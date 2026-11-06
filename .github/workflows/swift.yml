@@ -1,0 +1,36 @@
+name: Swift
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: macos-26
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # The package does not exist yet (design phase). Remove this guard once
+    # Package.swift is added so a missing manifest fails CI instead of skipping it.
+    - name: Check for package manifest
+      id: manifest
+      run: |
+        if [ -f Package.swift ]; then
+          echo "present=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "present=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::No Package.swift yet; skipping build and test."
+        fi
+
+    - name: Build
+      if: steps.manifest.outputs.present == 'true'
+      run: swift build
+
+    - name: Run tests
+      if: steps.manifest.outputs.present == 'true'
+      run: swift test

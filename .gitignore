@@ -1,0 +1,12 @@
+.DS_Store
+.build/
+.swiftpm/
+xcuserdata/
+DerivedData/
+*.xcodeproj/project.xcworkspace/
+*.xcuserstate
+Package.resolved
+
+# Large OSM data used for local testing (download, don't commit)
+*.osm.pbf
+*.pbf
