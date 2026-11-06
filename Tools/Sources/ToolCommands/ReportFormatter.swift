@@ -44,6 +44,7 @@ public enum ReportFormatter {
             "  relations: \(Formatting.count(summary.relations)) (\(Formatting.count(summary.incompleteRelations)) incomplete)",
             "  nodes referenced but missing from the file: \(summary.missingNodes)",
             "  way vertices: \(Formatting.count(summary.wayVertices))",
+            "  extract in memory: \(Formatting.bytes(Int64(summary.memoryBytes)))",
         ]
         return lines.joined(separator: "\n")
     }

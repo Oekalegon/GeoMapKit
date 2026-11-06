@@ -1,8 +1,13 @@
 /// A node position kept compactly while a file is scanned.
+///
+/// Coordinates are 32-bit integers in 1e-7 degrees (OSM's own precision). The tags
+/// of the node, if any, are a range in shared tag arrays.
 struct NodeRecord {
     var id: Int64
-    var latitude: Double
-    var longitude: Double
+    var latitude: Int32
+    var longitude: Int32
+    var tagStart: UInt32
+    var tagCount: UInt32
 }
 
 /// A table of node records sorted by ID, searched by binary search.
@@ -13,9 +18,17 @@ struct NodeTable {
     private(set) var records: [NodeRecord]
 
     /// Creates a table, sorting the records by ID.
-    init(sorting records: [NodeRecord]) {
+    init(sorting records: consuming [NodeRecord]) {
+        // `consuming` lets the caller hand the array over, so sorting happens in place
+        // instead of on a second copy of what can be a hundred megabytes.
+        records.sort { $0.id < $1.id }
         self.records = records
-        self.records.sort { $0.id < $1.id }
+    }
+
+    /// Hands over the records and leaves the table empty, so the caller holds the only reference.
+    mutating func takeRecords() -> [NodeRecord] {
+        defer { records = [] }
+        return records
     }
 
     /// The index of the record with the given ID, or `nil`.

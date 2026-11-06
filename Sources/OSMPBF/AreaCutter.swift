@@ -96,35 +96,37 @@ public struct AreaCutter: Sendable {
         guard box.isValid else { throw AreaCutterError.invalidBoundingBox }
         let header = try reader.header()
         let memberLimit = max(0, options.relationMemberLimit)
+        var interner = StringInterner()
 
-        // Pass 1: nodes inside the box.
+        // Pass 1: nodes inside the box. Their tags go into shared arrays, interned.
         progress?(.insideNodes)
         var records: [NodeRecord] = []
-        var insideTags: [Int64: [String: String]] = [:]
+        var nodeTagKeys: [UInt32] = []
+        var nodeTagValues: [UInt32] = []
         try reader.forEachBlock(kinds: .nodes) { block in
             try Task.checkCancellation()
             for node in block.nodes where box.contains(node.coordinate) {
-                records.append(NodeRecord(
-                    id: node.id, latitude: node.coordinate.latitude, longitude: node.coordinate.longitude
+                records.append(try Self.record(
+                    for: node, tagKeys: &nodeTagKeys, tagValues: &nodeTagValues, interner: &interner
                 ))
-                if !node.tags.isEmpty { insideTags[node.id] = node.tags }
             }
         }
-        let inside = NodeTable(sorting: records)
-        records = []
+        var inside = NodeTable(sorting: consume records)
         if let duplicate = inside.firstDuplicateID {
             throw AreaCutterError.duplicateID(kind: "node", id: duplicate)
         }
 
-        // Pass 2: ways with a node inside.
+        // Pass 2: ways with a node inside, kept in columns.
         progress?(.ways)
-        var keptWays: [Int64: OSMWay] = [:]
+        var keptWayIDs = Set<Int64>()
+        var ways = WayAccumulator()
         try reader.forEachBlock(kinds: .ways) { block in
             try Task.checkCancellation()
             for way in block.ways where way.nodeIDs.contains(where: inside.contains) {
-                guard keptWays.updateValue(way, forKey: way.id) == nil else {
+                guard keptWayIDs.insert(way.id).inserted else {
                     throw AreaCutterError.duplicateID(kind: "way", id: way.id)
                 }
+                try ways.append(way, interner: &interner)
             }
         }
 
@@ -138,7 +140,7 @@ public struct AreaCutter: Sendable {
                 let touches = relation.members.contains { member in
                     switch member.type {
                     case .node: inside.contains(member.id)
-                    case .way: keptWays[member.id] != nil
+                    case .way: keptWayIDs.contains(member.id)
                     case .relation: false
                     }
                 }
@@ -169,13 +171,13 @@ public struct AreaCutter: Sendable {
 
         // Completion: the member ways and nodes of selected relations.
         var wantedWayIDs = Set<Int64>()
-        var memberNodeIDs = Set<Int64>()
+        var memberNodeIDs: [Int64] = []
         for relation in selected.values {
             let wayMembers = relation.members.filter { $0.type == .way }
             if wayMembers.count <= memberLimit {
-                for member in wayMembers where keptWays[member.id] == nil { wantedWayIDs.insert(member.id) }
+                for member in wayMembers where !keptWayIDs.contains(member.id) { wantedWayIDs.insert(member.id) }
             }
-            for member in relation.members where member.type == .node { memberNodeIDs.insert(member.id) }
+            for member in relation.members where member.type == .node { memberNodeIDs.append(member.id) }
         }
 
         // Pass 4: the member ways that were not already kept.
@@ -184,65 +186,151 @@ public struct AreaCutter: Sendable {
             try reader.forEachBlock(kinds: .ways) { block in
                 try Task.checkCancellation()
                 for way in block.ways where wantedWayIDs.contains(way.id) {
-                    guard keptWays.updateValue(way, forKey: way.id) == nil else {
+                    guard keptWayIDs.insert(way.id).inserted else {
                         throw AreaCutterError.duplicateID(kind: "way", id: way.id)
                     }
+                    try ways.append(way, interner: &interner)
                 }
             }
         }
 
+        // The nodes that kept ways and relations refer to, as a sorted array of IDs.
+        let referenced = SortedIDs(unsorted: ways.vertices + memberNodeIDs)
+        let wanted = SortedIDs(sortedUnique: referenced.ids.filter { !inside.contains($0) })
+
         // Pass 5: referenced nodes outside the box.
-        var referenced = memberNodeIDs
-        for way in keptWays.values { referenced.formUnion(way.nodeIDs) }
-        let wanted = referenced.filter { !inside.contains($0) }
-        var outside: [OSMNode] = []
-        if !wanted.isEmpty {
+        var outside: [NodeRecord] = []
+        var foundOutside = 0
+        if !wanted.ids.isEmpty {
             progress?(.outsideNodes)
-            var foundOutside = Set<Int64>()
+            let wantedSet = Set(wanted.ids)
+            var found = Set<Int64>()
             try reader.forEachBlock(kinds: .nodes) { block in
                 try Task.checkCancellation()
-                for node in block.nodes where wanted.contains(node.id) {
-                    guard foundOutside.insert(node.id).inserted else {
+                for node in block.nodes where wantedSet.contains(node.id) {
+                    guard found.insert(node.id).inserted else {
                         throw AreaCutterError.duplicateID(kind: "node", id: node.id)
                     }
-                    outside.append(node)
+                    outside.append(try Self.record(
+                        for: node, tagKeys: &nodeTagKeys, tagValues: &nodeTagValues, interner: &interner
+                    ))
                 }
             }
+            foundOutside = found.count
         }
 
         // Assemble the result.
         progress?(.assembly)
-        var nodes = outside
-        nodes.reserveCapacity(outside.count + inside.records.count)
-        for record in inside.records {
-            let tags = insideTags[record.id]
-            if tags != nil || referenced.contains(record.id) {
-                nodes.append(OSMNode(
-                    id: record.id,
-                    coordinate: Coordinate(latitude: record.latitude, longitude: record.longitude),
-                    tags: tags ?? [:]
-                ))
+        // Keep the inside nodes that are tagged or referenced, compacting in place.
+        var insideRecords = inside.takeRecords()
+        inside = NodeTable(sorting: [])
+        var kept = 0
+        var cursor = 0
+        for index in insideRecords.indices {
+            let record = insideRecords[index]
+            while cursor < referenced.ids.count && referenced.ids[cursor] < record.id { cursor += 1 }
+            let isReferenced = cursor < referenced.ids.count && referenced.ids[cursor] == record.id
+            if record.tagCount > 0 || isReferenced {
+                insideRecords[kept] = record
+                kept += 1
             }
         }
-        nodes.sort { $0.id < $1.id }
-        let nodeIDs = Set(nodes.map(\.id))
+        insideRecords.removeLast(insideRecords.count - kept)
+        outside.sort { $0.id < $1.id }
 
-        let relations = selected.values.sorted { $0.id < $1.id }.map { relation in
-            ExtractedRelation(
-                relation: relation,
-                isComplete: relation.members.allSatisfy { member in
-                    switch member.type {
-                    case .node: nodeIDs.contains(member.id)
-                    case .way: keptWays[member.id] != nil
-                    case .relation: true
-                    }
-                }
-            )
+        // Merge the two sorted lists into node columns; the tags are copied into node order.
+        var nodeIDs: [Int64] = []
+        var latitudes: [Int32] = []
+        var longitudes: [Int32] = []
+        var nodeTags = TagColumns()
+        let total = insideRecords.count + outside.count
+        nodeIDs.reserveCapacity(total)
+        latitudes.reserveCapacity(total)
+        longitudes.reserveCapacity(total)
+        var i = 0
+        var j = 0
+        while i < insideRecords.count || j < outside.count {
+            let useInside = j >= outside.count || (i < insideRecords.count && insideRecords[i].id < outside[j].id)
+            let record = useInside ? insideRecords[i] : outside[j]
+            if useInside { i += 1 } else { j += 1 }
+            nodeIDs.append(record.id)
+            latitudes.append(record.latitude)
+            longitudes.append(record.longitude)
+            let range = Int(record.tagStart)..<Int(record.tagStart + record.tagCount)
+            try nodeTags.append(keys: nodeTagKeys[range], values: nodeTagValues[range])
         }
+        insideRecords = []
+        outside = []
+        nodeTagKeys = []
+        nodeTagValues = []
+
+        // Relations: members and tags in columns, with completeness computed from what is present.
+        var relationIDs: [Int64] = []
+        var memberOffsets: [UInt32] = [0]
+        var memberTypes: [UInt8] = []
+        var memberIDs: [Int64] = []
+        var memberRoles: [UInt32] = []
+        var complete: [Bool] = []
+        var relationTags = TagColumns()
+        for relation in selected.values.sorted(by: { $0.id < $1.id }) {
+            relationIDs.append(relation.id)
+            var isComplete = true
+            for member in relation.members {
+                memberTypes.append(UInt8(member.type.rawValue))
+                memberIDs.append(member.id)
+                memberRoles.append(interner.intern(member.role))
+                switch member.type {
+                case .node: if SortedIDs.index(of: member.id, in: nodeIDs) == nil { isComplete = false }
+                case .way: if !keptWayIDs.contains(member.id) { isComplete = false }
+                case .relation: break
+                }
+            }
+            memberOffsets.append(try CheckedOffset.make(memberIDs.count))
+            complete.append(isComplete)
+            try relationTags.append(relation.tags, interner: &interner)
+        }
+
+        let strings = interner.frozen()
         return OSMExtract(
-            header: header, boundingBox: box, nodes: nodes,
-            ways: keptWays.values.sorted { $0.id < $1.id }, relations: relations,
-            missingNodeCount: wanted.count - outside.count
+            header: header, boundingBox: box,
+            nodes: ExtractedNodes(
+                ids: nodeIDs, latitudes: latitudes, longitudes: longitudes,
+                tagOffsets: nodeTags.offsets, tagKeys: nodeTags.keys, tagValues: nodeTags.values, strings: strings
+            ),
+            ways: ways.finished(strings: strings),
+            relations: ExtractedRelations(
+                ids: relationIDs, memberOffsets: memberOffsets, memberTypes: memberTypes, memberIDs: memberIDs,
+                memberRoles: memberRoles, complete: complete, tagOffsets: relationTags.offsets,
+                tagKeys: relationTags.keys, tagValues: relationTags.values, strings: strings
+            ),
+            strings: strings,
+            missingNodeCount: wanted.ids.count - foundOutside
         )
+    }
+
+    /// A compact record for a node, with its tags interned (sorted by key) into the shared arrays.
+    private static func record(
+        for node: OSMNode, tagKeys: inout [UInt32], tagValues: inout [UInt32], interner: inout StringInterner
+    ) throws -> NodeRecord {
+        guard let latitude = scaled(node.coordinate.latitude, limit: 90),
+              let longitude = scaled(node.coordinate.longitude, limit: 180) else {
+            throw PBFError.malformed("node \(node.id) has an invalid coordinate")
+        }
+        let start = try CheckedOffset.make(tagKeys.count)
+        for (key, value) in node.tags.sorted(by: { $0.key < $1.key }) {
+            tagKeys.append(interner.intern(key))
+            tagValues.append(interner.intern(value))
+        }
+        _ = try CheckedOffset.make(tagKeys.count)
+        return NodeRecord(
+            id: node.id, latitude: latitude, longitude: longitude,
+            tagStart: start, tagCount: UInt32(node.tags.count)
+        )
+    }
+
+    /// Degrees as a 32-bit integer in 1e-7 degrees (OSM's precision), or `nil` if not finite or beyond `limit`.
+    private static func scaled(_ degrees: Double, limit: Double) -> Int32? {
+        guard degrees.isFinite, abs(degrees) <= limit else { return nil }
+        return Int32((degrees * 1e7).rounded())
     }
 }
