@@ -15,7 +15,7 @@ Status: early. The design is in [docs/design/architecture.md](docs/design/archit
 | Target | Role |
 |---|---|
 | `GeoCore` | Web Mercator maths, tile coordinates, coordinates and bounding boxes |
-| `OSMPBF` | PBF reader (nodes, ways, relations); area cutting to follow |
+| `OSMPBF` | PBF reader (nodes, ways, relations) and area cutting |
 | `FeatureStore` | Own feature store (placeholder) |
 | `MapStyle` | Style model (placeholder) |
 | `MapRender` | Renderer (placeholder) |

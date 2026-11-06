@@ -51,9 +51,13 @@ public struct PBFReader: Sendable {
     ///
     /// The header is validated first. Blobs of unknown types are skipped.
     ///
-    /// - Parameter body: Called once per data block, in file order.
+    /// - Parameters:
+    ///   - kinds: The object kinds to decode. Other kinds are skipped without being
+    ///     decoded, which makes passes that need only one kind much cheaper. Blocks
+    ///     are still decompressed.
+    ///   - body: Called once per data block, in file order.
     /// - Throws: ``PBFError`` if the file is malformed, or whatever `body` throws.
-    public func forEachBlock(_ body: (OSMBlock) throws -> Void) throws {
+    public func forEachBlock(kinds: OSMObjectKinds = .all, _ body: (OSMBlock) throws -> Void) throws {
         var sawHeader = false
         try container.forEachBlob { type, payload in
             if !sawHeader {
@@ -61,7 +65,7 @@ public struct PBFReader: Sendable {
                 _ = try HeaderBlockDecoder.decode(payload)
                 sawHeader = true
             } else if type == "OSMData" {
-                try body(PrimitiveBlockDecoder.decode(payload))
+                try body(PrimitiveBlockDecoder.decode(payload, kinds: kinds))
             }
             return true
         }
