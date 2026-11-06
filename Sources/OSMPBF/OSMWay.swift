@@ -10,7 +10,8 @@ public struct OSMWay: Hashable, Sendable {
     /// The node IDs along the way, in order.
     public let nodeIDs: [Int64]
 
-    /// All tags of the way. Nothing is dropped.
+    /// All tags of the way. Nothing is dropped, except that keys differing only in Unicode
+    /// normalization collapse into one (see `architecture.md`, question 46).
     public let tags: [String: String]
 
     /// Creates a way.

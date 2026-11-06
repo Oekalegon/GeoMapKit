@@ -278,7 +278,7 @@ public struct AreaCutter: Sendable {
             for member in relation.members {
                 memberTypes.append(UInt8(member.type.rawValue))
                 memberIDs.append(member.id)
-                memberRoles.append(interner.intern(member.role))
+                memberRoles.append(try interner.intern(member.role))
                 switch member.type {
                 case .node: if SortedIDs.index(of: member.id, in: nodeIDs) == nil { isComplete = false }
                 case .way: if !keptWayIDs.contains(member.id) { isComplete = false }
@@ -318,8 +318,8 @@ public struct AreaCutter: Sendable {
         }
         let start = try CheckedOffset.make(tagKeys.count)
         for (key, value) in node.tags.sorted(by: { $0.key < $1.key }) {
-            tagKeys.append(interner.intern(key))
-            tagValues.append(interner.intern(value))
+            tagKeys.append(try interner.intern(key))
+            tagValues.append(try interner.intern(value))
         }
         _ = try CheckedOffset.make(tagKeys.count)
         return NodeRecord(

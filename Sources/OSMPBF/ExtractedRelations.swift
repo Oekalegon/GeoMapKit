@@ -35,11 +35,11 @@ public struct ExtractedRelations: RandomAccessCollection, Sendable {
     public subscript(position: Int) -> ExtractedRelation {
         let range = Int(memberOffsets[position])..<Int(memberOffsets[position + 1])
         let members = range.map { index in
-            OSMMember(
-                type: OSMMemberType(rawValue: Int(memberTypes[index])) ?? .node,
-                id: memberIDs[index],
-                role: strings.string(at: memberRoles[index]) ?? ""
-            )
+            guard let type = OSMMemberType(rawValue: Int(memberTypes[index])),
+                  let role = strings.string(at: memberRoles[index]) else {
+                preconditionFailure("a relation member has an invalid type or role ID")
+            }
+            return OSMMember(type: type, id: memberIDs[index], role: role)
         }
         return ExtractedRelation(
             relation: OSMRelation(id: ids[position], members: members, tags: tags(at: position).dictionary),

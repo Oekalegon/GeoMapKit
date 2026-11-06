@@ -8,8 +8,8 @@ struct TagColumns {
     /// Appends the tags of one object, sorted by key so the order is deterministic.
     mutating func append(_ tags: [String: String], interner: inout StringInterner) throws {
         for (key, value) in tags.sorted(by: { $0.key < $1.key }) {
-            keys.append(interner.intern(key))
-            values.append(interner.intern(value))
+            keys.append(try interner.intern(key))
+            values.append(try interner.intern(value))
         }
         offsets.append(try CheckedOffset.make(keys.count))
     }
@@ -19,13 +19,5 @@ struct TagColumns {
         keys.append(contentsOf: newKeys)
         values.append(contentsOf: newValues)
         offsets.append(try CheckedOffset.make(keys.count))
-    }
-}
-
-/// Converts counts to the 32-bit offsets the extract uses.
-enum CheckedOffset {
-    static func make(_ count: Int) throws -> UInt32 {
-        guard let offset = UInt32(exactly: count) else { throw AreaCutterError.extractTooLarge }
-        return offset
     }
 }

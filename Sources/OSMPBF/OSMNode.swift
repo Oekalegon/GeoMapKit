@@ -8,7 +8,8 @@ public struct OSMNode: Hashable, Sendable {
     /// The position in degrees.
     public let coordinate: Coordinate
 
-    /// All tags of the node. Nothing is dropped.
+    /// All tags of the node. Nothing is dropped, except that keys differing only in Unicode
+    /// normalization collapse into one (see `architecture.md`, question 46).
     public let tags: [String: String]
 
     /// Creates a node.

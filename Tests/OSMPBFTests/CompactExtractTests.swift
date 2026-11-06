@@ -6,13 +6,13 @@ import GeoCore
 @Suite("StringInterner")
 struct StringInternerTests {
     @Test("The empty string is ID 0 and equal strings get the same ID")
-    func basics() {
+    func basics() throws {
         var interner = StringInterner()
-        #expect(interner.intern("") == 0)
-        let a = interner.intern("highway")
-        let b = interner.intern("path")
+        #expect(try interner.intern("") == 0)
+        let a = try interner.intern("highway")
+        let b = try interner.intern("path")
         #expect(a != b)
-        #expect(interner.intern("highway") == a)
+        #expect(try interner.intern("highway") == a)
         let table = interner.frozen()
         #expect(table.string(at: a) == "highway")
         #expect(table.string(at: b) == "path")
@@ -22,15 +22,15 @@ struct StringInternerTests {
     }
 
     @Test("Strings that Swift considers equal but whose bytes differ are kept apart")
-    func canonicallyEquivalentStringsStayDistinct() {
+    func canonicallyEquivalentStringsStayDistinct() throws {
         // "é" as one scalar and as "e" plus a combining accent compare equal in Swift but are different data.
         let precomposed = "caf\u{00E9}"
         let decomposed = "cafe\u{0301}"
         #expect(precomposed == decomposed)
         #expect(Array(precomposed.utf8) != Array(decomposed.utf8))
         var interner = StringInterner()
-        let first = interner.intern(precomposed)
-        let second = interner.intern(decomposed)
+        let first = try interner.intern(precomposed)
+        let second = try interner.intern(decomposed)
         #expect(first != second)
         let table = interner.frozen()
         #expect(Array(table.string(at: first)!.utf8) == Array(precomposed.utf8))
@@ -38,22 +38,22 @@ struct StringInternerTests {
     }
 
     @Test("Many strings, beyond several table growths, all come back exactly")
-    func growth() {
+    func growth() throws {
         var interner = StringInterner()
         let strings = (0..<20_000).map { "string-\($0)-\(String(repeating: "x", count: $0 % 17))" }
-        let ids = strings.map { interner.intern($0) }
+        let ids = try strings.map { try interner.intern($0) }
         #expect(Set(ids).count == strings.count)
         // Interning again returns the same IDs.
-        #expect(strings.map { interner.intern($0) } == ids)
+        #expect(try strings.map { try interner.intern($0) } == ids)
         let table = interner.frozen()
         for (string, id) in zip(strings, ids) { #expect(table.string(at: id) == string) }
     }
 
     @Test("Unicode, emoji and long strings round trip")
-    func unicode() {
+    func unicode() throws {
         var interner = StringInterner()
         let samples = ["Färchaneggweg", "日本語", "🏔️ peak", String(repeating: "å", count: 5_000)]
-        let ids = samples.map { interner.intern($0) }
+        let ids = try samples.map { try interner.intern($0) }
         let table = interner.frozen()
         #expect(ids.map { table.string(at: $0) } == samples.map { Optional($0) })
     }

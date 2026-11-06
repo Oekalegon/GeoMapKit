@@ -5,14 +5,16 @@ struct SortedIDs {
     /// The IDs, sorted ascending, without duplicates.
     private(set) var ids: [Int64]
 
-    /// Sorts and de-duplicates a list of IDs.
-    init(unsorted ids: [Int64]) {
-        var sorted = ids
-        sorted.sort()
-        var unique: [Int64] = []
-        unique.reserveCapacity(sorted.count)
-        for id in sorted where unique.last != id { unique.append(id) }
-        self.ids = unique
+    /// Sorts and de-duplicates a list of IDs, in place (the array is consumed).
+    init(unsorted ids: consuming [Int64]) {
+        ids.sort()
+        var kept = 0
+        for index in ids.indices where kept == 0 || ids[kept - 1] != ids[index] {
+            ids[kept] = ids[index]
+            kept += 1
+        }
+        ids.removeLast(ids.count - kept)
+        self.ids = ids
     }
 
     /// Wraps IDs that are already sorted ascending and unique.

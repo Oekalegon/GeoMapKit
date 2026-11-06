@@ -34,12 +34,12 @@ public struct ExtractSummary: Equatable, Sendable {
         let nodes = extract.nodes
         self.init(
             nodes: nodes.count,
-            taggedNodes: nodes.indices.filter { nodes.hasTags(at: $0) }.count,
-            nodesOutsideBox: nodes.indices.filter { !extract.boundingBox.contains(nodes.coordinate(at: $0)) }.count,
+            taggedNodes: nodes.indices.count(where: { nodes.hasTags(at: $0) }),
+            nodesOutsideBox: nodes.indices.count(where: { !extract.boundingBox.contains(nodes.coordinate(at: $0)) }),
             ways: extract.ways.count,
             wayVertices: extract.ways.vertexCount,
             relations: extract.relations.count,
-            incompleteRelations: extract.relations.indices.filter { !extract.relations.isComplete(at: $0) }.count,
+            incompleteRelations: extract.relations.indices.count(where: { !extract.relations.isComplete(at: $0) }),
             missingNodes: extract.missingNodeCount,
             memoryBytes: extract.memoryBytes
         )

@@ -15,16 +15,20 @@ struct StringInterner {
 
     /// Creates an interner whose first string, ID 0, is the empty string.
     init() {
-        _ = intern("")
+        offsets = [0, 0]
+        let emptyHash = Self.hash(UnsafeBufferPointer<UInt8>(start: nil, count: 0))
+        slots[Int(truncatingIfNeeded: emptyHash) & (slots.count - 1)] = 1
     }
 
     /// The ID of a string, adding it if it is new.
-    mutating func intern(_ string: String) -> UInt32 {
+    ///
+    /// - Throws: ``AreaCutterError/extractTooLarge`` if the table would pass 4 GB.
+    mutating func intern(_ string: String) throws -> UInt32 {
         var string = string
-        return string.withUTF8 { intern(bytes: $0) }
+        return try string.withUTF8 { try intern(bytes: $0) }
     }
 
-    private mutating func intern(bytes key: UnsafeBufferPointer<UInt8>) -> UInt32 {
+    private mutating func intern(bytes key: UnsafeBufferPointer<UInt8>) throws -> UInt32 {
         let mask = slots.count - 1
         var index = Int(truncatingIfNeeded: Self.hash(key)) & mask
         while true {
@@ -36,10 +40,10 @@ struct StringInterner {
         }
         // New string: append it and record it in the empty slot found.
         let id = UInt32(offsets.count - 1)
+        // The offsets are 32-bit, so the table cannot hold more than 4 GB of distinct strings.
+        let newEnd = try CheckedOffset.make(bytes.count + key.count)
         bytes.append(contentsOf: key)
-        // The offsets are 32-bit; more than 4 GB of distinct strings cannot occur in an extract of an
-        // area (it would need a source far larger than the format allows per area).
-        offsets.append(UInt32(truncatingIfNeeded: bytes.count))
+        offsets.append(newEnd)
         slots[index] = id + 1
         if (Int(id) + 1) * 2 > slots.count { grow() }
         return id
