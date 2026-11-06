@@ -10,3 +10,5 @@ Package.resolved
 # Large OSM data used for local testing (download, don't commit)
 *.osm.pbf
 *.pbf
+# ...but small test fixtures are committed
+!Tests/**/Fixtures/*.pbf

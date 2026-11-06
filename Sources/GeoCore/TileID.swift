@@ -24,6 +24,30 @@ public struct TileID: Hashable, Sendable, Codable {
     /// The row, from 0 at the northern edge southwards.
     public let y: Int
 
+    private enum CodingKeys: String, CodingKey {
+        case zoom, x, y
+    }
+
+    /// Decodes a tile address and rejects values outside the grid.
+    ///
+    /// Tile addresses arrive from manifests and from the Watch's area requests,
+    /// so they are treated as untrusted input.
+    ///
+    /// - Throws: `DecodingError.dataCorrupted` if the address lies outside the grid.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let zoom = try container.decode(Int.self, forKey: .zoom)
+        let x = try container.decode(Int.self, forKey: .x)
+        let y = try container.decode(Int.self, forKey: .y)
+        guard let tile = TileID(zoom: zoom, x: x, y: y) else {
+            throw DecodingError.dataCorrupted(DecodingError.Context(
+                codingPath: decoder.codingPath,
+                debugDescription: "Tile \(zoom)/\(x)/\(y) is outside the grid"
+            ))
+        }
+        self = tile
+    }
+
     /// Creates a tile address, or returns `nil` if it lies outside the grid.
     ///
     /// - Parameters:
@@ -42,8 +66,15 @@ public struct TileID: Hashable, Sendable, Codable {
     /// Returns the tile that contains a coordinate.
     ///
     /// Latitudes beyond ``maximumLatitude`` are clamped to the edge of the map,
-    /// and longitudes are wrapped into -180 to 180. A coordinate exactly on a
-    /// tile border belongs to the tile to its east and south.
+    /// and longitudes are wrapped into -180 to 180. Longitude +180 is treated
+    /// as -180 and falls in column 0, so a bounding box that ends at +180 is not
+    /// supported.
+    ///
+    /// A coordinate on a tile border is assigned to one of the two adjacent
+    /// tiles. Which one is subject to floating-point rounding, so do not use a
+    /// computed tile corner (``northWest``, ``southEast``) to identify a tile;
+    /// use a point inside it. Only exactly representable borders, such as the
+    /// equator and the prime meridian, are assigned to the east and south tile.
     ///
     /// - Parameters:
     ///   - coordinate: The position in degrees.
@@ -68,6 +99,9 @@ public struct TileID: Hashable, Sendable, Codable {
     }
 
     /// The north-west corner of the tile.
+    ///
+    /// Passing this back to ``containing(_:zoom:)`` may return a neighbouring
+    /// tile because of floating-point rounding.
     public var northWest: Coordinate {
         Coordinate(
             latitude: Self.latitude(forRow: Double(y), zoom: zoom),
