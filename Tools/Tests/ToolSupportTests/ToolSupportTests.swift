@@ -15,6 +15,15 @@ struct CommandLineArgumentsTests {
         #expect(arguments.value(for: "missing") == nil)
     }
 
+    @Test("A negative number is accepted as an option value")
+    func negativeValues() throws {
+        let arguments = try CommandLineArguments(["--center", "-33.9,18.4", "--radius-km", "5"], knownOptions: ["center", "radius-km"])
+        #expect(arguments.value(for: "center") == "-33.9,18.4")
+        #expect(arguments.positional.isEmpty)
+        let box = try AreaArgument.parse(bbox: nil, center: arguments.value(for: "center"), radiusKilometres: arguments.value(for: "radius-km"))
+        #expect(box.contains(Coordinate(latitude: -33.9, longitude: 18.4)))
+    }
+
     @Test("Unknown options and options without a value are errors")
     func errors() {
         #expect(throws: ToolError.self) { try CommandLineArguments(["--nope", "1"], knownOptions: ["bbox"]) }
@@ -64,8 +73,24 @@ struct FormattingTests {
         #expect(Formatting.count(7) == "7")
     }
 
-    @Test("Seconds from a duration")
+    @Test("Seconds from a duration, including more than a minute")
     func seconds() {
         #expect(Formatting.seconds(.milliseconds(230)) == "0.23 s")
+        #expect(Formatting.seconds(.seconds(71) + .milliseconds(440)) == "71.44 s")
+        #expect(Formatting.seconds(.seconds(3_725)) == "3725.00 s")
+    }
+}
+
+@Suite("Throughput")
+struct ThroughputTests {
+    @Test("Megabytes per second")
+    func rate() throws {
+        let rate = try #require(Throughput.megabytesPerSecond(bytes: 1_378_381_804, duration: .seconds(23)))
+        #expect(abs(rate - 59.9) < 0.1)
+    }
+
+    @Test("A zero duration has no rate")
+    func zero() {
+        #expect(Throughput.megabytesPerSecond(bytes: 100, duration: .zero) == nil)
     }
 }

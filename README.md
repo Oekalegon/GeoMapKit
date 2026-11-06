@@ -32,7 +32,7 @@ swift run --package-path Tools -c release geomapkit scan region.osm.pbf
 swift run --package-path Tools -c release geomapkit cut region.osm.pbf --center 59.9139,10.7522 --radius-km 15
 ```
 
-`cut` prints the time per pass, peak memory and what the extract contains.
+`cut` prints the time per pass, peak memory (heap footprint and resident) and what the extract contains. The commands live in the `ToolCommands` library and return reports, so they are tested; the `geomapkit` executable only parses arguments and prints.
 
 ## Build and test
 

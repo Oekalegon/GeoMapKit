@@ -15,15 +15,22 @@ let package = Package(
             name: "ToolSupport",
             dependencies: [.product(name: "GeoCore", package: "GeoMapKit")]
         ),
-        .executableTarget(
-            name: "geomapkit",
+        // The commands: they run the library and return reports, so they can be tested.
+        .target(
+            name: "ToolCommands",
             dependencies: [
                 "ToolSupport",
                 .product(name: "OSMPBF", package: "GeoMapKit"),
                 .product(name: "GeoCore", package: "GeoMapKit"),
             ]
         ),
+        // A thin executable: parse the command line, call ToolCommands, print.
+        .executableTarget(name: "geomapkit", dependencies: ["ToolSupport", "ToolCommands"]),
         .testTarget(name: "ToolSupportTests", dependencies: ["ToolSupport", .product(name: "GeoCore", package: "GeoMapKit")]),
+        .testTarget(
+            name: "ToolCommandsTests",
+            dependencies: ["ToolCommands", .product(name: "OSMPBF", package: "GeoMapKit"), .product(name: "GeoCore", package: "GeoMapKit")]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

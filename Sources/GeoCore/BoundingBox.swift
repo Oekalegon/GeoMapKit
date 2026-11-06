@@ -49,26 +49,30 @@ public struct BoundingBox: Hashable, Sendable, Codable {
         (south...north).contains(coordinate.latitude) && (west...east).contains(coordinate.longitude)
     }
 
-    /// The mean length of one degree of latitude, in kilometres (6371.0088 km mean radius).
-    private static let kilometresPerDegree = 6371.0088 * .pi / 180
+    /// The mean Earth radius in kilometres.
+    private static let earthRadiusKilometres = 6371.0088
 
-    /// The smallest box that contains a circle around a coordinate.
+    /// The smallest box that contains a circle around a coordinate on a sphere.
     ///
-    /// Uses a local approximation: one degree of latitude is about 111.195 km (from the 6371.0088 km mean Earth radius), and the
-    /// longitude extent is widened by `1 / cos(latitude)`. The box is square on the
-    /// ground and slightly larger than the circle, never smaller.
+    /// Uses the exact bounding-coordinates formula for a spherical circle, with the
+    /// mean Earth radius of 6371.0088 km: the latitude extent is the angular radius
+    /// and the longitude extent is `asin(sin(radius) / cos(latitude))`. The result
+    /// contains the whole circle at any radius. The Earth is not a sphere, so the
+    /// error against the ellipsoid is a few tenths of a percent of the radius.
     ///
     /// - Parameters:
     ///   - center: The centre of the circle.
     ///   - radiusKilometres: The radius in kilometres; must be positive and finite.
-    /// - Returns: The box, or `nil` if the radius or centre is invalid, or the box
-    ///   would reach a pole or cross the antimeridian (both unsupported).
+    /// - Returns: The box, or `nil` if the radius or centre is invalid, or the circle
+    ///   would contain a pole or the box would cross the antimeridian (both unsupported).
     public static func around(_ center: Coordinate, radiusKilometres: Double) -> BoundingBox? {
         guard center.isValid, radiusKilometres.isFinite, radiusKilometres > 0 else { return nil }
-        let latitudeExtent = radiusKilometres / kilometresPerDegree
-        let cosine = cos(center.latitude * .pi / 180)
-        guard cosine > 1e-6 else { return nil }
-        let longitudeExtent = latitudeExtent / cosine
+        let angularRadius = radiusKilometres / earthRadiusKilometres
+        let latitude = center.latitude * .pi / 180
+        // If sin(radius) >= cos(latitude) the circle reaches a pole and spans every longitude.
+        guard angularRadius < .pi / 2, sin(angularRadius) < cos(latitude) else { return nil }
+        let latitudeExtent = angularRadius * 180 / .pi
+        let longitudeExtent = asin(sin(angularRadius) / cos(latitude)) * 180 / .pi
         let box = BoundingBox(
             south: center.latitude - latitudeExtent, west: center.longitude - longitudeExtent,
             north: center.latitude + latitudeExtent, east: center.longitude + longitudeExtent

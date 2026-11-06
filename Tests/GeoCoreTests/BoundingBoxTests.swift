@@ -44,20 +44,31 @@ struct BoundingBoxTests {
         #expect(box.contains(oslo))
     }
 
-    @Test("The box contains the whole circle")
+    @Test("The box contains every point of the circle, at small and very large radii")
     func containsCircle() throws {
-        let tromso = Coordinate(latitude: 69.6492, longitude: 18.9553)
-        let box = try #require(BoundingBox.around(tromso, radiusKilometres: 10))
-        // Points just inside 10 km due east and due north (the edges touch the circle, so stay a hair inside).
-        let kilometresPerDegree = 6371.0088 * Double.pi / 180
-        let eastDegrees = 9.99 / (kilometresPerDegree * cos(tromso.latitude * .pi / 180))
-        let northDegrees = 9.99 / kilometresPerDegree
-        #expect(box.contains(Coordinate(latitude: tromso.latitude, longitude: tromso.longitude + eastDegrees)))
-        #expect(box.contains(Coordinate(latitude: tromso.latitude, longitude: tromso.longitude - eastDegrees)))
-        #expect(box.contains(Coordinate(latitude: tromso.latitude + northDegrees, longitude: tromso.longitude)))
-        #expect(box.contains(Coordinate(latitude: tromso.latitude - northDegrees, longitude: tromso.longitude)))
-        // A point 11 km north is outside.
-        #expect(!box.contains(Coordinate(latitude: tromso.latitude + 11 / kilometresPerDegree, longitude: tromso.longitude)))
+        let earthRadius = 6371.0088
+        for (latitude, radius) in [(69.6492, 10.0), (60.0, 15.0), (60.0, 200.0), (60.0, 2000.0), (70.0, 2000.0), (0.0, 500.0)] {
+            let center = Coordinate(latitude: latitude, longitude: 18.0)
+            let box = try #require(BoundingBox.around(center, radiusKilometres: radius))
+            let delta = radius / earthRadius
+            let phi = latitude * .pi / 180
+            // Walk the circle: the point at distance `radius` on each bearing.
+            for bearingDegrees in stride(from: 0.0, to: 360.0, by: 1.0) {
+                let theta = bearingDegrees * .pi / 180
+                let phi2 = asin(sin(phi) * cos(delta) + cos(phi) * sin(delta) * cos(theta))
+                let lambda2 = atan2(sin(theta) * sin(delta) * cos(phi), cos(delta) - sin(phi) * sin(phi2))
+                let point = Coordinate(latitude: phi2 * 180 / .pi, longitude: 18.0 + lambda2 * 180 / .pi)
+                // The extreme points lie exactly on the box edge, so allow for rounding.
+                let tolerance = 1e-9
+                #expect(
+                    point.latitude >= box.south - tolerance && point.latitude <= box.north + tolerance
+                        && point.longitude >= box.west - tolerance && point.longitude <= box.east + tolerance,
+                    "lat \(latitude), radius \(radius) km, bearing \(bearingDegrees)"
+                )
+            }
+            // The box is not much bigger than needed: its north edge is exactly the radius away.
+            #expect(abs((box.north - center.latitude) * .pi / 180 * earthRadius - radius) < 1e-6)
+        }
     }
 
     @Test("Invalid input, the poles and the antimeridian give nil")
@@ -69,5 +80,9 @@ struct BoundingBoxTests {
         #expect(BoundingBox.around(Coordinate(latitude: .nan, longitude: 0), radiusKilometres: 1) == nil)
         #expect(BoundingBox.around(Coordinate(latitude: 89.9, longitude: 0), radiusKilometres: 50) == nil)
         #expect(BoundingBox.around(Coordinate(latitude: 0, longitude: 179.9), radiusKilometres: 50) == nil)
+        // A circle that contains the pole spans every longitude.
+        #expect(BoundingBox.around(Coordinate(latitude: 80, longitude: 0), radiusKilometres: 1500) == nil)
+        // A radius of more than a quarter of the Earth.
+        #expect(BoundingBox.around(Coordinate(latitude: 0, longitude: 0), radiusKilometres: 12_000) == nil)
     }
 }
