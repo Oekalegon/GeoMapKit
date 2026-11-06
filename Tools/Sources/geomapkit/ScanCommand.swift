@@ -28,6 +28,6 @@ enum ScanCommand {
         }
         print("Objects:   \(Formatting.count(nodes)) nodes, \(Formatting.count(ways)) ways, \(Formatting.count(relations)) relations in \(Formatting.count(blocks)) blocks")
         print("Decode:    \(Formatting.seconds(elapsed)), \(throughput(size, elapsed))")
-        print("Peak memory (resident): \(Formatting.bytes(ProcessMemory.peakResidentBytes()))")
+        print("Peak memory: footprint \(ProcessMemory.peakFootprintBytes().map(Formatting.bytes) ?? "n/a"); resident \(Formatting.bytes(ProcessMemory.peakResidentBytes())) (includes touched pages of the mapped file)")
     }
 }

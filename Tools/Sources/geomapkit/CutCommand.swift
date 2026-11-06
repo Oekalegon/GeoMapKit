@@ -27,11 +27,11 @@ enum CutCommand {
         var passes: [(pass: AreaCutter.Pass, start: ContinuousClock.Instant, memory: Int64)] = []
         let begin = clock.now
         let extract = try AreaCutter(options: options).cut(reader, to: box) { pass in
-            passes.append((pass, clock.now, ProcessMemory.peakResidentBytes()))
+            passes.append((pass, clock.now, ProcessMemory.peakFootprintBytes() ?? ProcessMemory.peakResidentBytes()))
         }
         let end = clock.now
 
-        print("\n\(pad("Pass", 24)) \(pad("time", 9, left: true)) \(pad("file rate", 11, left: true))   peak memory at start")
+        print("\n\(pad("Pass", 24)) \(pad("time", 9, left: true)) \(pad("file rate", 11, left: true))   peak footprint at start")
         for (index, entry) in passes.enumerated() {
             let finish = index + 1 < passes.count ? passes[index + 1].start : end
             let duration = finish - entry.start
@@ -39,7 +39,8 @@ enum CutCommand {
             let rate = isFilePass ? throughput(size, duration).replacingOccurrences(of: " of file", with: "") : "-"
             print("\(pad(describe(entry.pass), 24)) \(pad(Formatting.seconds(duration), 9, left: true)) \(pad(rate, 11, left: true))   \(Formatting.bytes(entry.memory))")
         }
-        print("Total: \(Formatting.seconds(end - begin)); peak memory (resident): \(Formatting.bytes(ProcessMemory.peakResidentBytes()))")
+        print("Total: \(Formatting.seconds(end - begin))")
+        print("Peak memory: footprint \(ProcessMemory.peakFootprintBytes().map(Formatting.bytes) ?? "n/a") (heap, what the cut needs); resident \(Formatting.bytes(ProcessMemory.peakResidentBytes())) (includes touched pages of the mapped file)")
 
         let incomplete = extract.relations.filter { !$0.isComplete }.count
         let outside = extract.nodes.filter { !box.contains($0.coordinate) }.count
