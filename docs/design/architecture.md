@@ -95,6 +95,8 @@ Rendered tiles are generalized and clipped, so they cannot be used for routing.
 
 ## 5. Corridor (Watch data)
 
+**The track is known beforehand (decided).** For longer runs, ultras especially, the user has a track before the run: a GPX file, or a track created in an app that uses this package on macOS or iOS. The corridor is therefore cut from that track plus a buffer, before the run, on the phone or Mac; the Watch never decides what to load. The v1 corridor holds map features only (the graph part below is v2). Open: runs without a track (question 42).
+
 When a route is sent to the Watch:
 
 - Take all edges within a buffer of the route polyline (starting guess 300 m to 1 km, configurable), plus the junction nodes they connect.
@@ -182,7 +184,9 @@ The test Mac app (phase 1 of PBF sourcing) is the first consumer of the package:
 
 40. Minimum Watch hardware and power modes: which Watch models must work, and how does the kit behave in extended-battery or low-power workout modes (fix rate, background time, screen behaviour)? Does `RouteFollower` run in the workout session's process? Verify against the current watchOS documentation and a real device.
 
-41. Resolved (narrowed): no orienteering mode; tracks may be off-trail and are followed like any track. Still open: how a user creates such a track before a run: import a GPX file only, or draw and edit a track in the Mac app (placing points by hand, with no routing)? The kit would provide a `Route` model and editing operations in either case. Original question, kept for reference: Orienteering and off-trail scope: (a) following a route whose legs are not on paths (controls in sequence, straight legs): assumed in v1; (b) the map content orienteering needs: detailed contours, vegetation, cliffs, fences and boundaries. OSM covers some of this, and contours need the DEM that is out of v1, so how useful is the v1 map for orienteering; (c) route planning across terrain in v2 (a cost surface from land cover, not a graph). Which of these do you want, and when? Also: do ordered controls need to be marked as visited (punching), and does the Watch corridor need to be a region?
+41. Resolved (narrowed): no orienteering mode; tracks may be off-trail and are followed like any track. Track creation: a track is a GPX file or is created in an app that uses this package on macOS or iOS. The kit provides the `Route` model; which editing operations it provides (insert, move and delete point, set waypoint) is open and can start minimal. Without routing, creating a track means placing points by hand. Original question, kept for reference: Orienteering and off-trail scope: (a) following a route whose legs are not on paths (controls in sequence, straight legs): assumed in v1; (b) the map content orienteering needs: detailed contours, vegetation, cliffs, fences and boundaries. OSM covers some of this, and contours need the DEM that is out of v1, so how useful is the v1 map for orienteering; (c) route planning across terrain in v2 (a cost surface from land cover, not a graph). Which of these do you want, and when? Also: do ordered controls need to be marked as visited (punching), and does the Watch corridor need to be a region?
+
+42. Runs without a track: what does the Watch show when there is no track beforehand (an unplanned run)? Options: only the position and the runner's own trail so far, no basemap; a region around the start loaded in advance (a radius, for example a few km); or the phone sends cells around the current position on demand while it is reachable. Decide whether unplanned runs are in v1.
 
 **Routing**
 9. Resolved in outline (see "Cost model" in section 2): presets plus a few sliders, `sac_scale` limit as a user setting. Still open: the actual numbers per preset (speed factors per surface and highway class, penalties for barriers, steps and poor trail visibility), to be tuned on real routes; and grade-dependent speed once a DEM exists.
