@@ -40,6 +40,7 @@ A cross-cutting constraint. A trail run can last hours with GPS, heart rate and 
 | PBF sourcing | Phase 1: a **test Mac app** that uses the package and downloads full regional PBF files (for example from Geofabrik), cuts the chosen area and builds graph and map data. Phase 2: smaller area PBFs hosted on a server of ours, downloaded by the apps. The area-cutting code lives in the package, so the same code later produces the hosted files. |
 | Elevation (v1) | No DEM in v1. The cost model uses tags only (surface, `sac_scale`, road class). The graph format reserves optional ascent/descent fields so a DEM step can be added later without a format break. The Watch barometer remains the source for recorded elevation. |
 | Distribution | The kit will be distributed at some point, so licence, attribution and data-source terms are release gates (section 9). |
+| Cost model | A `CostProfile` is a table of weights (data, not code), chosen by user preference. Presets: trail running, road running, walking. Adjusted by a few user settings: road avoidance, surface preference and a maximum difficulty (`sac_scale` limit). `mountain_hiking` is acceptable when the user allows it; the limit is a user setting, not a fixed exclusion. Default limit: up to `mountain_hiking` (to confirm). Missing tags default to a mid value, never to the easiest. A full per-surface weight editor is deferred; the data-table design allows it later without a router change. The A* heuristic is computed from the fastest speed of the profile in use, so it stays admissible. |
 | Platforms | Minimum version 26 on all platforms: iOS, iPadOS, macOS and watchOS. No availability checks for older systems. |
 | Language | Swift 6 language mode with strict concurrency from the start. Value types and `Sendable` by default; explicit isolation (actors) for caches and file readers. |
 | Overlays (v1) | A generic `MapOverlay` protocol (points, lines, polygons with a style). Only GPX tracks in v1 (the planned route and the current track). The kit knows nothing about Strava or HealthKit. |
@@ -178,7 +179,7 @@ The test Mac app (phase 1 of PBF sourcing) is the first consumer of the package:
 40. Minimum Watch hardware and power modes: which Watch models must work, and how does the kit behave in extended-battery or low-power workout modes (fix rate, background time, screen behaviour)? Does `RouteFollower` run in the workout session's process? Verify against the current watchOS documentation and a real device.
 
 **Routing**
-9. Cost model: grade-dependent speed (Minetti-style or a simple penalty), surface and `sac_scale` weights, road avoidance, and how much the user can tune it.
+9. Resolved in outline (see "Cost model" in section 2): presets plus a few sliders, `sac_scale` limit as a user setting. Still open: the actual numbers per preset (speed factors per surface and highway class, penalties for barriers, steps and poor trail visibility), to be tuned on real routes; and grade-dependent speed once a DEM exists.
 10. Is plain A* fast enough on a small-area graph on iPhone, or do we need ALT or contraction hierarchies? Measure first.
 11. Turn-by-turn instructions: needed in v1, or only line-following with off-route alerts?
 12. Corridor buffer width: fixed, or scaled by edge density (wider in open terrain, narrower in towns)?
