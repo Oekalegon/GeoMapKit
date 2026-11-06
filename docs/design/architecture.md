@@ -46,6 +46,7 @@ A cross-cutting constraint. A trail run can last hours with GPS, heart rate and 
 | Platforms | Minimum version 26 on all platforms: iOS, iPadOS, macOS and watchOS. No availability checks for older systems. |
 | Language | Swift 6 language mode with strict concurrency from the start. Value types and `Sendable` by default; explicit isolation (actors) for caches and file readers. |
 | Numeric types and geometry conventions | `Int` may be 32 bits on some Watch hardware (to verify), so OSM IDs and file offsets use explicit `Int64`/`UInt64`. `TileID.maximumZoom` is 30 so `1 << zoom` is safe there. Longitude +180 is treated as -180 (column 0); bounding boxes crossing or ending at the antimeridian are not supported. Computed tile corners are not used to identify a tile (floating-point rounding); use a point inside it. Decoded tile IDs are validated, since they arrive from manifests and Watch requests. |
+| Own coordinate types | `GeoCore` uses its own `Coordinate` (and later its own live-position type for `RouteFollower`), not `CLLocationCoordinate2D` or `CLLocation`, so the core stays free of Apple frameworks (hosted area files may be produced on Linux) and the type is `Hashable`, `Codable` and under our control. Conversions to and from CoreLocation types live in a small adapter wrapped in `#if canImport(CoreLocation)`. |
 | Overlays (v2) | A generic `MapOverlay` protocol (points, lines, polygons with a style). Only GPX tracks in v1 (the planned route and the current track). The kit knows nothing about Strava or HealthKit. |
 
 ## 3. Modules
