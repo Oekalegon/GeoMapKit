@@ -40,6 +40,8 @@ A cross-cutting constraint. A trail run can last hours with GPS, heart rate and 
 | PBF sourcing | Phase 1: a **test Mac app** that uses the package and downloads full regional PBF files (for example from Geofabrik), cuts the chosen area and builds graph and map data. Phase 2: smaller area PBFs hosted on a server of ours, downloaded by the apps. The area-cutting code lives in the package, so the same code later produces the hosted files. |
 | Elevation (v1) | No DEM in v1. The cost model uses tags only (surface, `sac_scale`, road class). The graph format reserves optional ascent/descent fields so a DEM step can be added later without a format break. The Watch barometer remains the source for recorded elevation. |
 | Distribution | The kit will be distributed at some point, so licence, attribution and data-source terms are release gates (section 9). |
+| Platforms | Minimum version 26 on all platforms: iOS, iPadOS, macOS and watchOS. No availability checks for older systems. |
+| Language | Swift 6 language mode with strict concurrency from the start. Value types and `Sendable` by default; explicit isolation (actors) for caches and file readers. |
 | Overlays (v1) | A generic `MapOverlay` protocol (points, lines, polygons with a style). Only GPX tracks in v1 (the planned route and the current track). The kit knows nothing about Strava or HealthKit. |
 
 ## 3. Modules
@@ -181,8 +183,8 @@ The test Mac app (phase 1 of PBF sourcing) is the first consumer of the package:
 16. Watch rendering budget: target frame rate, always-on display behaviour, and a memory ceiling for decoded tiles.
 
 **Platform and project**
-17. Minimum OS versions (affects `Canvas` features and available Watch APIs).
+17. Resolved: version 26 minimum on all platforms.
 18. Resolved: not needed. PMTiles and MVT are not used.
 19. One repo with several Swift package targets and `Tools/` for the pipeline (current assumption). Is a separate repo for the pipeline wanted?
-20. Swift 6 language mode and strict concurrency from the start (current assumption).
+20. Resolved: Swift 6 language mode with strict concurrency.
 21. Sync and reconciliation: how does a provisional Watch reroute merge with the phone's plan, and what does the activity record keep?
