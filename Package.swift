@@ -41,6 +41,7 @@ let package = Package(
         .target(name: "Regions", dependencies: ["GeoCore", "FeatureStore"]),
 
         .testTarget(name: "GeoCoreTests", dependencies: ["GeoCore"]),
+        .testTarget(name: "OSMPBFTests", dependencies: ["OSMPBF", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
 )
