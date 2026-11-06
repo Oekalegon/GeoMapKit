@@ -33,6 +33,23 @@ import GeoCore
 /// cancellation between blocks, so run it inside a `Task` to be able to cancel it.
 /// It runs on the phone or the Mac, never on the Watch, which receives cut data.
 public struct AreaCutter: Sendable {
+    /// A stage of a cut, reported to the `progress` callback of ``cut(_:to:progress:)``
+    /// when it starts. Stages 4 and 5 are skipped when there is nothing to do.
+    public enum Pass: Int, CaseIterable, Sendable {
+        /// Reading the nodes inside the box.
+        case insideNodes
+        /// Reading the ways that touch the box.
+        case ways
+        /// Reading the relations that touch the box.
+        case relations
+        /// Reading the member ways of selected relations (completion).
+        case memberWays
+        /// Reading the referenced nodes outside the box.
+        case outsideNodes
+        /// Assembling the result in memory.
+        case assembly
+    }
+
     /// Settings for a cut.
     public struct Options: Sendable {
         /// The largest number of way members for which a relation is completed.
@@ -48,7 +65,7 @@ public struct AreaCutter: Sendable {
         }
     }
 
-    /// The settings used by ``cut(_:to:)``.
+    /// The settings used by ``cut(_:to:progress:)``.
     public let options: Options
 
     /// Creates a cutter.
@@ -66,17 +83,22 @@ public struct AreaCutter: Sendable {
     /// - Parameters:
     ///   - reader: The PBF file.
     ///   - box: The area. It must be valid and must not cross the antimeridian.
+    ///   - progress: Called when each stage starts, on the calling thread. Use it for
+    ///     progress display or to time the stages.
     /// - Returns: The extract.
     /// - Throws: ``AreaCutterError/invalidBoundingBox`` for an invalid box,
     ///   ``AreaCutterError/duplicateID(kind:id:)`` if an object ID repeats, a
     ///   ``PBFError`` if the file is malformed, or `CancellationError` if the
     ///   surrounding task was cancelled.
-    public func cut(_ reader: PBFReader, to box: BoundingBox) throws -> OSMExtract {
+    public func cut(
+        _ reader: PBFReader, to box: BoundingBox, progress: ((Pass) -> Void)? = nil
+    ) throws -> OSMExtract {
         guard box.isValid else { throw AreaCutterError.invalidBoundingBox }
         let header = try reader.header()
         let memberLimit = max(0, options.relationMemberLimit)
 
         // Pass 1: nodes inside the box.
+        progress?(.insideNodes)
         var records: [NodeRecord] = []
         var insideTags: [Int64: [String: String]] = [:]
         try reader.forEachBlock(kinds: .nodes) { block in
@@ -95,6 +117,7 @@ public struct AreaCutter: Sendable {
         }
 
         // Pass 2: ways with a node inside.
+        progress?(.ways)
         var keptWays: [Int64: OSMWay] = [:]
         try reader.forEachBlock(kinds: .ways) { block in
             try Task.checkCancellation()
@@ -106,6 +129,7 @@ public struct AreaCutter: Sendable {
         }
 
         // Pass 3: relations that touch the area.
+        progress?(.relations)
         var selected: [Int64: OSMRelation] = [:]
         var pending: [OSMRelation] = []
         try reader.forEachBlock(kinds: .relations) { block in
@@ -156,6 +180,7 @@ public struct AreaCutter: Sendable {
 
         // Pass 4: the member ways that were not already kept.
         if !wantedWayIDs.isEmpty {
+            progress?(.memberWays)
             try reader.forEachBlock(kinds: .ways) { block in
                 try Task.checkCancellation()
                 for way in block.ways where wantedWayIDs.contains(way.id) {
@@ -172,6 +197,7 @@ public struct AreaCutter: Sendable {
         let wanted = referenced.filter { !inside.contains($0) }
         var outside: [OSMNode] = []
         if !wanted.isEmpty {
+            progress?(.outsideNodes)
             var foundOutside = Set<Int64>()
             try reader.forEachBlock(kinds: .nodes) { block in
                 try Task.checkCancellation()
@@ -185,6 +211,7 @@ public struct AreaCutter: Sendable {
         }
 
         // Assemble the result.
+        progress?(.assembly)
         var nodes = outside
         nodes.reserveCapacity(outside.count + inside.records.count)
         for record in inside.records {

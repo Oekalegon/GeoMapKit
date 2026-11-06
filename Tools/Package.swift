@@ -1,0 +1,36 @@
+// swift-tools-version: 6.2
+
+import PackageDescription
+
+// Command-line tools for GeoMapKit. A separate package so the executable never
+// becomes part of the library's watchOS/iOS builds.
+
+let package = Package(
+    name: "GeoMapKitTools",
+    platforms: [.macOS(.v26)],
+    dependencies: [.package(path: "..")],
+    targets: [
+        // Argument parsing and formatting, kept apart from the executable so it can be tested.
+        .target(
+            name: "ToolSupport",
+            dependencies: [.product(name: "GeoCore", package: "GeoMapKit")]
+        ),
+        // The commands: they run the library and return reports, so they can be tested.
+        .target(
+            name: "ToolCommands",
+            dependencies: [
+                "ToolSupport",
+                .product(name: "OSMPBF", package: "GeoMapKit"),
+                .product(name: "GeoCore", package: "GeoMapKit"),
+            ]
+        ),
+        // A thin executable: parse the command line, call ToolCommands, print.
+        .executableTarget(name: "geomapkit", dependencies: ["ToolSupport", "ToolCommands"]),
+        .testTarget(name: "ToolSupportTests", dependencies: ["ToolSupport", .product(name: "GeoCore", package: "GeoMapKit")]),
+        .testTarget(
+            name: "ToolCommandsTests",
+            dependencies: ["ToolCommands", .product(name: "OSMPBF", package: "GeoMapKit"), .product(name: "GeoCore", package: "GeoMapKit")]
+        ),
+    ],
+    swiftLanguageModes: [.v6]
+)

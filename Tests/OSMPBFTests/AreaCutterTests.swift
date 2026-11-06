@@ -290,6 +290,20 @@ struct AreaCutterTests {
         await #expect(throws: CancellationError.self) { try await task.value }
     }
 
+    @Test("Progress reports each stage in order, skipping stages with nothing to do")
+    func progressStages() throws {
+        var stages: [AreaCutter.Pass] = []
+        _ = try AreaCutter().cut(PBFReader(data: World.file()), to: World.box) { stages.append($0) }
+        #expect(stages == [.insideNodes, .ways, .relations, .memberWays, .outsideNodes, .assembly])
+
+        // A box with nothing in it needs neither completion nor outside nodes.
+        stages = []
+        _ = try AreaCutter().cut(
+            PBFReader(data: World.file()), to: BoundingBox(south: 0, west: 0, north: 1, east: 1)
+        ) { stages.append($0) }
+        #expect(stages == [.insideNodes, .ways, .relations, .assembly])
+    }
+
     @Test("The header of the source file is carried over")
     func header() throws {
         let extract = try cut()

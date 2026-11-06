@@ -1,0 +1,51 @@
+import Foundation
+import OSMPBF
+import ToolCommands
+import ToolSupport
+
+let usage = """
+GeoMapKit tools
+
+  geomapkit scan <file.osm.pbf>
+      Decode the whole file once and print counts, time and memory.
+
+  geomapkit cut <file.osm.pbf> (--bbox south,west,north,east | --center lat,lon --radius-km R)
+                [--limit N]
+      Cut an area out of the file and print the time per pass, memory and
+      what the extract contains. --limit sets the relation member limit.
+"""
+
+do {
+    let arguments = Array(CommandLine.arguments.dropFirst())
+    guard let command = arguments.first else {
+        print(usage)
+        exit(0)
+    }
+    let rest = Array(arguments.dropFirst())
+    switch command {
+    case "scan":
+        let parsed = try CommandLineArguments(rest, knownOptions: [])
+        guard let path = parsed.positional.first else { throw ToolError("scan needs a file") }
+        print(ReportFormatter.text(for: try ToolRunner.scan(url: URL(fileURLWithPath: path))))
+    case "cut":
+        let parsed = try CommandLineArguments(rest, knownOptions: ["bbox", "center", "radius-km", "limit"])
+        guard let path = parsed.positional.first else { throw ToolError("cut needs a file") }
+        let area = try AreaArgument.parse(
+            bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"),
+            radiusKilometres: parsed.value(for: "radius-km")
+        )
+        var options = AreaCutter.Options()
+        if let limit = parsed.value(for: "limit") {
+            guard let value = Int(limit) else { throw ToolError("--limit expects a whole number") }
+            options.relationMemberLimit = value
+        }
+        print(ReportFormatter.text(for: try ToolRunner.cut(url: URL(fileURLWithPath: path), area: area, options: options)))
+    case "help", "--help", "-h":
+        print(usage)
+    default:
+        throw ToolError("Unknown command '\(command)'\n\n\(usage)")
+    }
+} catch {
+    FileHandle.standardError.write(Data("error: \(error)\n".utf8))
+    exit(1)
+}
