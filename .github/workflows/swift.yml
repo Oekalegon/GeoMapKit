@@ -27,3 +27,9 @@ jobs:
 
     - name: Build for iOS
       run: xcodebuild -scheme GeoMapKit-Package -destination 'generic/platform=iOS' build
+
+    - name: Build tools
+      run: swift build --package-path Tools
+
+    - name: Test tools
+      run: swift test --package-path Tools
