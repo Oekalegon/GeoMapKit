@@ -40,7 +40,8 @@ A cross-cutting constraint. A trail run can last hours with GPS, heart rate and 
 | PBF sourcing | Phase 1: a **test Mac app** that uses the package and downloads full regional PBF files (for example from Geofabrik), cuts the chosen area and builds graph and map data. Phase 2: smaller area PBFs hosted on a server of ours, downloaded by the apps. The area-cutting code lives in the package, so the same code later produces the hosted files. |
 | Elevation (v1) | No DEM in v1. The cost model uses tags only (surface, `sac_scale`, road class). The graph format reserves optional ascent/descent fields so a DEM step can be added later without a format break. The Watch barometer remains the source for recorded elevation. |
 | Distribution | The kit will be distributed at some point, so licence, attribution and data-source terms are release gates (section 9). |
-| Cost model | A `CostProfile` is a table of weights (data, not code), chosen by user preference. Presets: trail running, road running, walking. Adjusted by a few user settings: road avoidance, surface preference and a maximum difficulty (`sac_scale` limit). `mountain_hiking` is acceptable when the user allows it; the limit is a user setting, not a fixed exclusion. Default limit: up to `mountain_hiking` (to confirm). Missing tags default to a mid value, never to the easiest. A full per-surface weight editor is deferred; the data-table design allows it later without a router change. The A* heuristic is computed from the fastest speed of the profile in use, so it stays admissible. |
+| Release plan (provisional) | **v1 has no routing.** v1 is: PBF reader, area cutting, lossless feature store, renderer (iOS, macOS, watchOS), GPX import shown as an overlay, and route following on a given route (progress along the route, off-route detection, required waypoints). Off-route in v1 shows the bearing and distance back to the route; it does not compute a new path. **v2 adds routing:** graph builder, router and cost model, route planning, map-matching of GPX to the graph, the corridor graph, and rejoin rerouting. The corridor of map features for the Watch is in v1. The routing decisions in this document (cost model, rejoin, map-matching, route types) are the v2 design. |
+| Cost model (v2) | A `CostProfile` is a table of weights (data, not code), chosen by user preference. Presets: trail running, road running, walking. Adjusted by a few user settings: road avoidance, surface preference and a maximum difficulty (`sac_scale` limit). `mountain_hiking` is acceptable when the user allows it; the limit is a user setting, not a fixed exclusion. Default limit: up to `mountain_hiking` (to confirm). Missing tags default to a mid value, never to the easiest. A full per-surface weight editor is deferred; the data-table design allows it later without a router change. The A* heuristic is computed from the fastest speed of the profile in use, so it stays admissible. |
 | Platforms | Minimum version 26 on all platforms: iOS, iPadOS, macOS and watchOS. No availability checks for older systems. |
 | Language | Swift 6 language mode with strict concurrency from the start. Value types and `Sendable` by default; explicit isolation (actors) for caches and file readers. |
 | Overlays (v1) | A generic `MapOverlay` protocol (points, lines, polygons with a style). Only GPX tracks in v1 (the planned route and the current track). The kit knows nothing about Strava or HealthKit. |
@@ -134,10 +135,12 @@ Later: curved labels along paths, rotation and continuous zoom polish, live hill
 
 1. `GeoCore` and `OSMPBF` (Mercator maths, tile coordinates, PBF reader), testable on the Mac.
 2. `FeatureStore` and a Canvas renderer, trail layer only: one cell on the Watch simulator.
-3. Pipeline v0: an OSM reader and graph builder in Swift (a command-line target first, then called from the app), run on a small extract, so the Swift code has real data from the start.
-4. Graph format and A* router, with a command-line harness that prints routes as GPX.
-5. Style, labels, contours, hillshade.
-6. `Corridor` and `RouteFollower`, then the Watch integration.
+3. Pipeline v0: an OSM reader and feature builder in Swift (a command-line target first, then called from the app), run on a small extract, so the Swift code has real data from the start.
+4. Style and labels, then the Mac test app with a map view.
+5. GPX import and overlay, and `RouteFollower` on a given route (progress, off-route bearing and distance, required waypoints).
+6. Feature corridor and the Watch integration. **End of v1.**
+7. (v2) Graph builder and format, A* router with a command-line harness that prints routes as GPX, map-matching, corridor graph and rejoin rerouting.
+8. (later) Contours and hillshade once a DEM is in scope.
 
 The router can be developed and verified on the Mac with no UI, in parallel with the renderer.
 
@@ -181,7 +184,7 @@ The test Mac app (phase 1 of PBF sourcing) is the first consumer of the package:
 **Routing**
 9. Resolved in outline (see "Cost model" in section 2): presets plus a few sliders, `sac_scale` limit as a user setting. Still open: the actual numbers per preset (speed factors per surface and highway class, penalties for barriers, steps and poor trail visibility), to be tuned on real routes; and grade-dependent speed once a DEM exists.
 10. Is plain A* fast enough on a small-area graph on iPhone, or do we need ALT or contraction hierarchies? Measure first.
-11. Turn-by-turn instructions: needed in v1, or only line-following with off-route alerts?
+11. Resolved: v1 has no routing, so no turn-by-turn instructions in v1 (see "Release plan"). Revisit with the router in v2.
 12. Corridor buffer width: fixed, or scaled by edge density (wider in open terrain, narrower in towns)?
 13. Skip policy on rejoin: free skipping, a limit, or mandatory waypoints only?
 
