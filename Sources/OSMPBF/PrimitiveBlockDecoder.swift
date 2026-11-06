@@ -14,10 +14,12 @@ struct PrimitiveBlockDecoder {
 
     /// Decodes a data block.
     ///
-    /// - Parameter data: The decompressed `OSMData` payload.
-    /// - Returns: The block's nodes, ways and relations.
+    /// - Parameters:
+    ///   - data: The decompressed `OSMData` payload.
+    ///   - kinds: The object kinds to decode; groups of other kinds are skipped.
+    /// - Returns: The block's nodes, ways and relations of the requested kinds.
     /// - Throws: ``PBFError`` if the block is malformed or inconsistent.
-    static func decode(_ data: Data) throws -> OSMBlock {
+    static func decode(_ data: Data, kinds: OSMObjectKinds = .all) throws -> OSMBlock {
         var reader = ProtobufReader(data)
         var strings: [String] = []
         var groups: [Data] = []
@@ -42,7 +44,7 @@ struct PrimitiveBlockDecoder {
         )
         var block = OSMBlock()
         for group in groups {
-            try decoder.decodeGroup(group, into: &block)
+            try decoder.decodeGroup(group, kinds: kinds, into: &block)
         }
         return block
     }
@@ -60,15 +62,20 @@ struct PrimitiveBlockDecoder {
         return strings
     }
 
-    private func decodeGroup(_ data: Data, into block: inout OSMBlock) throws {
+    private func decodeGroup(_ data: Data, kinds: OSMObjectKinds, into block: inout OSMBlock) throws {
         var reader = ProtobufReader(data)
         while let (number, wireType) = try reader.readFieldKey() {
             switch (number, wireType) {
-            case (1, .lengthDelimited): block.nodes.append(try decodeNode(reader.readBytes()))
-            case (2, .lengthDelimited): try decodeDenseNodes(reader.readBytes(), into: &block.nodes)
-            case (3, .lengthDelimited): block.ways.append(try decodeWay(reader.readBytes()))
-            case (4, .lengthDelimited): block.relations.append(try decodeRelation(reader.readBytes()))
-            default: try reader.skip(wireType)
+            case (1, .lengthDelimited) where kinds.contains(.nodes):
+                block.nodes.append(try decodeNode(reader.readBytes()))
+            case (2, .lengthDelimited) where kinds.contains(.nodes):
+                try decodeDenseNodes(reader.readBytes(), into: &block.nodes)
+            case (3, .lengthDelimited) where kinds.contains(.ways):
+                block.ways.append(try decodeWay(reader.readBytes()))
+            case (4, .lengthDelimited) where kinds.contains(.relations):
+                block.relations.append(try decodeRelation(reader.readBytes()))
+            default:
+                try reader.skip(wireType)
             }
         }
     }
