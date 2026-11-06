@@ -15,22 +15,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # The package does not exist yet (design phase). Remove this guard once
-    # Package.swift is added so a missing manifest fails CI instead of skipping it.
-    - name: Check for package manifest
-      id: manifest
-      run: |
-        if [ -f Package.swift ]; then
-          echo "present=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "present=false" >> "$GITHUB_OUTPUT"
-          echo "::notice::No Package.swift yet; skipping build and test."
-        fi
-
-    - name: Build
-      if: steps.manifest.outputs.present == 'true'
+    - name: Build (macOS)
       run: swift build
 
     - name: Run tests
-      if: steps.manifest.outputs.present == 'true'
       run: swift test
+
+    # Every library target must build for all platforms (the Watch is the strictest).
+    - name: Build for watchOS
+      run: xcodebuild -scheme GeoMapKit-Package -destination 'generic/platform=watchOS' build
+
+    - name: Build for iOS
+      run: xcodebuild -scheme GeoMapKit-Package -destination 'generic/platform=iOS' build
