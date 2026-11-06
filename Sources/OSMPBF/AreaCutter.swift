@@ -1,4 +1,3 @@
-import Foundation
 import GeoCore
 
 /// Cuts a bounding box out of a PBF file.
@@ -14,19 +13,31 @@ import GeoCore
 ///    too (repeatedly).
 /// 4. Selected relations are **completed**: their member ways and nodes are added
 ///    even if they lie far outside the box. A relation with more than
-///    ``Options/relationMemberLimit`` way members is not completed and is marked
-///    incomplete, to bound the size.
+///    ``Options/relationMemberLimit`` way members is not completed, so it is
+///    incomplete unless all its members happened to be present already.
 /// 5. The nodes that kept ways and relations refer to, and that are outside the
 ///    box, are fetched.
 ///
 /// Each step is one pass over the file that decodes only the kind of object it
 /// needs, so memory is proportional to the area and not to the file.
+///
+/// **Known limitation.** A way is selected only if one of its *nodes* lies inside
+/// the box. A way with no vertex inside is missed even if its line crosses the
+/// box or its polygon covers it: for example a lake or forest outline whose
+/// vertices are all far away, or a long straight road with distant vertices.
+/// Relations are selected from the kept ways, so such a relation can be missed
+/// too. Osmium's bounding-box extract behaves the same way. See "Areas that span
+/// cells or the extract" in `docs/design/architecture.md`.
+///
+/// A cut is blocking and can take a while on a large file. It checks for task
+/// cancellation between blocks, so run it inside a `Task` to be able to cancel it.
+/// It runs on the phone or the Mac, never on the Watch, which receives cut data.
 public struct AreaCutter: Sendable {
     /// Settings for a cut.
     public struct Options: Sendable {
         /// The largest number of way members for which a relation is completed.
         /// Larger relations (national park boundaries and the like) are kept but
-        /// not completed, and are marked incomplete.
+        /// not completed. A negative value is treated as 0.
         public var relationMemberLimit: Int
 
         /// Creates options.
@@ -56,16 +67,20 @@ public struct AreaCutter: Sendable {
     ///   - reader: The PBF file.
     ///   - box: The area. It must be valid and must not cross the antimeridian.
     /// - Returns: The extract.
-    /// - Throws: ``AreaCutterError/invalidBoundingBox`` for an invalid box, or a
-    ///   ``PBFError`` if the file is malformed.
+    /// - Throws: ``AreaCutterError/invalidBoundingBox`` for an invalid box,
+    ///   ``AreaCutterError/duplicateID(kind:id:)`` if an object ID repeats, a
+    ///   ``PBFError`` if the file is malformed, or `CancellationError` if the
+    ///   surrounding task was cancelled.
     public func cut(_ reader: PBFReader, to box: BoundingBox) throws -> OSMExtract {
         guard box.isValid else { throw AreaCutterError.invalidBoundingBox }
         let header = try reader.header()
+        let memberLimit = max(0, options.relationMemberLimit)
 
         // Pass 1: nodes inside the box.
         var records: [NodeRecord] = []
         var insideTags: [Int64: [String: String]] = [:]
         try reader.forEachBlock(kinds: .nodes) { block in
+            try Task.checkCancellation()
             for node in block.nodes where box.contains(node.coordinate) {
                 records.append(NodeRecord(
                     id: node.id, latitude: node.coordinate.latitude, longitude: node.coordinate.longitude
@@ -75,12 +90,18 @@ public struct AreaCutter: Sendable {
         }
         let inside = NodeTable(sorting: records)
         records = []
+        if let duplicate = inside.firstDuplicateID {
+            throw AreaCutterError.duplicateID(kind: "node", id: duplicate)
+        }
 
         // Pass 2: ways with a node inside.
         var keptWays: [Int64: OSMWay] = [:]
         try reader.forEachBlock(kinds: .ways) { block in
+            try Task.checkCancellation()
             for way in block.ways where way.nodeIDs.contains(where: inside.contains) {
-                keptWays[way.id] = way
+                guard keptWays.updateValue(way, forKey: way.id) == nil else {
+                    throw AreaCutterError.duplicateID(kind: "way", id: way.id)
+                }
             }
         }
 
@@ -88,6 +109,7 @@ public struct AreaCutter: Sendable {
         var selected: [Int64: OSMRelation] = [:]
         var pending: [OSMRelation] = []
         try reader.forEachBlock(kinds: .relations) { block in
+            try Task.checkCancellation()
             for relation in block.relations {
                 let touches = relation.members.contains { member in
                     switch member.type {
@@ -97,7 +119,9 @@ public struct AreaCutter: Sendable {
                     }
                 }
                 if touches {
-                    selected[relation.id] = relation
+                    guard selected.updateValue(relation, forKey: relation.id) == nil else {
+                        throw AreaCutterError.duplicateID(kind: "relation", id: relation.id)
+                    }
                 } else if relation.members.contains(where: { $0.type == .relation }) {
                     pending.append(relation)
                 }
@@ -124,7 +148,7 @@ public struct AreaCutter: Sendable {
         var memberNodeIDs = Set<Int64>()
         for relation in selected.values {
             let wayMembers = relation.members.filter { $0.type == .way }
-            if wayMembers.count <= options.relationMemberLimit {
+            if wayMembers.count <= memberLimit {
                 for member in wayMembers where keptWays[member.id] == nil { wantedWayIDs.insert(member.id) }
             }
             for member in relation.members where member.type == .node { memberNodeIDs.insert(member.id) }
@@ -133,7 +157,12 @@ public struct AreaCutter: Sendable {
         // Pass 4: the member ways that were not already kept.
         if !wantedWayIDs.isEmpty {
             try reader.forEachBlock(kinds: .ways) { block in
-                for way in block.ways where wantedWayIDs.contains(way.id) { keptWays[way.id] = way }
+                try Task.checkCancellation()
+                for way in block.ways where wantedWayIDs.contains(way.id) {
+                    guard keptWays.updateValue(way, forKey: way.id) == nil else {
+                        throw AreaCutterError.duplicateID(kind: "way", id: way.id)
+                    }
+                }
             }
         }
 
@@ -143,8 +172,15 @@ public struct AreaCutter: Sendable {
         let wanted = referenced.filter { !inside.contains($0) }
         var outside: [OSMNode] = []
         if !wanted.isEmpty {
+            var foundOutside = Set<Int64>()
             try reader.forEachBlock(kinds: .nodes) { block in
-                for node in block.nodes where wanted.contains(node.id) { outside.append(node) }
+                try Task.checkCancellation()
+                for node in block.nodes where wanted.contains(node.id) {
+                    guard foundOutside.insert(node.id).inserted else {
+                        throw AreaCutterError.duplicateID(kind: "node", id: node.id)
+                    }
+                    outside.append(node)
+                }
             }
         }
 

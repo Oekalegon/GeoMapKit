@@ -29,6 +29,14 @@ struct NodeTable {
         return low < records.count && records[low].id == id ? low : nil
     }
 
+    /// The first ID that appears more than once, or `nil` if all IDs are unique.
+    var firstDuplicateID: Int64? {
+        for index in records.indices.dropFirst() where records[index].id == records[index - 1].id {
+            return records[index].id
+        }
+        return nil
+    }
+
     func contains(_ id: Int64) -> Bool {
         index(of: id) != nil
     }
