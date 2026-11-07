@@ -20,6 +20,11 @@ GeoMapKit tools
       Cut an area, build a feature store file from it, write it atomically,
       verify it, and print times, sizes and what was stored. The default
       profile is full; watch builds the reduced Watch copy.
+
+  geomapkit render <file.gmk> --center lat,lon --zoom Z --output <file.png>
+                   [--size WxH] [--scale S] [--style standard|watch]
+      Draw a map from a feature store file into a PNG. Size is in points
+      (default 800x600), scale is pixels per point (default 2).
 """
 
 do {
@@ -64,6 +69,13 @@ do {
         let report = try ToolRunner.build(
             url: URL(fileURLWithPath: path), area: area, output: URL(fileURLWithPath: output), profile: profile, options: options)
         print(ReportFormatter.text(for: report))
+    case "render":
+        let parsed = try CommandLineArguments(rest, knownOptions: ["center", "zoom", "output", "size", "scale", "style"])
+        guard let path = parsed.positional.first else { throw ToolError("render needs a store file") }
+        let request = try RenderArgument.parse(
+            center: parsed.value(for: "center"), zoom: parsed.value(for: "zoom"), size: parsed.value(for: "size"),
+            scale: parsed.value(for: "scale"), style: parsed.value(for: "style"), output: parsed.value(for: "output"))
+        print(ReportFormatter.text(for: try ToolRunner.render(store: URL(fileURLWithPath: path), request: request)))
     case "help", "--help", "-h":
         print(usage)
     default:

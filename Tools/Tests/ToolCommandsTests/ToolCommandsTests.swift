@@ -215,3 +215,50 @@ struct BuildCommandTests {
         #expect(text.contains("features skipped by the profile: 9,001"))
     }
 }
+
+@Suite("Render command")
+struct RenderCommandTests {
+    private func temporary(_ name: String) -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-\(UUID().uuidString)-\(name)")
+    }
+
+    @Test("renders a store to a PNG and reports what it drew")
+    func renders() throws {
+        let input = temporary("in.osm.pbf"), store = temporary("s.gmk"), png = temporary("m.png")
+        defer { for url in [input, store, png] { try? FileManager.default.removeItem(at: url) } }
+        try TinyPBF.make().write(to: input)
+        _ = try ToolRunner.build(
+            url: input, area: BoundingBox(south: 47, west: 9, north: 48, east: 10), output: store, profile: .full)
+        let cell = try #require(try FeatureStoreFile(contentsOf: store).cells().first)
+        let centre = Coordinate(
+            latitude: (cell.northWest.latitude + cell.southEast.latitude) / 2,
+            longitude: (cell.northWest.longitude + cell.southEast.longitude) / 2)
+
+        let request = RenderRequest(center: centre, zoom: 15, width: 200, height: 150, scale: 2, style: .standard, output: png.path)
+        let report = try ToolRunner.render(store: store, request: request)
+        let data = try Data(contentsOf: png)
+        #expect(Array(data.prefix(4)) == [0x89, 0x50, 0x4E, 0x47])
+        #expect(report.pixelWidth == 400 && report.pixelHeight == 300)
+        #expect(report.pngBytes == data.count)
+        #expect(report.band == .detail)
+        #expect(ReportFormatter.text(for: report).contains("400 x 300 px"))
+    }
+
+    @Test("a missing store is a ToolError and nothing is written")
+    func missingStore() {
+        let png = temporary("m.png")
+        let request = RenderRequest(
+            center: Coordinate(latitude: 47, longitude: 9), zoom: 15, width: 100, height: 100, scale: 1, style: .watch,
+            output: png.path)
+        #expect(throws: ToolError.self) { try ToolRunner.render(store: URL(fileURLWithPath: "/nonexistent/s.gmk"), request: request) }
+        #expect(!FileManager.default.fileExists(atPath: png.path))
+    }
+
+    @Test("an output directory that does not exist is rejected")
+    func missingDirectory() {
+        let request = RenderRequest(
+            center: Coordinate(latitude: 47, longitude: 9), zoom: 15, width: 100, height: 100, scale: 1, style: .standard,
+            output: "/nonexistent/dir/m.png")
+        #expect(throws: ToolError.self) { try ToolRunner.render(store: URL(fileURLWithPath: "/nonexistent/s.gmk"), request: request) }
+    }
+}
