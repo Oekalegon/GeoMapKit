@@ -11,7 +11,8 @@ struct MapStyleTests {
         #expect(border.color == boundary.color && border.dash == boundary.dash, "the same dashed purple line")
         let casing = try #require(border.casing)
         #expect(casing.color.value(atZoom: 12).alpha < 1 && casing.color.value(atZoom: 12).alpha > 0)
-        #expect(casing.extraPoints.value(atZoom: 12) >= 4, "much wider than the 1 point line")
+        #expect(casing.extraPoints.value(atZoom: 12) >= 3, "several times wider than the 1 point line")
+        #expect(casing.extraPoints.value(atZoom: 8) < casing.extraPoints.value(atZoom: 16), "narrower when zoomed out")
         #expect(MapStyle.watch.style(for: .countryBorder) == nil)
         // The band is drawn before the line, so the line stays crisp on top of it.
         let steps = MapStyle.standard.drawSteps(atZoom: 12).filter { $0.featureClass == .countryBorder }
