@@ -42,15 +42,16 @@ extension FeatureStoreBuilder {
             let rings = joined.rings.compactMap { ring in tolerance.map { GeometrySimplifier.simplify(ring: ring, tolerance: $0) } ?? ring }
             let lines = SeaBuilder.Lines(rings: rings, chains: chains)
             let sea = tolerance == nil ? whole.rings : SeaBuilder.build(lines: lines, box: block).rings
+            let blockParts = SeaBuilder.parts(lines: lines, sea: sea, columns: columns, rows: rows, zoom: Self.zoom)
             for row in rows {
                 for column in columns {
-                    guard let cell = TileID(zoom: Self.zoom, x: column, y: row) else { continue }
-                    let parts = SeaBuilder.parts(in: CellRect(tile: cell), lines: lines, sea: sea)
-                    guard !parts.isEmpty else { continue }
+                    guard let found = blockParts[(row - rows.lowerBound) * columns.count + (column - columns.lowerBound)], !found.isEmpty,
+                        let cell = TileID(zoom: Self.zoom, x: column, y: row)
+                    else { continue }
                     try emitter.writer.add(
                         StoredFeature(
                             classID: FeatureClass.sea.rawValue, subclass: 0, kind: .area, objectType: .way, objectID: 0,
-                            flags: [], offsetAlongLine: 0, nameID: nil, tags: [], parts: parts),
+                            flags: [], offsetAlongLine: 0, nameID: nil, tags: [], parts: found),
                         band: band, cell: cell)
                 }
             }

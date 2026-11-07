@@ -85,6 +85,47 @@ enum SeaBuilder {
             }
         }
 
+        return finish(pieces: pieces, islands: islands, seaRings: seaRings, box: box)
+    }
+
+    /// What the coastlines in one cell are, gathered by ``SeaCellBuckets`` without looking at the rest of the coastline.
+    struct CellInput {
+        /// Runs of a coastline that pass through the cell. A run may reach beyond the cell; it is clipped to it here.
+        var runs: [[PackedPoint]] = []
+        /// Closed coastlines that lie wholly inside the cell: islands, and the rare clockwise ring that is water inside.
+        var wholeRings: [(points: [PackedPoint], area: Double)] = []
+
+        var isEmpty: Bool { runs.isEmpty && wholeRings.isEmpty }
+    }
+
+    /// Builds the sea in one cell from the coastline pieces that were found for it; the same as ``build(lines:box:)`` for that
+    /// cell, without looking at every coastline vertex.
+    static func buildCell(_ input: CellInput, box: CellRect) -> Result {
+        var pieces: [[PackedPoint]] = []
+        for run in input.runs {
+            var parts = LineClipper.clip(run, to: box).map(\.points)
+            // A run that is a whole closed ring and starts inside the cell is cut in two at its start: the last part
+            // continues into the first.
+            if run.count >= 4, run.first == run.last, parts.count > 1, let first = parts.first, let last = parts.last,
+                !onBorder(first[0], box)
+            {
+                parts[0] = last + first.dropFirst()
+                parts.removeLast()
+            }
+            pieces.append(contentsOf: parts)
+        }
+        var islands: [[PackedPoint]] = []
+        var seaRings: [[PackedPoint]] = []
+        for ring in input.wholeRings {
+            if ring.area > 0 { islands.append(ring.points) } else if ring.area < 0 { seaRings.append(ring.points) }
+        }
+        return finish(pieces: pieces, islands: islands, seaRings: seaRings, box: box)
+    }
+
+    /// The part of the building that both entry points share: check the pieces, walk the border, cut out the islands.
+    private static func finish(pieces: [[PackedPoint]], islands: [[PackedPoint]], seaRings initialRings: [[PackedPoint]], box: CellRect) -> Result {
+        var result = Result()
+        var seaRings = initialRings
         result.touchesBox = !pieces.isEmpty || !islands.isEmpty || !seaRings.isEmpty
         result.openEnds = pieces.filter { piece in
             guard let first = piece.first, let last = piece.last else { return true }
@@ -143,6 +184,27 @@ enum SeaBuilder {
             if contains(sea, centre) { rings = [boxRing(cell)] }
         }
         return rings.map { ring in GeometryPart(points: ring, artificialEdges: artificialRuns(of: ring, in: cell)) }
+    }
+
+    /// The sea in one cell from the coastline pieces `SeaCellBuckets` found for it.
+    ///
+    /// - Returns: The parts, and whether the cell has no coastline in it at all (`nil` parts), in which case it is sea or
+    ///   land as a whole and the caller says which.
+    static func parts(in cell: CellRect, input: CellInput) -> [GeometryPart]? {
+        let result = buildCell(input, box: cell)
+        if result.rings.isEmpty && !result.touchesBox { return nil }
+        return result.rings.map { ring in GeometryPart(points: ring, artificialEdges: artificialRuns(of: ring, in: cell)) }
+    }
+
+    /// The cell square as one part: a cell that is wholly sea.
+    static func wholeCell(_ cell: CellRect) -> GeometryPart {
+        let ring = boxRing(cell)
+        return GeometryPart(points: ring, artificialEdges: artificialRuns(of: ring, in: cell))
+    }
+
+    /// The point at the middle of a cell, for asking whether the cell is sea.
+    static func centre(of cell: CellRect) -> PackedPoint {
+        PackedPoint(longitude: Int32((Int64(cell.west) + Int64(cell.east)) / 2), latitude: Int32((Int64(cell.south) + Int64(cell.north)) / 2))
     }
 
     /// The runs of edges that lie along the cell border (both ends on the same border line).
@@ -213,7 +275,8 @@ enum SeaBuilder {
                 if next.index == start { closed = true; break }
                 used[next.index] = true
                 current = next.index
-                ring.append(contentsOf: pieces[current])
+                // A piece that starts where the last one ended (a ring cut at its start on the border) adds no second vertex.
+                ring.append(contentsOf: pieces[current].first == ring.last ? Array(pieces[current].dropFirst()) : pieces[current])
             }
             if closed, ring.count >= 3 {
                 if ring.first != ring.last { ring.append(ring[0]) }
