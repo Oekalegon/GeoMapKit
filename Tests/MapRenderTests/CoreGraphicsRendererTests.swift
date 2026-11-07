@@ -112,4 +112,29 @@ struct CoreGraphicsRendererTests {
         #expect(!inkRows.isEmpty)
         #expect(inkRows.allSatisfy { abs($0 - 80) < 24 })
     }
+
+    @Test func attributionIsDrawnInTheBottomRightCorner() throws {
+        let wide = MapViewport(center: viewport.center, zoom: 16, width: 400, height: 80)
+        let scene = MapScene(viewport: wide, band: .detail, steps: [], cellCount: 0, attribution: "© OpenStreetMap contributors, ODbL")
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 2))
+        let background = MapStyle.standard.background
+        var minRow = image.height
+        var maxColumn = 0
+        var minColumn = image.width
+        for y in 0..<image.height {
+            for x in 0..<image.width where !close(pixel(image, x: x, y: y), to: background) {
+                minRow = min(minRow, y)
+                minColumn = min(minColumn, x)
+                maxColumn = max(maxColumn, x)
+            }
+        }
+        #expect(minRow >= image.height - 30, "ink only in the bottom rows")
+        #expect(maxColumn > image.width - 12 && minColumn > image.width / 2)
+    }
+
+    @Test func noAttributionMeansNoInk() throws {
+        let scene = MapScene(viewport: viewport, band: .detail, steps: [], cellCount: 0)
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 2))
+        #expect(close(pixel(image, x: image.width - 10, y: image.height - 10), to: MapStyle.standard.background))
+    }
 }
