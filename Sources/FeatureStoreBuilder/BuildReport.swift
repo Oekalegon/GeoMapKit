@@ -35,6 +35,8 @@ public struct BuildReport: Sendable, Equatable {
     public var featuresSkippedByProfile = 0
     /// Pieces (detail band) that fall in cells outside the written area, and were dropped.
     public var piecesOutsideCells = 0
+    /// Footways that were classed as pavement because they run beside a road, without a sidewalk tag of their own counted.
+    public var footwaysBesideRoads = 0
     /// Coastline ways found in the extract.
     public var coastlineWays = 0
     /// Sea polygons built from the coastlines.
