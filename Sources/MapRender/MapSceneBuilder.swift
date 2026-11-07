@@ -94,7 +94,9 @@ public struct MapSceneBuilder: Sendable {
                 if isRoad, polyline.count > 2 { throughPoints.formUnion(polyline[1..<(polyline.count - 1)]) }
             }
         }
-        var lines: [FeatureClass: [SceneLine]] = [:]
+        var built: [SceneLine] = []
+        var ends: [(start: PackedPoint?, end: PackedPoint?)] = []
+        var roadWidths: [Double?] = []
         for (key, info, polyline) in joined {
             let screen = polyline.map(viewport.screenPoint(for:))
             guard let bounds = ScreenBounds(of: screen), bounds.intersects(visible) else { continue }
@@ -106,10 +108,16 @@ public struct MapSceneBuilder: Sendable {
                 guard onGround, let end else { return false }
                 return structureEnds.contains(end) || (isRoad && throughPoints.contains(end))
             }
-            lines[key.featureClass, default: []].append(SceneLine(
+            built.append(SceneLine(
                 featureClass: key.featureClass, objectID: key.objectID, points: screen, lanes: info.lanes, name: info.name,
                 structure: info.structure, flatStart: endsFlat(polyline.first), flatEnd: endsFlat(polyline.last)))
+            ends.append((polyline.first, polyline.last))
+            roadWidths.append(classStyle?.stroke?.width.ground == nil ? nil : classStyle?.stroke?.width.resolved(
+                atZoom: viewport.zoom, metresPerPoint: viewport.metresPerPoint, lanes: info.lanes))
         }
+        RoadTaper.apply(to: &built, nodes: ends, widths: roadWidths)
+        var lines: [FeatureClass: [SceneLine]] = [:]
+        for line in built { lines[line.featureClass, default: []].append(line) }
         // Dictionary order is not stable; sort so the same input always gives the same scene.
         for featureClass in lines.keys { lines[featureClass]?.sort { ($0.objectID, $0.points[0].x) < ($1.objectID, $1.points[0].x) } }
         for featureClass in areas.keys { areas[featureClass]?.sort { $0.objectID < $1.objectID } }
