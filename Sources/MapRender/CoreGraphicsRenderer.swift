@@ -14,6 +14,9 @@ public struct CoreGraphicsRenderer: MapRenderer {
     /// Creates a renderer.
     public init() {}
 
+    /// Draws the scene into a context in screen points (origin top-left, y down).
+    ///
+    /// The data credit of the scene is drawn last, in the bottom-right corner.
     public func draw(_ scene: MapScene, style: MapStyle, into context: CGContext) {
         let viewport = scene.viewport
         let zoom = viewport.zoom
@@ -41,6 +44,20 @@ public struct CoreGraphicsRenderer: MapRenderer {
             }
         }
         drawLabels(scene, style: style, in: context)
+        drawAttribution(scene, in: context)
+    }
+
+    /// Draws the data credit in the bottom-right corner, small, on a light halo so it stays readable.
+    private func drawAttribution(_ scene: MapScene, in context: CGContext) {
+        guard !scene.attribution.isEmpty else { return }
+        let fontSize = 8.0
+        let size = Self.measure(scene.attribution, fontSize)
+        let origin = ScreenPoint(
+            x: max(scene.viewport.width - size.width - 4, 2), y: max(scene.viewport.height - size.height - 3, 0))
+        let label = PlacedLabel(
+            text: scene.attribution, origin: origin, width: size.width, height: size.height, fontSize: fontSize,
+            style: LabelStyle(size: ZoomValue(constant: fontSize), color: MapColor(hex: 0x333333), haloWidth: 2))
+        drawLabel(label, in: context)
     }
 
     // MARK: Body
@@ -118,28 +135,30 @@ public struct CoreGraphicsRenderer: MapRenderer {
         let candidates = LabelCandidates.collect(from: scene, style: style)
         let labels = LabelPlacer.place(
             candidates, viewWidth: scene.viewport.width, viewHeight: scene.viewport.height, measure: Self.measure)
-        for label in labels {
-            let line = Self.line(for: label.text, fontSize: label.fontSize)
-            context.saveGState()
-            // Core Text draws upright in a y-up space; the view is y-down, so flip around the baseline.
-            context.translateBy(x: label.origin.x, y: label.origin.y + Self.ascent(of: line))
-            context.scaleBy(x: 1, y: -1)
-            context.textMatrix = .identity
-            context.textPosition = .zero
-            if label.style.haloWidth > 0 {
-                context.setTextDrawingMode(.stroke)
-                context.setStrokeColor(label.style.haloColor.cgColor)
-                context.setLineWidth(label.style.haloWidth * 2)
-                context.setLineJoin(.round)
-                CTLineDraw(line, context)
-            }
-            // CTLineDraw moves the text position to the end of the line: start the fill pass at the same place.
-            context.textPosition = .zero
-            context.setTextDrawingMode(.fill)
-            context.setFillColor(label.style.color.cgColor)
+        for label in labels { drawLabel(label, in: context) }
+    }
+
+    private func drawLabel(_ label: PlacedLabel, in context: CGContext) {
+        let line = Self.line(for: label.text, fontSize: label.fontSize)
+        context.saveGState()
+        defer { context.restoreGState() }
+        // Core Text draws upright in a y-up space; the view is y-down, so flip around the baseline.
+        context.translateBy(x: label.origin.x, y: label.origin.y + Self.ascent(of: line))
+        context.scaleBy(x: 1, y: -1)
+        context.textMatrix = .identity
+        context.textPosition = .zero
+        if label.style.haloWidth > 0 {
+            context.setTextDrawingMode(.stroke)
+            context.setStrokeColor(label.style.haloColor.cgColor)
+            context.setLineWidth(label.style.haloWidth * 2)
+            context.setLineJoin(.round)
             CTLineDraw(line, context)
-            context.restoreGState()
         }
+        // CTLineDraw moves the text position to the end of the line: start the fill pass at the same place.
+        context.textPosition = .zero
+        context.setTextDrawingMode(.fill)
+        context.setFillColor(label.style.color.cgColor)
+        CTLineDraw(line, context)
     }
 
     static func line(for text: String, fontSize: Double) -> CTLine {

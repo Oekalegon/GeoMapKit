@@ -104,7 +104,7 @@ public struct MapSceneBuilder: Sendable {
             }
             if !sceneStep.lines.isEmpty || !sceneStep.areas.isEmpty || !sceneStep.points.isEmpty { steps.append(sceneStep) }
         }
-        return MapScene(viewport: viewport, band: band, steps: steps, cellCount: cellCount)
+        return MapScene(viewport: viewport, band: band, steps: steps, cellCount: cellCount, attribution: file.attribution)
     }
 
     // MARK: Areas
