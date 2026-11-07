@@ -1,11 +1,13 @@
 import FeatureStore
+import GeoCore
 import OSMPBF
 
 extension FeatureStoreBuilder {
     /// Builds the sea from the coastlines in the extract and stores it as one area feature of class `sea`.
     ///
-    /// The sea polygon covers the written cells only. It is stored in every band, like any other area, and has the
-    /// object ID 0 (it is not an OSM object). Nothing is stored if the coastlines cannot be closed (see ``SeaBuilder``).
+    /// The sea covers the written cells only, and is built cell by cell for every band (``SeaBuilder``), from coastlines
+    /// simplified for that band. It has the object ID 0 (it is not an OSM object). Nothing is stored if the coastlines
+    /// cannot be closed.
     func storeSea(
         of extract: OSMExtract, columns: ClosedRange<Int>, rows: ClosedRange<Int>, into emitter: inout FeatureEmitter
     ) throws {
@@ -20,17 +22,36 @@ extension FeatureStoreBuilder {
             ways.append(CoastlineJoiner.Way(
                 id: extract.ways.ids[position], nodeIDs: Array(extract.ways.nodeIDs(at: position)), points: runs[0]))
         }
-        guard !ways.isEmpty, let box = CellRect(columns: columns, rows: rows, zoom: Self.zoom) else { return }
+        guard !ways.isEmpty, let block = CellRect(columns: columns, rows: rows, zoom: Self.zoom) else { return }
         let joined = CoastlineJoiner.join(ways)
-        let sea = SeaBuilder.build(rings: joined.rings, chains: joined.chains, box: box)
+        let whole = SeaBuilder.build(rings: joined.rings, chains: joined.chains, box: block)
         emitter.report.coastlineWays = ways.count
-        emitter.report.seaOpenEnds = sea.openEnds + (broken ? 1 : 0)
-        guard !broken, !sea.rings.isEmpty else { return }
-        emitter.report.seaPolygons = sea.seaPolygons
-        emitter.report.seaIslands = sea.islands
-        let classification = Classification(
-            featureClass: .sea, subclass: 0, kind: .area, minimumBand: .overview, showsOnWatch: true)
-        try emitter.emit(FeatureSpec(
-            classification: classification, objectType: .way, objectID: 0, tags: [], geometry: .rings(sea.rings)))
+        emitter.report.seaOpenEnds = whole.openEnds + (broken ? 1 : 0)
+        guard !broken, !whole.rings.isEmpty else { return }
+        emitter.report.seaPolygons = whole.seaPolygons
+        emitter.report.seaIslands = whole.islands
+        emitter.report.featuresByClass[.sea] = 1
+
+        for band in ZoomBand.allCases {
+            if profile == .watch && band == .overview { continue }
+            try Task.checkCancellation()
+            let tolerance = GeometrySimplifier.tolerance(for: band)
+            let chains = joined.chains.map { chain in tolerance.map { GeometrySimplifier.simplify(line: chain, tolerance: $0) } ?? chain }
+            let rings = joined.rings.compactMap { ring in tolerance.map { GeometrySimplifier.simplify(ring: ring, tolerance: $0) } ?? ring }
+            let lines = SeaBuilder.Lines(rings: rings, chains: chains)
+            let sea = tolerance == nil ? whole.rings : SeaBuilder.build(lines: lines, box: block).rings
+            for row in rows {
+                for column in columns {
+                    guard let cell = TileID(zoom: Self.zoom, x: column, y: row) else { continue }
+                    let parts = SeaBuilder.parts(in: CellRect(tile: cell), lines: lines, sea: sea)
+                    guard !parts.isEmpty else { continue }
+                    try emitter.writer.add(
+                        StoredFeature(
+                            classID: FeatureClass.sea.rawValue, subclass: 0, kind: .area, objectType: .way, objectID: 0,
+                            flags: [], offsetAlongLine: 0, nameID: nil, tags: [], parts: parts),
+                        band: band, cell: cell)
+                }
+            }
+        }
     }
 }
