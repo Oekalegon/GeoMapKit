@@ -67,12 +67,14 @@ public enum ToolRunner {
         let result = try FeatureStoreBuilder(profile: profile).build(from: extract)
         let buildTime = clock.now - started
 
+        // Verify before touching the output, so a bad build never replaces a good file.
+        try FeatureStoreFile(data: result.data).verify()
         do {
             try result.data.write(to: output, options: .atomic)
         } catch {
             throw ToolError("Cannot write \(output.path): \(error.localizedDescription)")
         }
-        // Verify what is on disk, not what is in memory.
+        // Verify again what is on disk, to catch a bad write.
         let file = try FeatureStoreFile(contentsOf: output)
         try file.verify()
         return BuildCommandReport(

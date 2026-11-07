@@ -16,6 +16,7 @@ public struct BuildCommandReport: Sendable {
     /// What the builder stored, skipped and counted.
     public let report: BuildReport
 
+    /// Creates a report from its parts.
     public init(
         profile: BuildProfile, outputName: String, cut: CutReport, buildTime: Duration,
         statistics: FeatureStoreFile.Statistics, report: BuildReport
