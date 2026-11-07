@@ -11,6 +11,9 @@ enum RoadTaper {
     /// Roads that leave a node within this angle of straight on the other side are taken to continue each other: the cosine
     /// of 140 degrees. A side road leaves at a much smaller angle and is not a continuation.
     private static let continuationCosine = -0.766
+    /// A road that meets a straight-through pair of ways ends flat, unless it leaves within this angle of one of them (a fork
+    /// rather than a side road): the cosine of 35 degrees.
+    private static let forkCosine = 0.82
     /// A difference in width below this many points is not worth a blend.
     private static let minimumDifference = 0.75
 
@@ -39,6 +42,9 @@ enum RoadTaper {
                 atNode[node, default: []].append(Entry(line: index, isStart: false, direction: direction, width: width))
             }
         }
+        for entries in atNode.values where entries.count >= 3 {
+            markSideRoads(among: entries, in: &lines)
+        }
         for entries in atNode.values where entries.count >= 2 {
             for entry in entries {
                 // The partner is the road of the same class that leaves most nearly straight on the other side.
@@ -51,6 +57,28 @@ enum RoadTaper {
                 let target = (partner.width + entry.width) / 2
                 if entry.isStart { lines[entry.line].startWidth = target } else { lines[entry.line].endWidth = target }
             }
+        }
+    }
+
+    /// Marks the ends of the roads that meet a straight-through pair of ways side on.
+    ///
+    /// A through road that is cut into two ways at a junction ends both halves at the node, so the side road that ends there
+    /// meets no vertex in the middle of a road, and is not found as a T junction by the scene builder. Here the two halves are
+    /// the pair of ends that leave in nearly opposite directions; any other end at the node that is not almost one of
+    /// their directions (a fork) is a side road, and ends flat.
+    private static func markSideRoads(among entries: [Entry], in lines: inout [SceneLine]) {
+        var pair: (a: Entry, b: Entry, dot: Double)?
+        for (index, first) in entries.enumerated() {
+            for second in entries[(index + 1)...] where second.line != first.line {
+                let dot = first.direction.x * second.direction.x + first.direction.y * second.direction.y
+                if dot < continuationCosine, pair.map({ dot < $0.dot }) ?? true { pair = (first, second, dot) }
+            }
+        }
+        guard let pair else { return }
+        func cosine(_ a: Entry, _ b: Entry) -> Double { a.direction.x * b.direction.x + a.direction.y * b.direction.y }
+        for entry in entries where entry.line != pair.a.line && entry.line != pair.b.line {
+            guard cosine(entry, pair.a) < forkCosine, cosine(entry, pair.b) < forkCosine else { continue }
+            if entry.isStart { lines[entry.line].flatStart = true } else { lines[entry.line].flatEnd = true }
         }
     }
 

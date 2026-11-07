@@ -157,4 +157,37 @@ struct MapSceneStructureTests {
         #expect(try line(4).endWidth == nil && line(5).startWidth == nil, "equal widths need no blend")
         #expect(try line(6).startWidth == nil, "a road of another class does not continue it")
     }
+
+    @Test("A road that ends where a through road is cut into two ways ends flat, unless it forks off at a small angle")
+    func splitThroughRoad() throws {
+        var writer = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 47.0, west: 9.4, north: 47.3, east: 9.7), attribution: "© OpenStreetMap contributors, ODbL")
+        let cell = try #require(TileID.containing(Coordinate(latitude: 47.1, longitude: 9.5), zoom: 13))
+        let west = Int32((cell.northWest.longitude * 1e7).rounded())
+        func point(_ x: Int32, _ y: Int32) -> PackedPoint { PackedPoint(longitude: west + x, latitude: latitude + y) }
+        func add(_ id: Int64, _ featureClass: FeatureClass, _ points: [PackedPoint]) throws {
+            try writer.add(
+                StoredFeature(classID: featureClass.rawValue, subclass: 4, kind: .line, objectType: .way, objectID: id, parts: [GeometryPart(points: points)]),
+                band: .detail, cell: cell)
+        }
+        // Junction 1 at (6000, 0): the through road in two halves (1, 2) and a side road (3) at a right angle.
+        try add(1, .roadMajor, [point(2_000, 0), point(6_000, 0)])
+        try add(2, .roadMajor, [point(6_000, 0), point(10_000, 0)])
+        try add(3, .roadMinor, [point(6_000, 3_000), point(6_000, 0)])
+        // Junction 2 at (20000, 0): the same, but the third road forks off at about 15 degrees from the second half.
+        try add(4, .roadMajor, [point(16_000, 0), point(20_000, 0)])
+        try add(5, .roadMajor, [point(20_000, 0), point(24_000, 0)])
+        try add(6, .roadMajor, [point(20_000, 0), point(24_000, 1_000)])
+        // Junction 3 at (30000, 0): a bend of two roads and nothing else.
+        try add(7, .roadMinor, [point(28_000, 0), point(30_000, 0)])
+        try add(8, .roadMinor, [point(30_000, 0), point(32_000, 2_000)])
+        let file = try FeatureStoreFile(data: try writer.data())
+        let centre = Coordinate(latitude: Double(latitude) / 1e7, longitude: Double(west + 16_000) / 1e7)
+        let scene = try MapSceneBuilder(file: file, style: .standard).scene(for: MapViewport(center: centre, zoom: 16, width: 800, height: 400))
+        func line(_ id: Int64) throws -> SceneLine { try #require(scene.steps.flatMap(\.lines).first { $0.objectID == id }) }
+        #expect(try line(3).flatEnd && !line(3).flatStart, "the side road ends flat at the cut through road")
+        #expect(try !line(1).flatEnd && !line(2).flatStart, "the two halves keep their round ends")
+        #expect(try !line(6).flatStart && !line(6).flatEnd, "a fork is not a side road")
+        #expect(try !line(7).flatEnd && !line(8).flatStart, "a plain bend is unchanged")
+    }
 }
