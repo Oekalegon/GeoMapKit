@@ -335,4 +335,29 @@ struct FeatureStoreBuilderTests {
         #expect(shore.allSatisfy { $0.objectType == .relation && $0.objectID == 20 })
         #expect(!all.contains { $0.classID == FeatureClass.coastline.rawValue && $0.kind == .area })
     }
+
+    @Test("The Watch copy has the sea in the mid and detail bands only")
+    func seaInTheWatchCopy() throws {
+        var world = SyntheticWorld()
+        world.node(1, -0.3, 1.5); world.node(2, 1.5, 1.4); world.node(3, 3.3, 1.5)
+        world.way(10, [1, 2, 3], [("natural", "coastline")])
+        let result = try FeatureStoreBuilder(profile: .watch).build(from: try world.extract())
+        let file = try FeatureStoreFile(data: result.data)
+        let block = world.block
+        let cell = block.tile(column: 1, row: 2)
+        #expect(file.bands == [.mid, .detail])
+        for band in [ZoomBand.mid, .detail] {
+            #expect(try file.features(in: cell, band: band).contains { $0.classID == FeatureClass.sea.rawValue }, "sea in \(band)")
+        }
+        #expect(result.report.seaPolygons == 1)
+    }
+
+    @Test("A coastline way with a node missing from the file builds no sea, and the report says so")
+    func brokenCoastlineWay() throws {
+        var world = SyntheticWorld()
+        world.node(1, -0.3, 1.5); world.node(3, 3.3, 1.5)
+        world.way(10, [1, 999, 3], [("natural", "coastline")])      // node 999 is not in the file
+        let result = try FeatureStoreBuilder().build(from: try world.extract())
+        #expect(result.report.seaOpenEnds > 0 && result.report.seaPolygons == 0 && result.report.featuresByClass[.sea] == nil)
+    }
 }

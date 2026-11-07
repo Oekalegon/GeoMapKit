@@ -33,7 +33,7 @@ enum SeaBuilder {
             let line: LineClipper.PreparedLine
             let west: Int32, east: Int32, south: Int32, north: Int32
             /// Twice the signed area: positive for a counter-clockwise ring (an island).
-            let area: Int64
+            let area: Double
         }
         let chains: [LineClipper.PreparedLine]
         let rings: [Ring]
@@ -236,13 +236,16 @@ enum SeaBuilder {
     // MARK: Geometry
 
     /// Twice the signed area in longitude and latitude (east and north as positive): positive for a counter-clockwise ring.
-    static func signedArea(_ ring: [PackedPoint]) -> Int64 {
+    ///
+    /// Only the sign is used, so the sum is made in `Double`: with integer products a ring that spans a large part of the
+    /// world would overflow `Int64`, which traps.
+    static func signedArea(_ ring: [PackedPoint]) -> Double {
         guard let origin = ring.first, ring.count >= 4 else { return 0 }
-        var sum: Int64 = 0
+        var sum = 0.0
         for index in 1..<(ring.count - 1) {
             let a = ring[index], b = ring[index + 1]
-            let ax = Int64(a.longitude) - Int64(origin.longitude), ay = Int64(a.latitude) - Int64(origin.latitude)
-            let bx = Int64(b.longitude) - Int64(origin.longitude), by = Int64(b.latitude) - Int64(origin.latitude)
+            let ax = Double(a.longitude) - Double(origin.longitude), ay = Double(a.latitude) - Double(origin.latitude)
+            let bx = Double(b.longitude) - Double(origin.longitude), by = Double(b.latitude) - Double(origin.latitude)
             sum += ax * by - bx * ay
         }
         return sum

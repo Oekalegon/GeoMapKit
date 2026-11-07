@@ -16,7 +16,8 @@ public struct ClassStyle: Sendable, Equatable {
     /// This is on top of the store's bands: a band decides which geometry exists,
     /// this range decides what the style shows.
     public var visibleZoom: ClosedRange<Double>
-    /// The drawing order, lowest first.
+    /// The drawing order, lowest first. A style file allows 0 through 99: bridges are drawn 100 layers above their class
+    /// and tunnels on layer 15, so the layers of the classes stay below 100.
     public var layer: Int
     /// The layer on which the stroke's casing is drawn, or `nil` to draw it directly under the stroke.
     ///

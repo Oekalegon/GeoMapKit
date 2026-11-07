@@ -61,6 +61,33 @@ struct MapSceneStructureTests {
         #expect(ids(scene, .roadMajor, .casing, .tunnel).isEmpty, "a tunnel has no casing step")
     }
 
+    @Test("A store without tags, like the Watch copy, has no width blends in any style")
+    func storeWithoutTagsHasNoBlends() throws {
+        var writer = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 47.0, west: 9.4, north: 47.3, east: 9.7), attribution: "© OpenStreetMap contributors, ODbL")
+        let cell = try #require(TileID.containing(Coordinate(latitude: 47.1, longitude: 9.5), zoom: 13))
+        let west = Int32((cell.northWest.longitude * 1e7).rounded())
+        // Two roads that meet in line. With `lanes` tags (1 and 3) they would blend; the Watch copy carries no tags, so
+        // both are drawn with the default lane count and have the same width.
+        func add(_ id: Int64, from: Int32, to: Int32) throws {
+            let part = GeometryPart(points: [
+                PackedPoint(longitude: west + from, latitude: latitude), PackedPoint(longitude: west + to, latitude: latitude)])
+            try writer.add(
+                StoredFeature(classID: FeatureClass.roadMajor.rawValue, subclass: 4, kind: .line, objectType: .way, objectID: id, parts: [part]),
+                band: .detail, cell: cell)
+        }
+        try add(1, from: 2_000, to: 6_000)
+        try add(2, from: 6_000, to: 10_000)
+        let file = try FeatureStoreFile(data: try writer.data())
+        let centre = Coordinate(latitude: Double(latitude) / 1e7, longitude: Double(west + 6_000) / 1e7)
+        let view = MapViewport(center: centre, zoom: 18, width: 800, height: 400)
+        for style in [MapStyle.watch, MapStyle.standard] {
+            let lines = try MapSceneBuilder(file: file, style: style).scene(for: view).steps.flatMap(\.lines)
+            #expect(lines.count >= 2, "\(style.name): found \(lines.count) lines")
+            #expect(lines.allSatisfy { $0.startWidth == nil && $0.endWidth == nil }, "\(style.name)")
+        }
+    }
+
     @Test("A road on the ground ends flat where a tunnel or a bridge starts, and keeps its round end elsewhere")
     func portalEnds() throws {
         let (scene, _) = try scene()

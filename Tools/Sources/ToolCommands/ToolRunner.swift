@@ -198,7 +198,8 @@ public enum ToolRunner {
             outputName: output.lastPathComponent, pixelWidth: Int((Double(request.width) * request.scale).rounded()),
             pixelHeight: Int((Double(request.height) * request.scale).rounded()), pngBytes: png.count, band: scene.band,
             cellCount: scene.cellCount, stepCount: scene.steps.count, featureCount: featureCount, sceneTime: sceneTime,
-            drawTime: drawTime)
+            drawTime: drawTime, outdatedRuleTable: file.classifierVersion < Int(FeatureClassifier.version) ? file.classifierVersion : nil,
+            currentRuleTable: Int(FeatureClassifier.version))
     }
 
     /// Counts the objects of a feature store file per class, and the most common tags in one class.

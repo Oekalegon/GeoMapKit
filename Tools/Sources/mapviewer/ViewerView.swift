@@ -1,5 +1,6 @@
 import AppKit
 import FeatureStore
+import FeatureStoreBuilder
 import GeoCore
 import MapRender
 import MapStyle
@@ -27,6 +28,7 @@ struct ViewerView: View {
     @State private var customStyle: MapStyle?
     @State private var watchSize = false
     @State private var message: String?
+    @State private var outdatedNote: String?
     @State private var importing: Importing?
 
     private enum Importing: Identifiable {
@@ -55,6 +57,12 @@ struct ViewerView: View {
                         .id(storeName)
                         .frame(width: watchSize ? 184 : nil, height: watchSize ? 224 : nil)
                         .border(watchSize ? Color.secondary : .clear)
+                        .overlay(alignment: .top) {
+                            if let outdatedNote {
+                                Text(outdatedNote)
+                                    .font(.footnote).padding(6).background(.regularMaterial, in: Capsule()).padding(8)
+                            }
+                        }
                         .overlay(alignment: .bottom) {
                             if choice == .watch && zoom < Self.watchMinimumZoom {
                                 Text("The Watch style shows the map from zoom 12.")
@@ -152,6 +160,10 @@ struct ViewerView: View {
             storeName = path
             store = file
             message = nil
+            let built = file.classifierVersion, current = Int(FeatureClassifier.version)
+            outdatedNote = built < current
+                ? "Built with rule table \(built), current is \(current): rebuild to get the sea, sidewalks and road areas."
+                : nil
         } catch {
             store = nil
             message = "Cannot open \(path): \(error)"

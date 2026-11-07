@@ -135,6 +135,19 @@ struct StyleJSONTests {
         #expect(MapStyle.standard.style(for: .address) == nil && MapStyle.watch.style(for: .address) == nil)
     }
 
+    @Test func layersAreLimitedToZeroThroughNinetyNine() throws {
+        #expect(try parse(document(classBody: "\"layer\": 99, \"casingLayer\": 0")).style(for: .roadMajor)?.layer == 99)
+        #expect(reason(document(classBody: "\"layer\": 100")).contains("layer"))
+        #expect(reason(document(classBody: "\"layer\": -1")).contains("between 0 and 99"))
+        #expect(reason(document(classBody: "\"layer\": 5, \"casingLayer\": 120")).contains("casingLayer"))
+        // The built-in styles obey the rule.
+        for style in [MapStyle.standard, MapStyle.watch] {
+            for (featureClass, classStyle) in style.classes {
+                #expect((0...99).contains(classStyle.layer) && (0...99).contains(classStyle.casingLayer ?? 0), "\(featureClass)")
+            }
+        }
+    }
+
     @Test func bridgeAndTunnelStylesAreReadStrictly() throws {
         let style = try parse(document(classBody: """
             "layer": 5, "stroke": {"color": "#000000", "width": {"points": 1}},
