@@ -56,6 +56,21 @@ struct MapModelTests {
         #expect(zoomed.viewport.zoom == 17)
     }
 
+    @Test func aFrameThatIsOutOfDateWhenItArrivesIsCorrected() async throws {
+        let (store, centre) = try file()
+        let model = MapModel(file: store, style: .standard)
+        let first = MapViewport(center: centre, zoom: 16, width: 200, height: 100)
+        // The user has moved on by 3 km before the first frame is ready.
+        let later = MapViewport(center: Coordinate(latitude: centre.latitude, longitude: centre.longitude + 0.03), zoom: 16, width: 200, height: 100)
+        model.request(viewport: first, scale: 1, interacting: false)
+        model.request(viewport: later, scale: 1, interacting: false)
+        for _ in 0..<200 {
+            if let frame = model.frame, abs(frame.viewport.center.longitude - later.center.longitude) < 1e-9 { return }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        Issue.record("no frame for the latest viewport arrived")
+    }
+
     @Test func aStyleChangeDropsTheFrame() async throws {
         let (store, centre) = try file()
         let model = MapModel(file: store, style: .standard)

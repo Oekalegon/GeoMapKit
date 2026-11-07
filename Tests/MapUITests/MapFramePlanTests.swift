@@ -25,6 +25,11 @@ struct MapFramePlanTests {
         #expect(MapFramePlan.margin(forViewWidth: 301, viewHeight: 10) == 151)
     }
 
+    @Test func theMarginIsCappedSoTheImageStaysSmall() {
+        #expect(MapFramePlan.margin(forViewWidth: 1032, viewHeight: 1376) == 256)
+        #expect(MapFramePlan.margin(forViewWidth: 184, viewHeight: 224) == 112)
+    }
+
     @Test func aFreshFrameFillsTheViewExactlyAndNeedsNoNewOne() {
         let plan = MapFramePlan(frame: frameViewport(), requested: requested())
         #expect(plan.coversView && !plan.zoomDiffers)
@@ -40,7 +45,7 @@ struct MapFramePlanTests {
         let plan = MapFramePlan(frame: frameViewport(), requested: moved)
         #expect(abs(plan.centre.x - (width / 2 - 50)) < 1e-6)
         #expect(plan.coversView)
-        #expect(!plan.needsNewFrame(interacting: false), "50 points is within a quarter of the screen")
+        #expect(!plan.needsNewFrame(interacting: false), "50 points is within half the margin")
     }
 
     @Test func panningFarEnoughNeedsANewFrameEvenWhileInteracting() {
@@ -51,7 +56,7 @@ struct MapFramePlanTests {
         #expect(plan.needsNewFrame(interacting: true))
     }
 
-    @Test func driftBeyondAQuarterScreenIsFixedWhenTheGestureEnds() {
+    @Test func driftBeyondHalfTheMarginIsFixedWhenTheGestureEnds() {
         let start = requested()
         let moved = requested(start.coordinate(at: ScreenPoint(x: width / 2 + 150, y: height / 2)))
         let plan = MapFramePlan(frame: frameViewport(), requested: moved)
@@ -72,5 +77,17 @@ struct MapFramePlanTests {
     @Test func zoomingOutFarUncoversTheViewAndForcesANewFrame() {
         let plan = MapFramePlan(frame: frameViewport(zoom: 15), requested: requested(zoom: 13))
         #expect(!plan.coversView && plan.needsNewFrame(interacting: true))
+    }
+}
+
+@Suite("MapView centre")
+struct MapViewCentreTests {
+    @Test func panningPastThePoleOrTheAntimeridianKeepsTheCentreValid() {
+        let pole = MapView.normalized(Coordinate(latitude: 89, longitude: 10))
+        #expect(pole.latitude == TileID.maximumLatitude && pole.longitude == 10)
+        let wrapped = MapView.normalized(Coordinate(latitude: 0, longitude: 190))
+        #expect(abs(wrapped.longitude - -170) < 1e-9)
+        #expect(abs(MapView.normalized(Coordinate(latitude: 0, longitude: -190)).longitude - 170) < 1e-9)
+        #expect(MapView.normalized(Coordinate(latitude: 47, longitude: 9.5)) == Coordinate(latitude: 47, longitude: 9.5))
     }
 }

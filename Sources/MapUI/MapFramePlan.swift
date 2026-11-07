@@ -25,11 +25,16 @@ struct MapFramePlan: Equatable {
     /// Zoom differences below this are drawn as is (about a thousandth of a pixel at 256 points).
     static let zoomTolerance = 1e-6
 
-    /// The extra area drawn around the view on every side, in points: half the larger dimension of the view.
+    /// The most the frame extends past the view on each side, in points. It bounds the size of the image: on a large
+    /// iPad view, half a screen of margin would make an image of more than 100 MB.
+    static let maximumMargin = 256.0
+
+    /// The extra area drawn around the view on every side, in points: half the larger dimension of the view, but
+    /// not more than ``maximumMargin``.
     ///
-    /// With this margin a pan of up to half a screen is shown without drawing again.
+    /// With this margin a pan of up to half a screen (on a Watch or iPhone) is shown without drawing again.
     static func margin(forViewWidth width: Double, viewHeight height: Double) -> Double {
-        (max(width, height) / 2).rounded(.up)
+        min((max(width, height) / 2).rounded(.up), maximumMargin)
     }
 
     /// Plans how to show `frame` in `requested`.

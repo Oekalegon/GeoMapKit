@@ -12,6 +12,9 @@ import SwiftUI
 /// keeps the work, and on the Watch the battery use, bounded: nothing is redrawn on a timer.
 ///
 /// Gestures: drag to pan; on iOS, iPadOS and macOS pinch to zoom; on watchOS the Digital Crown zooms and a drag pans.
+/// To show another store, give the view a new identity (`.id(...)`); a changed `style` is picked up by itself.
+/// Mouse-only Mac users cannot zoom yet (no scroll wheel or buttons); trackpad pinch works.
+///
 /// The data credit is drawn into the image as the style's `attribution` setting says.
 public struct MapView: View {
     private let file: FeatureStoreFile
@@ -64,6 +67,8 @@ public struct MapView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
             .contentShape(Rectangle())
+            .accessibilityElement()
+            .accessibilityLabel("Map")
             .gesture(pan(in: geometry.size))
             #if !os(watchOS)
             .gesture(pinch())
@@ -73,6 +78,11 @@ public struct MapView: View {
                 $crownZoom, from: 0, through: Self.zoomRange.upperBound - Self.zoomRange.lowerBound, by: 0.1,
                 sensitivity: .medium, isContinuous: false, isHapticFeedbackEnabled: true)
             .onChange(of: crownZoom) { _, value in zoom = Self.zoomRange.lowerBound + value }
+            .onChange(of: zoom) { _, value in
+                // Keep the Crown in step when the app sets the zoom itself.
+                let wanted = min(max(value, Self.zoomRange.lowerBound), Self.zoomRange.upperBound) - Self.zoomRange.lowerBound
+                if abs(wanted - crownZoom) > 0.05 { crownZoom = wanted }
+            }
             .onAppear { crownZoom = min(max(zoom, Self.zoomRange.lowerBound), Self.zoomRange.upperBound) - Self.zoomRange.lowerBound }
             #endif
             .onChange(of: viewport) { _, new in model.request(viewport: new, scale: displayScale, interacting: interacting) }
@@ -93,13 +103,22 @@ public struct MapView: View {
                 interacting = true
                 let start = dragStart ?? MapViewport(center: center, zoom: zoom, width: size.width, height: size.height)
                 dragStart = start
-                center = start.coordinate(
-                    at: ScreenPoint(x: size.width / 2 - value.translation.width, y: size.height / 2 - value.translation.height))
+                center = Self.normalized(
+                    start.coordinate(
+                        at: ScreenPoint(x: size.width / 2 - value.translation.width, y: size.height / 2 - value.translation.height)))
             }
             .onEnded { _ in
                 dragStart = nil
                 interacting = pinchStart != nil
             }
+    }
+
+    /// Keeps a panned centre valid: the latitude stays within the Web Mercator limit, and a longitude past ±180° wraps.
+    static func normalized(_ coordinate: Coordinate) -> Coordinate {
+        let limit = TileID.maximumLatitude
+        var longitude = (coordinate.longitude + 180).truncatingRemainder(dividingBy: 360)
+        if longitude < 0 { longitude += 360 }
+        return Coordinate(latitude: min(max(coordinate.latitude, -limit), limit), longitude: longitude - 180)
     }
 
     #if !os(watchOS)

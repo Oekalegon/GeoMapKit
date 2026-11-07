@@ -6,8 +6,9 @@ import Observation
 /// Keeps the cached ``MapFrame`` of a ``MapView`` and decides when to draw a new one.
 ///
 /// Drawing happens only on events: the requested viewport changed enough (see ``MapFramePlan``), the style or the
-/// store changed, or a gesture ended. There are no timers. One frame is drawn at a time; a request that arrives
-/// while a frame is being drawn replaces the waiting one, so the work never queues up.
+/// store changed, or a gesture ended. There are no timers. One frame is drawn at a time; requests that arrive
+/// meanwhile only update the latest wanted viewport, which is checked when the frame arrives, so the work never
+/// queues up and a frame that is already out of date is corrected once.
 @MainActor
 @Observable
 final class MapModel {
@@ -20,7 +21,7 @@ final class MapModel {
     /// Counts style and store changes; a frame from an older generation is stale.
     private var generation = 0
     private var drawing = false
-    private var waiting: (viewport: MapViewport, scale: Double)?
+    private var latest: (viewport: MapViewport, scale: Double, interacting: Bool)?
 
     /// Creates a model.
     init(file: FeatureStoreFile, style: MapStyle) {
@@ -42,6 +43,16 @@ final class MapModel {
     ///   - interacting: Whether a gesture is in progress.
     func request(viewport: MapViewport, scale: Double, interacting: Bool) {
         guard viewport.width > 0, viewport.height > 0 else { return }
+        latest = (viewport, scale, interacting)
+        evaluate()
+    }
+
+    /// Draws a frame for the latest request if the cached one is not good enough and nothing is being drawn.
+    ///
+    /// It also runs when a frame arrives: the user may have moved on while it was drawn, and nothing else would
+    /// ask for a correction once the gestures have ended.
+    private func evaluate() {
+        guard !drawing, let (viewport, scale, interacting) = latest else { return }
         if let frame, frame.styleID == renderer.styleID {
             let plan = MapFramePlan(frame: frame.viewport, requested: viewport)
             guard plan.needsNewFrame(interacting: interacting) else { return }
@@ -53,10 +64,6 @@ final class MapModel {
     }
 
     private func draw(_ viewport: MapViewport, scale: Double) {
-        guard !drawing else {
-            waiting = (viewport, scale)
-            return
-        }
         drawing = true
         let renderer = renderer
         Task {
@@ -66,17 +73,15 @@ final class MapModel {
             drawing = false
             switch result {
             case .success(let drawn):
-                // A frame for an old style or store is stale; the next request draws a new one.
+                // A frame for an old style or store is stale and is never shown.
                 if drawn.styleID == self.renderer.styleID {
                     frame = drawn
                     errorDescription = nil
                 }
+                evaluate()
             case .failure(let error):
+                // No retry: the same request would fail again. The next event asks again.
                 errorDescription = "\(error)"
-            }
-            if let next = waiting {
-                waiting = nil
-                draw(next.viewport, scale: next.scale)
             }
         }
     }
