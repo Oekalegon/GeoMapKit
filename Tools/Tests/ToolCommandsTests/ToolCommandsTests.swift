@@ -246,6 +246,9 @@ struct BuildCommandTests {
         #expect(text.contains("warning: the file covers less than the box you asked for"))
         #expect(text.contains("Widen the box"))
         #expect(report.storedExtent.west >= 9 && report.storedExtent.east <= 10)
+        // The suggested widening is one cell of longitude at the file's storage zoom.
+        let file = try FeatureStoreFile(contentsOf: output)
+        #expect(ExtentShortfall.oneCellInDegrees == 360.0 / Double(1 << file.storageZoom))
     }
 }
 
