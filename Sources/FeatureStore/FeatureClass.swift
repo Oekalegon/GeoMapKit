@@ -52,4 +52,6 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     case transportStop = 22
     /// Road details at a point: crossings, traffic signals, street lamps and similar. Added in rule table version 2.
     case roadPoint = 23
+    /// National borders (`boundary=administrative` with `admin_level=2`). Added in rule table version 3.
+    case countryBorder = 24
 }

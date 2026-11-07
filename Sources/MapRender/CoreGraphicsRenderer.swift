@@ -34,11 +34,22 @@ public struct CoreGraphicsRenderer: MapRenderer {
                 guard let stroke = classStyle.stroke, let casing = stroke.casing else { continue }
                 let extra = casing.extraPoints.value(atZoom: zoom)
                 guard extra > 0 else { continue }
-                context.setStrokeColor(casing.color.value(atZoom: zoom).cgColor)
+                let color = casing.color.value(atZoom: zoom)
+                // A translucent casing is drawn as one group and blended once. Stroked piece by piece, the places where
+                // two lines overlap or join would be blended twice and show darker.
+                let translucent = color.alpha < 1
+                context.saveGState()
+                if translucent {
+                    context.setAlpha(color.alpha)
+                    context.beginTransparencyLayer(auxiliaryInfo: nil)
+                }
+                context.setStrokeColor(MapColor(red: color.red, green: color.green, blue: color.blue).cgColor)
                 for line in sceneStep.lines {
                     let width = stroke.width.resolved(atZoom: zoom, metresPerPoint: viewport.metresPerPoint, lanes: line.lanes)
                     strokePath(line.points, width: width + 2 * extra, stroke: stroke, dashed: false, in: context)
                 }
+                if translucent { context.endTransparencyLayer() }
+                context.restoreGState()
             case .body:
                 drawBody(sceneStep, classStyle: classStyle, viewport: viewport, in: context)
             }
