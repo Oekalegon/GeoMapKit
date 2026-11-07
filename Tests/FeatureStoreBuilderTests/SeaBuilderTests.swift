@@ -151,6 +151,92 @@ struct SeaPerCellTests {
     }
 }
 
+@Suite("Sea by cell buckets")
+struct SeaBucketTests {
+    private let block = Block()
+
+    private func line(_ points: (Double, Double)...) -> [PackedPoint] { points.map { block.point($0.0, $0.1) } }
+
+    /// The sea of every cell the slow way (every cell clips every coastline) and the fast way (segments sorted into cells).
+    private func compare(rings: [[PackedPoint]], chains: [[PackedPoint]], _ name: String) throws {
+        let columns = block.centre.x - 1...block.centre.x + 1, rows = block.centre.y - 1...block.centre.y + 1
+        let box = try #require(CellRect(columns: columns, rows: rows, zoom: 13))
+        let lines = SeaBuilder.Lines(rings: rings, chains: chains)
+        let sea = SeaBuilder.build(lines: lines, box: box).rings
+        let fast = SeaBuilder.parts(lines: lines, sea: sea, columns: columns, rows: rows, zoom: 13)
+        for row in rows {
+            for column in columns {
+                let cell = CellRect(tile: try #require(TileID(zoom: 13, x: column, y: row)))
+                let slow = SeaBuilder.parts(in: cell, lines: lines, sea: sea)
+                let got = fast[(row - rows.lowerBound) * columns.count + (column - columns.lowerBound)] ?? []
+                // The same parts, up to extra vertices where a coastline lies exactly along a cell border: compare the areas.
+                let area = { (parts: [GeometryPart]) in parts.map { projectedArea($0.points) }.sorted() }
+                let same = slow.count == got.count && zip(area(slow), area(got)).allSatisfy { abs($0 - $1) <= 1e-9 * max($0, $1, 1e-12) }
+                #expect(same, "\(name): cell \(column - columns.lowerBound),\(row - rows.lowerBound): \(area(slow)) against \(area(got))")
+            }
+        }
+    }
+
+    @Test("The fast way agrees with the slow way on random islands and coasts")
+    func randomScenes() throws {
+        var random = SplitMix64(seed: 20_261_108)
+        func unit() -> Double { Double(random.next() % 10_000) / 10_000 }
+        for scene in 0..<300 {
+            // Up to four islands: counter-clockwise polygons of 4 to 9 points around a random centre, of random size.
+            var rings: [[PackedPoint]] = []
+            for _ in 0..<Int(random.next() % 4) {
+                let cx = unit() * 3, cy = unit() * 3, radius = 0.05 + unit() * 1.1
+                let count = 4 + Int(random.next() % 6)
+                var points: [(Double, Double)] = []
+                for k in 0..<count {
+                    let angle = Double(k) / Double(count) * 2 * Double.pi
+                    let r = radius * (0.6 + 0.4 * unit())
+                    points.append((cx + r * cos(angle), cy - r * sin(angle)))   // y grows south: counter-clockwise on the map
+                }
+                points.append(points[0])
+                rings.append(points.map { block.point($0.0, $0.1) })
+            }
+            // Sometimes a coast across the block, as a few long segments.
+            var chains: [[PackedPoint]] = []
+            if random.next() % 2 == 0 {
+                let y0 = unit() * 3, y1 = unit() * 3
+                chains.append([block.point(-0.4, y0), block.point(1.0 + unit(), (y0 + y1) / 2 + unit() - 0.5), block.point(3.4, y1)])
+            }
+            try compare(rings: rings, chains: chains, "scene \(scene)")
+        }
+    }
+
+    @Test("The fast way gives the same sea in every cell as the slow way")
+    func sameAsTheSlowWay() throws {
+        // A coast across the block, running through three cells.
+        try compare(rings: [], chains: [line((-0.3, 1.5), (1.5, 1.4), (3.3, 1.5))], "coast")
+        // The same coast the other way round.
+        try compare(rings: [], chains: [line((3.3, 1.5), (1.5, 1.4), (-0.3, 1.5))], "coast, reversed")
+        // A coast that cuts a corner, and a strait between two coasts.
+        try compare(rings: [], chains: [line((1.0, -0.2), (2.0, 0.5), (3.2, 1.0))], "corner")
+        try compare(rings: [], chains: [line((-0.3, 0.8), (3.3, 0.8)), line((3.3, 2.2), (-0.3, 2.2))], "strait")
+        // Islands: one covering the middle cell (cells inside it are land), one small in a cell, one across a border.
+        let big = line((0.7, 2.3), (2.3, 2.3), (2.3, 0.7), (0.7, 0.7), (0.7, 2.3))
+        let small = line((0.1, 0.45), (0.3, 0.45), (0.3, 0.2), (0.1, 0.2), (0.1, 0.45))
+        let across = line((2.5, 2), (3.5, 2), (3.5, 1), (2.5, 1), (2.5, 2))
+        try compare(rings: [big, small, across], chains: [], "islands in open sea")
+        // A clockwise ring (water inside) and an island on land beside a coast.
+        let lake = line((1, 1), (2, 1), (2, 2), (1, 2), (1, 1))
+        try compare(rings: [lake], chains: [], "lake")
+        try compare(rings: [line((1, 2.8), (2, 2.8), (2, 2.1), (1, 2.1), (1, 2.8))], chains: [line((-0.3, 1.0), (3.3, 1.0))], "island and coast")
+        // A coast that runs exactly along a cell border: the cells on both sides must agree with the slow way.
+        let border = CellRect(tile: try #require(TileID(zoom: 13, x: block.centre.x, y: block.centre.y))).north
+        let along = [PackedPoint(longitude: block.point(-0.3, 1).longitude, latitude: border), PackedPoint(longitude: block.point(3.3, 1).longitude, latitude: border)]
+        try compare(rings: [], chains: [along], "along a border")
+        // A ring that starts inside a cell and is cut by the border (the wrap case) and one that starts on a border.
+        let wrap = line((1.2, 1.2), (1.8, 1.2), (1.8, 1.8), (1.2, 1.8), (1.2, 1.2))
+        let wrapAcross = line((0.8, 1.5), (1.5, 1.2), (2.2, 1.5), (1.5, 1.8), (0.8, 1.5))
+        try compare(rings: [wrap, wrapAcross], chains: [], "rings that start inside a cell")
+        // Nothing at all.
+        try compare(rings: [], chains: [], "nothing")
+    }
+}
+
 @Suite("Cancelling squares")
 struct CancellingSquareTests {
     private let block = Block()
