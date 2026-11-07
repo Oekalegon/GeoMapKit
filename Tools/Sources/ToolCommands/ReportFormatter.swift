@@ -73,7 +73,7 @@ public enum ReportFormatter {
             "  cut:   \(Formatting.seconds(report.cut.totalTime))",
             "  build: \(Formatting.seconds(report.buildTime))",
             "  file:  \(report.outputName), \(Formatting.bytes(Int64(statistics.fileBytes))), \(Formatting.count(statistics.cellCount)) cells written (verified)",
-            "  extent: \(extentText(report.storedExtent))",
+            "  extent: \(extentText(report.storedExtent))\(report.cut.area == report.requestedArea ? "" : " (the cut box was widened to whole cells)")",
             "  parts: cells \(Formatting.bytes(Int64(statistics.cellBytes))), strings \(Formatting.bytes(Int64(statistics.stringTableBytes))) (\(Formatting.count(statistics.stringCount)) strings), relations \(Formatting.bytes(Int64(statistics.relationTableBytes)))",
             "",
             "\(pad("Band", 8)) \(pad("bytes", 12, left: true)) \(pad("features", 10, left: true))",

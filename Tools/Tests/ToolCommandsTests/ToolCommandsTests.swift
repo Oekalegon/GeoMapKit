@@ -197,7 +197,7 @@ struct BuildCommandTests {
         counters.piecesOutsideCells = 77
         counters.featuresSkippedByProfile = 9_001
         let text = ReportFormatter.text(for: BuildCommandReport(
-            profile: .full, outputName: "out.gmk", cut: cut, buildTime: .milliseconds(450), storedExtent: cut.area,
+            profile: .full, outputName: "out.gmk", cut: cut, buildTime: .milliseconds(450), requestedArea: cut.area, storedExtent: cut.area,
             statistics: statistics, report: counters))
         #expect(text.contains("File: test.osm.pbf, 3.5 MB"))
         #expect(text.contains("Build (full profile)"))
@@ -233,22 +233,45 @@ struct BuildCommandTests {
         #expect(ExtentShortfall(requested: area, stored: BoundingBox(south: 47.00000001, west: 9.4, north: 47.3, east: 9.7)).isEmpty)
     }
 
-    @Test("a real build with a box that cuts cells reports the shortfall and the warning")
-    func realBuildWarns() throws {
+    @Test("a real build widens the box to whole cells, so the file covers the box and no warning is printed")
+    func realBuildCoversTheBox() throws {
         let input = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-\(UUID().uuidString)-in.osm.pbf")
         let output = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-\(UUID().uuidString)-o.gmk")
         defer { for url in [input, output] { try? FileManager.default.removeItem(at: url) } }
         try TinyPBF.make().write(to: input)
-        let report = try ToolRunner.build(
-            url: input, area: BoundingBox(south: 47, west: 9, north: 48, east: 10), output: output, profile: .full)
+        let asked = BoundingBox(south: 47, west: 9, north: 48, east: 10)
+        let report = try ToolRunner.build(url: input, area: asked, output: output, profile: .full)
         let text = ReportFormatter.text(for: report)
-        #expect(!report.shortfall.isEmpty, "a 1 degree box is not made of whole cells")
-        #expect(text.contains("warning: the file covers less than the box you asked for"))
-        #expect(text.contains("Widen the box"))
-        #expect(report.storedExtent.west >= 9 && report.storedExtent.east <= 10)
+        #expect(report.requestedArea == asked)
+        #expect(report.cut.area != asked, "the cut used a box of whole cells")
+        #expect(report.shortfall.isEmpty, "the file covers the whole box that was asked for")
+        let stored = report.storedExtent
+        #expect(stored.west <= asked.west && stored.east >= asked.east && stored.south <= asked.south && stored.north >= asked.north)
+        #expect(text.contains("the cut box was widened to whole cells"))
+        #expect(!text.contains("warning"))
         // The suggested widening is one cell of longitude at the file's storage zoom.
         let file = try FeatureStoreFile(contentsOf: output)
         #expect(ExtentShortfall.oneCellInDegrees == 360.0 / Double(1 << file.storageZoom))
+    }
+
+    @Test("the report still warns if the stored extent falls short of the box")
+    func warnsOnAShortfall() throws {
+        let cut = CutReport(
+            fileName: "x.osm.pbf", fileSize: 1, area: BoundingBox(south: 47, west: 9, north: 48, east: 10), passes: [],
+            totalTime: .zero,
+            summary: ExtractSummary(
+                nodes: 1, taggedNodes: 0, nodesOutsideBox: 0, ways: 1, wayVertices: 1,
+                relations: 0, incompleteRelations: 0, missingNodes: 0, memoryBytes: 1_000),
+            peakFootprint: nil, peakResident: 1)
+        let statistics = FeatureStoreFile.Statistics(
+            fileBytes: 1, cellCount: 4, stringCount: 0, stringTableBytes: 0, relationTableBytes: 0, cellBytes: 1,
+            bandBytes: [:], featureCounts: [:], detailFeaturesByClass: [:])
+        let report = BuildCommandReport(
+            profile: .full, outputName: "o.gmk", cut: cut, buildTime: .zero, requestedArea: cut.area,
+            storedExtent: BoundingBox(south: 47, west: 9.0922, north: 47.9, east: 10), statistics: statistics, report: BuildReport())
+        let text = ReportFormatter.text(for: report)
+        #expect(text.contains("warning: the file covers less than the box you asked for (west by 0.092, north by 0.100 degrees)."))
+        #expect(text.contains("Widen the box"))
     }
 }
 

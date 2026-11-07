@@ -62,7 +62,10 @@ public enum ToolRunner {
         url: URL, area: BoundingBox, output: URL, profile: BuildProfile, options: AreaCutter.Options = .init()
     ) throws -> BuildCommandReport {
         try checkWritable(output)
-        let (extract, cutReport) = try cutExtract(url: url, area: area, options: options)
+        // The builder writes only cells that lie completely inside the area, so cut a box of whole cells that contains
+        // the one asked for; the file then covers all of it.
+        let cutArea = FeatureStoreBuilder.cellAlignedBox(covering: area)
+        let (extract, cutReport) = try cutExtract(url: url, area: cutArea, options: options)
 
         let clock = ContinuousClock()
         let started = clock.now
@@ -81,7 +84,7 @@ public enum ToolRunner {
         try file.verify()
         return BuildCommandReport(
             profile: profile, outputName: output.lastPathComponent, cut: cutReport, buildTime: buildTime,
-            storedExtent: file.boundingBox, statistics: try file.statistics(), report: result.report
+            requestedArea: area, storedExtent: file.boundingBox, statistics: try file.statistics(), report: result.report
         )
     }
 
