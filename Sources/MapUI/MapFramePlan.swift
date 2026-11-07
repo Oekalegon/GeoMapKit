@@ -58,11 +58,13 @@ struct MapFramePlan: Equatable {
 
     /// Whether a new frame is needed for the requested viewport.
     ///
-    /// - Parameter interacting: Whether a gesture is in progress. While the user drags or pinches, the old frame keeps
-    ///   being shown (moved and scaled) as long as it covers the view; a new one is drawn when the gesture ends or
-    ///   the frame no longer covers the view.
+    /// - Parameter interacting: Whether a gesture is in progress. While the user pans, a new frame is started as
+    ///   soon as the view has drifted past ``driftLimit`` (half the margin), not only when the old frame stops covering
+    ///   the view: drawing takes time, and the user keeps moving meanwhile, so waiting for the edge would show an empty
+    ///   border at every cell. While the user pinches, the old frame is only scaled; a zoom change is drawn when the
+    ///   gesture ends, unless the frame no longer covers the view.
     func needsNewFrame(interacting: Bool) -> Bool {
-        if !coversView { return true }
-        return !interacting && (zoomDiffers || drift > driftLimit)
+        if !coversView || drift > driftLimit { return true }
+        return !interacting && zoomDiffers
     }
 }
