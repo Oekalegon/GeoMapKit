@@ -140,7 +140,7 @@ struct StyleJSONTests {
         let names = [
             "other", "path", "track", "roadMajor", "roadMinor", "railway", "waterLine", "waterArea", "forest", "landcover",
             "landuseUrban", "building", "peak", "place", "poiAnchor", "poi", "boundary", "powerLine", "piste", "aerialway",
-            "tree", "barrier", "transportStop", "roadPoint", "countryBorder", "address", "pavement", "cliff",
+            "tree", "barrier", "transportStop", "roadPoint", "countryBorder", "address", "pavement", "cliff", "sea", "coastline",
         ]
         #expect(FeatureClass.allCases.map { String(describing: $0) } == names)
         for name in names {

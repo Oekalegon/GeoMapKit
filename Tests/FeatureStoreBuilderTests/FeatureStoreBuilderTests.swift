@@ -279,4 +279,44 @@ struct FeatureStoreBuilderTests {
         }
         await #expect(throws: CancellationError.self) { try await task.value }
     }
+
+    @Test("A coastline across the block becomes a sea polygon in the cells south of it, and nothing north of it")
+    func sea() throws {
+        var world = SyntheticWorld()
+        world.node(1, -0.3, 1.5); world.node(2, 1.5, 1.4); world.node(3, 3.3, 1.5)
+        world.way(10, [1, 2, 3], [("natural", "coastline")])
+        let extract = try world.extract()
+        let result = try FeatureStoreBuilder().build(from: extract)
+        let file = try FeatureStoreFile(data: result.data)
+        try file.verify()
+        #expect(result.report.coastlineWays == 1 && result.report.seaPolygons == 1 && result.report.seaOpenEnds == 0)
+        #expect(result.report.featuresByClass[.sea] == 1 && result.report.featuresByClass[.coastline] == 1)
+        let block = world.block
+        for band in ZoomBand.allCases {
+            for row in 0..<3 {
+                for column in 0..<3 {
+                    let cell = block.tile(column: column, row: row)
+                    let seaPieces = try file.features(in: cell, band: band).filter { $0.classID == FeatureClass.sea.rawValue }
+                    // The coast is at y = 1.5: row 0 is land, row 2 is sea, row 1 is both.
+                    if row == 0 { #expect(seaPieces.isEmpty, "land in \(band) \(column),\(row)") }
+                    if row >= 1 { #expect(seaPieces.count == 1 && seaPieces[0].kind == .area, "sea in \(band) \(column),\(row)") }
+                }
+            }
+        }
+        // A cell wholly in the sea is covered completely: its piece is the cell square, with every edge artificial.
+        let southCell = block.tile(column: 1, row: 2)
+        let piece = try #require(try file.features(in: southCell, band: .detail).first { $0.classID == FeatureClass.sea.rawValue })
+        #expect(piece.parts.count == 1 && piece.parts[0].points.count == 5)
+    }
+
+    @Test("A coastline that ends inside the area builds no sea, and the report says so")
+    func brokenCoastline() throws {
+        var world = SyntheticWorld()
+        world.node(1, 0.5, 1.5); world.node(2, 1.5, 1.4)
+        world.way(10, [1, 2], [("natural", "coastline")])
+        let extract = try world.extract()
+        let result = try FeatureStoreBuilder().build(from: extract)
+        #expect(result.report.seaOpenEnds > 0 && result.report.seaPolygons == 0 && result.report.featuresByClass[.sea] == nil)
+        #expect(result.report.featuresByClass[.coastline] == 1)
+    }
 }

@@ -54,6 +54,7 @@ public struct FeatureStoreBuilder: Sendable {
         let suppressed = try storeRelations(of: extract, into: &emitter)
         try storeWays(of: extract, suppressed: suppressed, into: &emitter)
         try storeNodes(of: extract, into: &emitter)
+        if let range { try storeSea(of: extract, columns: range.columns, rows: range.rows, into: &emitter) }
         return BuildResult(data: try emitter.writer.data(), report: emitter.report)
     }
 

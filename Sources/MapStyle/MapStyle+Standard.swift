@@ -6,6 +6,9 @@ extension MapStyle {
     public static let standard = MapStyle(
         name: "Standard", background: MapColor(hex: 0xF2EFE9),
         classes: [
+            // The sea, under everything else; the coastline is a fine line on its edge.
+            .sea: ClassStyle(fill: FillStyle(color: .color(0xAAD3EA)), layer: 9),
+            .coastline: ClassStyle(stroke: .line(0x6FA8C8, ZoomValue((8, 0.5), (16, 1.2))), layer: 14),
             .landuseUrban: ClassStyle(fill: FillStyle(color: .color(0xE6E0D8)), visibleZoom: 12...24, layer: 10),
             .landcover: ClassStyle(fill: FillStyle(color: .color(0xDDE8C8)), visibleZoom: 12...24, layer: 11),
             .forest: ClassStyle(fill: FillStyle(color: .color(0xC5DDB0)), layer: 12),

@@ -114,10 +114,17 @@ public enum ReportFormatter {
             "  ways:             \(Formatting.count(counters.waysStored)) stored, \(Formatting.count(counters.waysSuppressed)) suppressed (multipolygon members)",
             "  relations stored: \(Formatting.count(counters.relationsStored))",
             "  multipolygons:    \(Formatting.count(counters.multipolygonsAssembled)) assembled, \(Formatting.count(counters.multipolygonsIncomplete)) incomplete",
+            "  sea:              \(Formatting.count(counters.coastlineWays)) coastline ways, \(Formatting.count(counters.seaPolygons)) sea polygons, \(Formatting.count(counters.seaIslands)) islands",
             "  pieces outside the cells: \(Formatting.count(counters.piecesOutsideCells))",
             "  features skipped by the profile: \(Formatting.count(counters.featuresSkippedByProfile))",
         ]
         lines += extentWarning(for: report)
+        if counters.seaOpenEnds > 0 {
+            lines += [
+                "",
+                "warning: no sea was drawn. \(Formatting.count(counters.seaOpenEnds)) coastline end(s) lie inside the stored area, or a coastline way has a node missing, so the side the water is on cannot be followed to the edge of the area. This happens where the extract stops at a country border. Move the box edge out of the border area, or accept a map without the sea fill.",
+            ]
+        }
         return lines.joined(separator: "\n")
     }
 
