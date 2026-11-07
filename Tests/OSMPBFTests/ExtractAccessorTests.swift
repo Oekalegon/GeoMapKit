@@ -75,8 +75,36 @@ struct ExtractAccessorTests {
         #expect(extract.memoryBytes > 0)
     }
 
-    @Test("Two tag keys that differ only in Unicode normalization collapse into one tag in the reader (known limitation)")
-    func readerMergesEquivalentKeys() throws {
+    @Test("Two tag keys that differ only in Unicode normalization both survive the reader and the extract")
+    func equivalentKeysSurvive() throws {
+        var builder = PBFFileBuilder()
+        builder.appendBlob(type: "OSMHeader", payload: PBFFileBuilder.headerPayload())
+        let precomposed = "caf\u{00E9}", decomposed = "cafe\u{0301}"
+        builder.appendBlob(type: "OSMData", payload: PBFFileBuilder.primitiveBlock(
+            strings: ["", precomposed, decomposed, "v1", "v2"],
+            dense: PBFFileBuilder.denseNodes(
+                ids: [1], latitudes: [raw(47.5)], longitudes: [raw(9.5)],
+                tags: [[(key: 1, value: 3), (key: 2, value: 4)]]
+            ),
+            ways: [PBFFileBuilder.way(id: 10, nodeIDs: [1, 1], tags: [(key: 1, value: 3), (key: 2, value: 4)])]
+        ))
+        var nodeTags: [[OSMTag]] = [], wayTags: [[OSMTag]] = []
+        try PBFReader(data: builder.file).forEachBlock {
+            nodeTags += $0.nodes.map(\.orderedTags)
+            wayTags += $0.ways.map(\.orderedTags)
+        }
+        #expect(nodeTags.count == 1 && nodeTags[0].count == 2)
+        #expect(wayTags.count == 1 && wayTags[0].count == 2)
+        // They are separate keys with their own values, and the order is by key bytes: "caf\u{00E9}" (c3 a9) before "cafe\u{0301}" (65).
+        let byBytes = nodeTags[0].map { Array($0.key.utf8) }
+        #expect(byBytes == [Array("cafe\u{0301}".utf8), Array("caf\u{00E9}".utf8)].sorted { $0.lexicographicallyPrecedes($1) })
+        #expect(Set(nodeTags[0].map { Array($0.key.utf8) }).count == 2)
+        #expect(nodeTags[0].first { $0.key.utf8.elementsEqual(precomposed.utf8) }?.value == "v1")
+        #expect(nodeTags[0].first { $0.key.utf8.elementsEqual(decomposed.utf8) }?.value == "v2")
+    }
+
+    @Test("Both keys reach the compact extract and are found by their own bytes")
+    func equivalentKeysInExtract() throws {
         var builder = PBFFileBuilder()
         builder.appendBlob(type: "OSMHeader", payload: PBFFileBuilder.headerPayload())
         let precomposed = "caf\u{00E9}", decomposed = "cafe\u{0301}"
@@ -87,11 +115,41 @@ struct ExtractAccessorTests {
                 tags: [[(key: 1, value: 3), (key: 2, value: 4)]]
             )
         ))
-        var tagCounts: [Int] = []
-        try PBFReader(data: builder.file).forEachBlock { tagCounts += $0.nodes.map(\.tags.count) }
-        // This pins current behaviour (architecture.md, question 46). When the reader keeps an
-        // ordered, byte-exact tag list, this should become 2.
-        #expect(tagCounts == [1])
+        let extract = try cut(builder.file)
+        let tags = extract.nodes.tags(at: 0)
+        #expect(tags.count == 2)
+        #expect(tags[precomposed] == "v1")
+        #expect(tags[decomposed] == "v2")
+        #expect(Array(tags).count == 2)
+    }
+
+    @Test("Identical keys are all kept, in file order")
+    func duplicateKeys() throws {
+        var builder = PBFFileBuilder()
+        builder.appendBlob(type: "OSMHeader", payload: PBFFileBuilder.headerPayload())
+        builder.appendBlob(type: "OSMData", payload: PBFFileBuilder.primitiveBlock(
+            strings: ["", "name", "first", "second"],
+            dense: PBFFileBuilder.denseNodes(
+                ids: [1], latitudes: [raw(47.5)], longitudes: [raw(9.5)],
+                tags: [[(key: 1, value: 2), (key: 1, value: 3)]]
+            )
+        ))
+        var tags: [OSMTag] = []
+        try PBFReader(data: builder.file).forEachBlock { tags += $0.nodes.flatMap(\.orderedTags) }
+        #expect(tags.map(\.value) == ["first", "second"])
+        // The dictionary convenience is lossy: the last value wins.
+        var dictionary: [String: String] = [:]
+        try PBFReader(data: builder.file).forEachBlock { dictionary = $0.nodes[0].tags }
+        #expect(dictionary == ["name": "second"])
+    }
+
+    @Test("Elements built from a dictionary and from an ordered list agree, and order is by key bytes")
+    func initialisersAgree() {
+        let fromDictionary = OSMNode(id: 1, coordinate: Coordinate(latitude: 1, longitude: 2), tags: ["b": "2", "a": "1"])
+        let fromList = OSMNode(id: 1, coordinate: Coordinate(latitude: 1, longitude: 2), orderedTags: [OSMTag(key: "b", value: "2"), OSMTag(key: "a", value: "1")])
+        #expect(fromDictionary == fromList)
+        #expect(fromList.orderedTags.map(\.key) == ["a", "b"])
+        #expect(fromList.tags == ["a": "1", "b": "2"])
     }
 
     @Test("Looking up a tag key compares bytes, not Swift string equality")

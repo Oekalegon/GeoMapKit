@@ -9,7 +9,7 @@ struct WayAccumulator {
         ids.append(way.id)
         vertices.append(contentsOf: way.nodeIDs)
         vertexOffsets.append(try CheckedOffset.make(vertices.count))
-        try tags.append(way.tags, interner: &interner)
+        try tags.append(way.orderedTags, interner: &interner)
     }
 
     /// The finished columns, sorted by way ID.

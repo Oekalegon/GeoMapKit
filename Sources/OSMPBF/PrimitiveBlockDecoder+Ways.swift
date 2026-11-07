@@ -25,6 +25,6 @@ extension PrimitiveBlockDecoder {
             nodeID = nodeID &+ delta
             return nodeID
         }
-        return OSMWay(id: id, nodeIDs: nodeIDs, tags: try tags(keys: keys, values: values))
+        return OSMWay(id: id, nodeIDs: nodeIDs, orderedTags: try tags(keys: keys, values: values))
     }
 }

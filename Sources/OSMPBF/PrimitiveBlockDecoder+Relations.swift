@@ -36,6 +36,6 @@ extension PrimitiveBlockDecoder {
             }
             members.append(OSMMember(type: type, id: memberID, role: try string(at: Int(roles[index]))))
         }
-        return OSMRelation(id: id, members: members, tags: try tags(keys: keys, values: values))
+        return OSMRelation(id: id, members: members, orderedTags: try tags(keys: keys, values: values))
     }
 }

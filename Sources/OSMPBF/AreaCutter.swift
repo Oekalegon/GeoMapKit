@@ -287,7 +287,7 @@ public struct AreaCutter: Sendable {
             }
             memberOffsets.append(try CheckedOffset.make(memberIDs.count))
             complete.append(isComplete)
-            try relationTags.append(relation.tags, interner: &interner)
+            try relationTags.append(relation.orderedTags, interner: &interner)
         }
 
         let strings = interner.frozen()
@@ -317,14 +317,14 @@ public struct AreaCutter: Sendable {
             throw PBFError.malformed("node \(node.id) has an invalid coordinate")
         }
         let start = try CheckedOffset.make(tagKeys.count)
-        for (key, value) in node.tags.sorted(by: { $0.key < $1.key }) {
-            tagKeys.append(try interner.intern(key))
-            tagValues.append(try interner.intern(value))
+        for tag in node.orderedTags {
+            tagKeys.append(try interner.intern(tag.key))
+            tagValues.append(try interner.intern(tag.value))
         }
         _ = try CheckedOffset.make(tagKeys.count)
         return NodeRecord(
             id: node.id, latitude: latitude, longitude: longitude,
-            tagStart: start, tagCount: UInt32(node.tags.count)
+            tagStart: start, tagCount: UInt32(node.orderedTags.count)
         )
     }
 
