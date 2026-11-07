@@ -10,16 +10,21 @@ public struct LabelStyle: Sendable, Equatable {
     public var haloWidth: Double
     /// Higher priority labels are placed first and win a collision.
     public var priority: Int
+    /// The zoom range in which this label is shown. It can be narrower than the class's own `visibleZoom`, so a
+    /// name appears later than its shape.
+    public var visibleZoom: ClosedRange<Double>
 
     /// Creates a label style.
     public init(
         size: ZoomValue<Double>, color: MapColor, haloColor: MapColor = .white, haloWidth: Double = 2,
-        priority: Int = 0
+        priority: Int = 0,
+        visibleZoom: ClosedRange<Double> = 0...24
     ) {
         self.size = size
         self.color = color
         self.haloColor = haloColor
         self.haloWidth = haloWidth
         self.priority = priority
+        self.visibleZoom = visibleZoom
     }
 }

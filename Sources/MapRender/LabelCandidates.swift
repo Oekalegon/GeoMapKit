@@ -13,7 +13,7 @@ enum LabelCandidates {
         for step in scene.steps where step.step.part == .body {
             guard let classStyle = style.style(for: step.step.featureClass), let label = classStyle.label else { continue }
             let size = label.size.value(atZoom: zoom)
-            guard size > 0 else { continue }
+            guard size > 0, label.visibleZoom.contains(zoom) else { continue }
             for point in step.points {
                 guard let name = point.name, !name.isEmpty else { continue }
                 let radius = classStyle.point?.radius.value(atZoom: zoom) ?? 0

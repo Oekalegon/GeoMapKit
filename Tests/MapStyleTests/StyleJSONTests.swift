@@ -73,6 +73,27 @@ struct StyleJSONTests {
         #expect(ground == GroundWidth(metresPerLane: 3, defaultLanes: 2, maximumLanes: 12))
     }
 
+    @Test func labelSettingsAndLabelZoomAreReadAndRoundTrip() throws {
+        let json = """
+            {"formatVersion": 1, "name": "T", "background": "#000000", "labels": {"padding": 5, "maximumCount": 4},
+             "classes": {"place": {"layer": 1, "label": {"size": 12, "color": "#FFFFFF", "visibleZoom": [13, 20]}}}}
+            """
+        let style = try parse(json)
+        #expect(style.labels == LabelSettings(padding: 5, maximumCount: 4))
+        #expect(style.style(for: .place)?.label?.visibleZoom == 13...20)
+        #expect(try MapStyle(json: style.jsonData()) == style)
+        #expect(try parse(document()).labels == LabelSettings())
+        #expect(reason(json.replacingOccurrences(of: "\"maximumCount\": 4", with: "\"maximumCount\": -1")).contains("labels.maximumCount"))
+        #expect(reason(json.replacingOccurrences(of: "\"padding\": 5", with: "\"padding\": -1")).contains("labels.padding"))
+        #expect(reason(json.replacingOccurrences(of: "[13, 20]", with: "[20, 13]")).contains("label.visibleZoom"))
+    }
+
+    @Test func labelSettingsClampInvalidValues() {
+        #expect(LabelSettings(padding: -3, maximumCount: -1) == LabelSettings(padding: 0, maximumCount: 0))
+        #expect(LabelSettings(padding: .nan).padding == 0)
+        #expect(MapStyle.watch.labels.maximumCount != nil && MapStyle.standard.labels.maximumCount == nil)
+    }
+
     @Test func aBadFileFailsLoudlyWithTheLocation() {
         #expect(reason("not json").contains("not valid JSON"))
         #expect(reason(document(version: 2)).contains("version 2"))

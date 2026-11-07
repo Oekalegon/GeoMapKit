@@ -1,14 +1,23 @@
 extension LabelStyle: Codable {
-    private enum Keys: String, CodingKey, CaseIterable { case size, color, haloColor, haloWidth, priority }
+    private enum Keys: String, CodingKey, CaseIterable { case size, color, haloColor, haloWidth, priority, visibleZoom }
 
     public init(from decoder: Decoder) throws {
         try decoder.requireKnownKeys(Keys.self)
         let c = try decoder.container(keyedBy: Keys.self)
+        var range: ClosedRange<Double> = 0...24
+        if c.contains(.visibleZoom) {
+            let bounds = try c.decode([Double].self, forKey: .visibleZoom)
+            guard bounds.count == 2, bounds.allSatisfy(\.isFinite), bounds[0] <= bounds[1] else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .visibleZoom, in: c, debugDescription: "expects [lowest, highest] zoom, for example [14, 24]")
+            }
+            range = bounds[0]...bounds[1]
+        }
         self.init(
             size: try c.decodeZoomNumber(forKey: .size), color: try c.decode(MapColor.self, forKey: .color),
             haloColor: try c.decodeIfPresent(MapColor.self, forKey: .haloColor) ?? .white,
             haloWidth: try c.decodeNumber(forKey: .haloWidth, default: 2),
-            priority: try c.decodeIfPresent(Int.self, forKey: .priority) ?? 0)
+            priority: try c.decodeIfPresent(Int.self, forKey: .priority) ?? 0, visibleZoom: range)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -18,5 +27,6 @@ extension LabelStyle: Codable {
         try c.encode(haloColor, forKey: .haloColor)
         try c.encode(haloWidth, forKey: .haloWidth)
         try c.encode(priority, forKey: .priority)
+        try c.encode([visibleZoom.lowerBound, visibleZoom.upperBound], forKey: .visibleZoom)
     }
 }
