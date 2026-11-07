@@ -7,8 +7,9 @@ import SwiftUI
 /// A map from a feature store file, with pan and zoom.
 ///
 /// The view draws the map into an image that is a little larger than the view and shows that image moved and scaled
-/// while the user pans or zooms. A new image is drawn only when the old one no longer covers the view, when a gesture
-/// ends after the zoom changed or the view moved far from the image's centre, or when the style or store changes. That
+/// while the user pans or zooms. A new image is drawn only when the view has moved far from the image's centre (half the
+/// margin, so the next one is ready before the edge shows), when a gesture ends after the zoom changed, when the old
+/// image no longer covers the view, or when the style or store changes. That
 /// keeps the work, and on the Watch the battery use, bounded: nothing is redrawn on a timer.
 ///
 /// Gestures: drag to pan; on iOS, iPadOS and macOS pinch to zoom; on watchOS the Digital Crown zooms and a drag pans.

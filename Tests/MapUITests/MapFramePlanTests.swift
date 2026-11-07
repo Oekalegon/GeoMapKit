@@ -56,12 +56,12 @@ struct MapFramePlanTests {
         #expect(plan.needsNewFrame(interacting: true))
     }
 
-    @Test func driftBeyondHalfTheMarginIsFixedWhenTheGestureEnds() {
+    @Test func driftBeyondHalfTheMarginStartsANewFrameDuringTheGestureToo() {
         let start = requested()
         let moved = requested(start.coordinate(at: ScreenPoint(x: width / 2 + 150, y: height / 2)))
         let plan = MapFramePlan(frame: frameViewport(), requested: moved)
         #expect(plan.coversView && plan.drift > plan.driftLimit)
-        #expect(!plan.needsNewFrame(interacting: true))
+        #expect(plan.needsNewFrame(interacting: true), "the next frame takes time, so it starts before the edge shows")
         #expect(plan.needsNewFrame(interacting: false))
     }
 

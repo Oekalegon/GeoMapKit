@@ -33,6 +33,9 @@ struct ViewerView: View {
         var id: Self { self }
     }
 
+    /// The Watch style draws nothing below this zoom (the Watch holds the mid and detail bands only).
+    private static let watchMinimumZoom = 12.0
+
     private var style: MapStyle {
         switch choice {
         case .standard: return .standard
@@ -51,6 +54,12 @@ struct ViewerView: View {
                         .id(storeName)
                         .frame(width: watchSize ? 184 : nil, height: watchSize ? 224 : nil)
                         .border(watchSize ? Color.secondary : .clear)
+                        .overlay(alignment: .bottom) {
+                            if choice == .watch && zoom < Self.watchMinimumZoom {
+                                Text("The Watch style shows the map from zoom 12.")
+                                    .font(.footnote).padding(6).background(.regularMaterial, in: Capsule()).padding(8)
+                            }
+                        }
                 } else {
                     Text(message ?? "Open a .gmk feature store file").foregroundStyle(.secondary).padding()
                 }
@@ -82,11 +91,16 @@ struct ViewerView: View {
                 ForEach(StyleChoice.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented).frame(width: 220)
-            .onChange(of: choice) { _, new in if new == .file && customStyle == nil { importing = .style } }
+            .onChange(of: choice) { _, new in
+                if new == .file && customStyle == nil { importing = .style }
+                if new == .watch { zoom = max(zoom, Self.watchMinimumZoom) }
+            }
             if choice == .file { Button("Style file…") { importing = .style } }
             Toggle("Watch size", isOn: $watchSize)
             Spacer()
-            Button("−") { zoom = max(zoom - 1, MapView.zoomRange.lowerBound) }
+            Button("−") {
+                zoom = max(zoom - 1, choice == .watch ? Self.watchMinimumZoom : MapView.zoomRange.lowerBound)
+            }
             Text(String(format: "z%.2f", zoom)).monospacedDigit()
             Button("+") { zoom = min(zoom + 1, MapView.zoomRange.upperBound) }
             Text(String(format: "%.5f, %.5f", center.latitude, center.longitude)).monospacedDigit().foregroundStyle(.secondary)
