@@ -161,6 +161,22 @@ struct CoreGraphicsRendererTests {
         #expect(close(pixel(image, x: half, y: 50 + Int((halfWidth + 2).rounded(.up))), to: MapStyle.standard.background))
     }
 
+    @Test func aBridgeThatBlendsToItsNeighbourStillEndsFlat() throws {
+        let view = MapViewport(center: Coordinate(latitude: 47.1, longitude: 9.5), zoom: 18, width: 200, height: 100)
+        let road = try #require(MapStyle.standard.style(for: .roadMajor))
+        let own = road.stroke?.width.resolved(atZoom: 18, metresPerPoint: view.metresPerPoint, lanes: nil) ?? 0
+        let line = SceneLine(
+            featureClass: .roadMajor, objectID: 1, points: [ScreenPoint(x: 40, y: 50), ScreenPoint(x: 160, y: 50)], structure: .bridge,
+            startWidth: own / 2, endWidth: own / 2)
+        let steps = [DrawStep.Part.casing, .body].map { SceneStep(step: DrawStep(featureClass: .roadMajor, part: $0, structure: .bridge), lines: [line]) }
+        let scene = MapScene(viewport: view, band: .detail, steps: steps, cellCount: 1)
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 1))
+        #expect(close(pixel(image, x: 80, y: 50), to: try #require(road.stroke?.color.value(atZoom: 18))), "the deck")
+        // A round end would reach past the end of the line by half its width; the casing is round-free.
+        #expect(close(pixel(image, x: 37, y: 50), to: MapStyle.standard.background), "no round cap before the start of the bridge")
+        #expect(close(pixel(image, x: 163, y: 50), to: MapStyle.standard.background), "no round cap after its end")
+    }
+
     @Test func slicingAPolylineKeepsTheVerticesBetween() {
         let points = [ScreenPoint(x: 0, y: 0), ScreenPoint(x: 10, y: 0), ScreenPoint(x: 10, y: 10)]
         let cumulative = [0.0, 10, 20]
