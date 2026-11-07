@@ -31,7 +31,8 @@ extension FeatureClassifier {
             make(.place, .overview, watch: true, [("city", 1), ("town", 2)]),
             make(.place, .mid, watch: true, [("village", 3)]),
             make(.place, .detail, watch: false,
-                [("hamlet", 4), ("suburb", 5), ("locality", 6), ("isolated_dwelling", 7)]))))
+                [("hamlet", 4), ("suburb", 5), ("locality", 6), ("isolated_dwelling", 7), ("farm", 8), ("islet", 9),
+                 ("neighbourhood", 10), ("quarter", 11), ("square", 12)]))))
         rules.append(ClassifierRule("amenity", merged(
             make(.poiAnchor, .detail, watch: true, [("drinking_water", 1), ("shelter", 2)]),
             make(.poiAnchor, .detail, watch: false, [("toilets", 3)]))))
@@ -54,12 +55,14 @@ extension FeatureClassifier {
                 [("residential", 2), ("service", 3), ("living_street", 4), ("pedestrian", 5), ("road", 6)]))))
         rules.append(ClassifierRule("railway", merged(
             make(.railway, .overview, watch: true, [("rail", 1), ("light_rail", 2), ("narrow_gauge", 3), ("funicular", 4)]),
-            make(.railway, .detail, watch: true, [("tram", 5)]))))
+            make(.railway, .detail, watch: true, [("tram", 5)]),
+            make(.railway, .detail, watch: false, [("subway", 6), ("monorail", 7)]))))
 
         // Landmarks that a runner navigates by (rule table version 2).
         rules.append(ClassifierRule("power", merged(
             make(.powerLine, .mid, watch: true, [("line", 1), ("minor_line", 2), ("cable", 3)]),
-            make(.powerLine, .detail, watch: true, [("tower", 4)]))))
+            make(.powerLine, .detail, watch: true, [("tower", 4)]),
+            make(.powerLine, .detail, watch: false, [("pole", 5), ("portal", 6)]))))
         rules.append(ClassifierRule("aerialway", merged(
             make(.aerialway, .mid, watch: true,
                 [("cable_car", 1), ("gondola", 2), ("chair_lift", 3), ("mixed_lift", 4), ("drag_lift", 5), ("t-bar", 6),
@@ -75,7 +78,7 @@ extension FeatureClassifier {
         rules.append(ClassifierRule("waterway", merged(
             make(.waterLine, .overview, watch: true, [("river", 1), ("canal", 2)]),
             make(.waterLine, .mid, watch: true, [("stream", 3)]),
-            make(.waterLine, .detail, watch: false, [("ditch", 4), ("drain", 5)]),
+            make(.waterLine, .detail, watch: false, [("ditch", 4), ("drain", 5), ("dam", 6), ("weir", 7)]),
             make(.waterArea, .overview, watch: true, [("riverbank", 2)]))))
         rules.append(ClassifierRule("natural", make(.waterArea, .overview, watch: true, [("water", 1)])))
         rules.append(ClassifierRule("landuse", make(.waterArea, .overview, watch: true, [("reservoir", 3), ("basin", 4)])))
@@ -87,15 +90,17 @@ extension FeatureClassifier {
 
         // Land cover and land use.
         rules.append(ClassifierRule("natural", make(.landcover, .mid, watch: true,
-            [("scrub", 1), ("heath", 2), ("grassland", 3), ("fell", 4), ("bare_rock", 5), ("scree", 6), ("shingle", 7),
+            [("scrub", 1), ("shrubbery", 13), ("shrub", 14), ("heath", 2), ("grassland", 3), ("fell", 4), ("bare_rock", 5), ("scree", 6), ("shingle", 7),
              ("sand", 8), ("beach", 9), ("glacier", 10), ("wetland", 11), ("mud", 12)])))
         rules.append(ClassifierRule("landuse", make(.landcover, .mid, watch: true,
             [("meadow", 20), ("grass", 21), ("farmland", 22), ("orchard", 23), ("vineyard", 24), ("allotments", 25),
-             ("quarry", 26)])))
+             ("quarry", 26), ("village_green", 27), ("recreation_ground", 28), ("flowerbed", 29)])))
         rules.append(ClassifierRule("leisure", make(.landcover, .mid, watch: true,
             [("park", 30), ("garden", 31), ("golf_course", 32), ("pitch", 33), ("playground", 34)])))
         rules.append(ClassifierRule("landuse", make(.landuseUrban, .mid, watch: false,
-            [("residential", 1), ("industrial", 2), ("commercial", 3), ("retail", 4), ("construction", 5), ("military", 6)])))
+            [("residential", 1), ("industrial", 2), ("commercial", 3), ("retail", 4), ("construction", 5), ("military", 6),
+             ("farmyard", 7), ("garages", 8), ("railway", 9)])))
+        rules.append(ClassifierRule("natural", make(.cliff, .mid, watch: false, [("cliff", 1)])))
 
         // Buildings, then barriers, stops and road details, then other points of interest.
         rules.append(ClassifierRule("building", any: one(.building, .detail, watch: false)))
@@ -114,8 +119,17 @@ extension FeatureClassifier {
             [("crossing", 1), ("traffic_signals", 2), ("stop", 3), ("give_way", 4), ("street_lamp", 5), ("turning_circle", 6),
              ("mini_roundabout", 7), ("motorway_junction", 8), ("milestone", 9), ("passing_place", 10), ("speed_camera", 11),
              ("elevator", 12), ("turning_loop", 13)])))
+        // Rail and road details at a point (rule table version 4).
+        rules.append(ClassifierRule("railway", make(.roadPoint, .detail, watch: false,
+            [("level_crossing", 14), ("crossing", 15), ("tram_level_crossing", 16), ("tram_crossing", 17), ("switch", 18),
+             ("signal", 19), ("buffer_stop", 20)])))
+        rules.append(ClassifierRule("traffic_calming", any: one(.roadPoint, .detail, watch: false, sub: 21)))
         for (index, key) in ["amenity", "shop", "tourism", "historic", "leisure", "man_made", "emergency"].enumerated() {
             rules.append(ClassifierRule(key, any: one(.poi, .detail, watch: false, sub: UInt8(index + 1))))
+        }
+        // Objects with nothing but an address (rule table version 4): the largest group in a town.
+        for key in ["addr:housenumber", "addr:housename", "addr:street", "addr:postcode", "addr:city"] {
+            rules.append(ClassifierRule(key, any: one(.address, .detail, watch: false)))
         }
         return rules
     }()

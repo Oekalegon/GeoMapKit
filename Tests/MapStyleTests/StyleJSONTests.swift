@@ -125,12 +125,22 @@ struct StyleJSONTests {
         #expect(MapStyle.watch.style(for: .countryBorder) == nil)
     }
 
+    @Test func aStyleFileWithoutPavementHidesSidewalks() throws {
+        var object = try #require(JSONSerialization.jsonObject(with: MapStyle.standard.jsonData()) as? [String: Any])
+        var classes = try #require(object["classes"] as? [String: Any])
+        #expect(classes.removeValue(forKey: "pavement") != nil)
+        object["classes"] = classes
+        #expect(try MapStyle(json: JSONSerialization.data(withJSONObject: object)).style(for: .pavement) == nil)
+        // Addresses are never drawn.
+        #expect(MapStyle.standard.style(for: .address) == nil && MapStyle.watch.style(for: .address) == nil)
+    }
+
     @Test func classNamesInTheFileFormatArePinned() throws {
         // These names are the file format. Renaming a FeatureClass case must not silently break users' style files.
         let names = [
             "other", "path", "track", "roadMajor", "roadMinor", "railway", "waterLine", "waterArea", "forest", "landcover",
             "landuseUrban", "building", "peak", "place", "poiAnchor", "poi", "boundary", "powerLine", "piste", "aerialway",
-            "tree", "barrier", "transportStop", "roadPoint", "countryBorder",
+            "tree", "barrier", "transportStop", "roadPoint", "countryBorder", "address", "pavement", "cliff",
         ]
         #expect(FeatureClass.allCases.map { String(describing: $0) } == names)
         for name in names {

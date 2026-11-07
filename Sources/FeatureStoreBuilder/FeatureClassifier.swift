@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 3
+    public static let version: UInt16 = 4
 
     /// Creates a classifier.
     public init() {}
@@ -30,6 +30,12 @@ public struct FeatureClassifier: Sendable {
             tags.value(forKey: "admin_level") == "2", tags.value(forKey: "maritime") != "yes"
         {
             outcome = ClassifierOutcome(featureClass: .countryBorder, subclass: 0, band: outcome.band, watch: false)
+        }
+        // A sidewalk or a crossing is a footway too, but it is part of the street, not a path to run: it gets its own class.
+        if outcome.featureClass == .path, tags.value(forKey: "highway") == "footway",
+            let kind = tags.value(forKey: "footway"), Self.pavementKinds.contains(kind)
+        {
+            outcome = ClassifierOutcome(featureClass: .pavement, subclass: outcome.subclass, band: .detail, watch: false)
         }
         var subclass = outcome.subclass
         switch outcome.featureClass {
@@ -75,6 +81,9 @@ public struct FeatureClassifier: Sendable {
         if let boundary = tags.value(forKey: "boundary"), boundary == "protected_area" || boundary == "national_park" { return true }
         return false
     }
+
+    /// The `footway` values that mark a footway as part of a street.
+    private static let pavementKinds: Set<String> = ["sidewalk", "crossing", "traffic_island", "access_aisle"]
 
     private static let linearNatural: Set<String> = ["coastline", "cliff", "ridge", "arete", "tree_row", "valley", "no"]
     private static let linearManMade: Set<String> = ["pipeline", "cutline", "embankment", "dyke", "no"]
