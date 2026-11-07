@@ -6,7 +6,7 @@ import OSMPBF
 /// Builds a feature store file from an `OSMExtract`.
 ///
 /// The builder classifies every object, simplifies it per band, clips it to cells, assembles
-/// multipolygons and writes the result with ``FeatureStoreWriter``. Nothing is dropped: all
+/// multipolygons and writes the result with `FeatureStoreWriter`. Nothing is dropped: all
 /// tagged nodes, all ways and all relations are stored with all their tags, except in the
 /// ``BuildProfile/watch`` copy. Only cells that lie fully inside the extract's bounding box are
 /// written, because the extract is incomplete near its edge; pieces outside them are counted.
@@ -42,7 +42,7 @@ public struct FeatureStoreBuilder: Sendable {
     ///
     /// - Parameter extract: The cut area.
     /// - Returns: The file data and a report.
-    /// - Throws: `CancellationError` if the task is cancelled, or ``FeatureStoreError`` if a value does not fit the format.
+    /// - Throws: `CancellationError` if the task is cancelled, or `FeatureStoreError` if a value does not fit the format.
     public func build(from extract: OSMExtract) throws -> BuildResult {
         let range = Self.writtenCells(in: extract.boundingBox)
         let writer = FeatureStoreWriter(
