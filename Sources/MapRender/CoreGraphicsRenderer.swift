@@ -31,7 +31,7 @@ public struct CoreGraphicsRenderer: MapRenderer {
             guard let classStyle = style.style(for: sceneStep.step.featureClass) else { continue }
             switch sceneStep.step.part {
             case .casing:
-                guard let stroke = classStyle.stroke, let casing = stroke.casing else { continue }
+                guard let stroke = classStyle.stroke(for: sceneStep.step.structure), let casing = stroke.casing else { continue }
                 let extra = casing.extraPoints.value(atZoom: zoom)
                 guard extra > 0 else { continue }
                 let color = casing.color.value(atZoom: zoom)
@@ -100,7 +100,7 @@ public struct CoreGraphicsRenderer: MapRenderer {
                 for run in area.outline { strokePath(run, width: width, stroke: stroke, dashed: true, in: context) }
             }
         }
-        if let stroke = classStyle.stroke {
+        if let stroke = classStyle.stroke(for: step.step.structure) {
             context.setStrokeColor(stroke.color.value(atZoom: zoom).cgColor)
             for line in step.lines {
                 let width = stroke.width.resolved(atZoom: zoom, metresPerPoint: viewport.metresPerPoint, lanes: line.lanes)

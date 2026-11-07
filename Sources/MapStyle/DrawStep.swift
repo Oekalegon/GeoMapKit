@@ -16,10 +16,14 @@ public struct DrawStep: Sendable, Equatable {
     public var featureClass: FeatureClass
     /// The part of the class to draw.
     public var part: Part
+    /// Which lines of the class the step draws: those on the ground, the bridges or the tunnels. Areas and points are
+    /// only drawn in steps on the ground.
+    public var structure: Structure
 
     /// Creates a step.
-    public init(featureClass: FeatureClass, part: Part) {
+    public init(featureClass: FeatureClass, part: Part, structure: Structure = .ground) {
         self.featureClass = featureClass
         self.part = part
+        self.structure = structure
     }
 }

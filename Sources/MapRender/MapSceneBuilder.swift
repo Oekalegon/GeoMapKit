@@ -35,7 +35,7 @@ public struct MapSceneBuilder: Sendable {
         let visible = ScreenBounds(width: viewport.width, height: viewport.height, margin: Self.cullingMargin)
 
         var linePieces: [LineKey: [LinePiece]] = [:]
-        var lineInfo: [LineKey: (lanes: Int?, name: String?)] = [:]
+        var lineInfo: [LineKey: (lanes: Int?, name: String?, structure: Structure)] = [:]
         var areas: [FeatureClass: [SceneArea]] = [:]
         var points: [FeatureClass: [ScenePoint]] = [:]
 
@@ -57,7 +57,7 @@ public struct MapSceneBuilder: Sendable {
                     if lineInfo[key] == nil {
                         // Tags are looked up only where the style uses them: `lanes` for classes with a ground width.
                         let usesLanes = style.style(for: featureClass)?.stroke?.width.ground != nil
-                        lineInfo[key] = (usesLanes ? lanes(of: feature) : nil, name(of: feature))
+                        lineInfo[key] = (usesLanes ? lanes(of: feature) : nil, name(of: feature), Structure(subclass: feature.subclass))
                     }
                 case .area:
                     if let area = makeArea(feature, featureClass: featureClass, viewport: viewport, visible: visible) {
@@ -77,12 +77,13 @@ public struct MapSceneBuilder: Sendable {
 
         var lines: [FeatureClass: [SceneLine]] = [:]
         for (key, pieces) in linePieces {
-            let info = lineInfo[key] ?? (nil, nil)
+            let info = lineInfo[key] ?? (nil, nil, .ground)
             for polyline in LineJoiner.join(pieces) {
                 let screen = polyline.map(viewport.screenPoint(for:))
                 guard let bounds = ScreenBounds(of: screen), bounds.intersects(visible) else { continue }
                 lines[key.featureClass, default: []].append(SceneLine(
-                    featureClass: key.featureClass, objectID: key.objectID, points: screen, lanes: info.lanes, name: info.name))
+                    featureClass: key.featureClass, objectID: key.objectID, points: screen, lanes: info.lanes, name: info.name,
+                    structure: info.structure))
             }
         }
         // Dictionary order is not stable; sort so the same input always gives the same scene.
@@ -93,14 +94,18 @@ public struct MapSceneBuilder: Sendable {
         var steps: [SceneStep] = []
         for step in style.drawSteps(atZoom: viewport.zoom) {
             let featureClass = step.featureClass
+            // A line is drawn in the steps of the structure its class has a style for: a class with no bridge style draws
+            // its bridges on the ground.
+            let classStyle = style.style(for: featureClass)
+            let stepLines = (lines[featureClass] ?? []).filter { classStyle?.drawnStructure(for: $0.structure) == step.structure }
             let sceneStep: SceneStep
             switch step.part {
             case .casing:
-                sceneStep = SceneStep(step: step, lines: lines[featureClass] ?? [])
+                sceneStep = SceneStep(step: step, lines: stepLines)
+            case .body where step.structure == .ground:
+                sceneStep = SceneStep(step: step, lines: stepLines, areas: areas[featureClass] ?? [], points: points[featureClass] ?? [])
             case .body:
-                sceneStep = SceneStep(
-                    step: step, lines: lines[featureClass] ?? [], areas: areas[featureClass] ?? [],
-                    points: points[featureClass] ?? [])
+                sceneStep = SceneStep(step: step, lines: stepLines)
             }
             if !sceneStep.lines.isEmpty || !sceneStep.areas.isEmpty || !sceneStep.points.isEmpty { steps.append(sceneStep) }
         }

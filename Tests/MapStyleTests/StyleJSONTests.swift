@@ -135,6 +135,24 @@ struct StyleJSONTests {
         #expect(MapStyle.standard.style(for: .address) == nil && MapStyle.watch.style(for: .address) == nil)
     }
 
+    @Test func bridgeAndTunnelStylesAreReadStrictly() throws {
+        let style = try parse(document(classBody: """
+            "layer": 5, "stroke": {"color": "#000000", "width": {"points": 1}},
+            "bridge": {"casing": {"color": "#404040", "extraPoints": [[12, 0.5], [16, 1.5]]}},
+            "tunnel": {"opacity": 0.4, "dash": [4, 2]}
+            """))
+        let road = try #require(style.style(for: .roadMajor))
+        #expect(road.bridge?.casing.extraPoints.value(atZoom: 16) == 1.5)
+        #expect(road.tunnel == TunnelStyle(opacity: 0.4, dash: [4, 2]))
+        #expect(try MapStyle(json: style.jsonData()) == style)
+        // The tunnel opacity defaults, and is checked.
+        #expect(try parse(document(classBody: "\"layer\": 5, \"tunnel\": {}")).style(for: .roadMajor)?.tunnel == TunnelStyle(opacity: 0.5))
+        #expect(reason(document(classBody: "\"layer\": 5, \"tunnel\": {\"opacity\": 2}")).contains("opacity"))
+        #expect(reason(document(classBody: "\"layer\": 5, \"tunnel\": {\"dash\": [-1]}")).contains("dash"))
+        #expect(reason(document(classBody: "\"layer\": 5, \"bridge\": {}")).contains("casing"))
+        #expect(reason(document(classBody: "\"layer\": 5, \"bridge\": {\"casing\": {\"color\": \"#000000\", \"extraPoints\": 1}, \"width\": 2}")).contains("width"))
+    }
+
     @Test func classNamesInTheFileFormatArePinned() throws {
         // These names are the file format. Renaming a FeatureClass case must not silently break users' style files.
         let names = [

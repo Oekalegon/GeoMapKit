@@ -85,6 +85,29 @@ struct CoreGraphicsRendererTests {
         #expect(!close(single, to: MapStyle.standard.background), "the band is visible")
     }
 
+    @Test func aBridgeCasingIsDrawnAroundTheDeckAndTheDeckOnTopOfIt() throws {
+        let view = MapViewport(center: Coordinate(latitude: 47.1, longitude: 9.5), zoom: 16, width: 100, height: 100)
+        let road = try #require(MapStyle.standard.style(for: .roadMinor))
+        let bridge = try #require(road.stroke(for: .bridge))
+        let casing = try #require(bridge.casing)
+        let half = bridge.width.resolved(atZoom: 16, metresPerPoint: view.metresPerPoint, lanes: nil) / 2
+        let extra = casing.extraPoints.value(atZoom: 16)
+        let line = SceneLine(
+            featureClass: .roadMinor, objectID: 1, points: [ScreenPoint(x: 0, y: 50), ScreenPoint(x: 100, y: 50)], structure: .bridge)
+        let scene = MapScene(
+            viewport: view, band: .detail,
+            steps: [
+                SceneStep(step: DrawStep(featureClass: .roadMinor, part: .casing, structure: .bridge), lines: [line]),
+                SceneStep(step: DrawStep(featureClass: .roadMinor, part: .body, structure: .bridge), lines: [line]),
+            ], cellCount: 1)
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 1))
+        let deck = bridge.color.value(atZoom: 16)
+        #expect(close(pixel(image, x: 50, y: 50), to: deck), "the deck is on top")
+        let inBand = Int((50 + half + extra / 2).rounded(.down))
+        #expect(close(pixel(image, x: 50, y: inBand), to: casing.color.value(atZoom: 16)), "the casing shows beside the deck")
+        #expect(close(pixel(image, x: 50, y: Int((50 + half + extra + 3).rounded(.up))), to: MapStyle.standard.background))
+    }
+
     @Test func sceneIsNotFlippedVertically() throws {
         let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene(), style: .standard, scale: 1))
         let water = try #require(MapStyle.standard.style(for: .waterArea)?.fill?.color.value(atZoom: 16))

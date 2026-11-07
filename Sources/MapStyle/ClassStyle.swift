@@ -25,12 +25,19 @@ public struct ClassStyle: Sendable, Equatable {
     /// road fills on top, so at a crossing the fills run through each other's outlines and the outlines
     /// join into one shape instead of one road's outline cutting across the other.
     public var casingLayer: Int?
+    /// How bridges of the class are drawn, or `nil` to draw them like the rest of the class (see ``BridgeStyle``).
+    public var bridge: BridgeStyle?
+    /// How tunnels of the class are drawn, or `nil` to draw them like the rest of the class (see ``TunnelStyle``).
+    public var tunnel: TunnelStyle?
 
     /// Creates a class style.
     public init(
         fill: FillStyle? = nil, stroke: StrokeStyle? = nil, point: PointStyle? = nil, label: LabelStyle? = nil,
-        visibleZoom: ClosedRange<Double> = 0...24, layer: Int, casingLayer: Int? = nil
+        visibleZoom: ClosedRange<Double> = 0...24, layer: Int, casingLayer: Int? = nil, bridge: BridgeStyle? = nil,
+        tunnel: TunnelStyle? = nil
     ) {
+        self.bridge = bridge
+        self.tunnel = tunnel
         self.fill = fill
         self.stroke = stroke
         self.point = point

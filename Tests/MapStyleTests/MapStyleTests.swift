@@ -37,6 +37,64 @@ struct MapStyleTests {
         #expect(MapStyle.watch.style(for: .pavement) == nil)
     }
 
+    @Test func bridgesAreDrawnAfterEveryLineOnTheGroundAndTunnelsBeforeThem() throws {
+        let steps = MapStyle.standard.drawSteps(atZoom: 16)
+        func indices(_ matching: (DrawStep) -> Bool) -> [Int] { steps.indices.filter { matching(steps[$0]) } }
+        let ground = indices { $0.structure == .ground }
+        let bridges = indices { $0.structure == .bridge }
+        let tunnels = indices { $0.structure == .tunnel }
+        #expect(!bridges.isEmpty && !tunnels.isEmpty)
+        #expect(try #require(bridges.min()) > (try #require(ground.max())), "every bridge step after every ground step")
+        // Tunnels are above the area fills and below every line on the ground.
+        let fills = indices { $0.structure == .ground && [.waterArea, .forest, .building, .landcover].contains($0.featureClass) }
+        let groundLines = indices { $0.structure == .ground && [.roadMajor, .roadMinor, .path, .track, .railway].contains($0.featureClass) }
+        #expect(try #require(tunnels.min()) > (try #require(fills.max())))
+        #expect(try #require(tunnels.max()) < (try #require(groundLines.min())))
+        // A bridge has its casing step before its body step, and all casings before the bodies of the same layer.
+        let roadBridge = steps.filter { $0.featureClass == .roadMajor && $0.structure == .bridge }
+        #expect(roadBridge.map(\.part) == [.casing, .body])
+        // The Watch style draws bridges and tunnels like any other line.
+        #expect(MapStyle.watch.drawSteps(atZoom: 16).allSatisfy { $0.structure == .ground })
+    }
+
+    @Test func aStyleWithoutBridgeOrTunnelStyleDrawsThemOnTheGround() throws {
+        let pavement = try #require(MapStyle.standard.style(for: .pavement))
+        #expect(pavement.drawnStructure(for: .bridge) == .ground && pavement.drawnStructure(for: .tunnel) == .ground)
+        let road = try #require(MapStyle.standard.style(for: .roadMajor))
+        #expect(road.drawnStructure(for: .bridge) == .bridge && road.drawnStructure(for: .tunnel) == .tunnel)
+        #expect(road.drawnStructure(for: .ground) == .ground)
+        // The water line has tunnels (culverts) but no bridges.
+        let water = try #require(MapStyle.standard.style(for: .waterLine))
+        #expect(water.drawnStructure(for: .tunnel) == .tunnel && water.drawnStructure(for: .bridge) == .ground)
+    }
+
+    @Test func aBridgeHasItsOwnCasingAndATunnelIsFainterAndHasNone() throws {
+        let road = try #require(MapStyle.standard.style(for: .roadMinor))
+        let ground = try #require(road.stroke(for: .ground))
+        #expect(ground == road.stroke)
+        let bridge = try #require(road.stroke(for: .bridge))
+        #expect(bridge.casing == road.bridge?.casing && bridge.casing != ground.casing)
+        #expect(bridge.color == ground.color && bridge.dash == ground.dash)
+        let tunnel = try #require(road.stroke(for: .tunnel))
+        #expect(tunnel.casing == nil)
+        #expect(tunnel.color.value(atZoom: 16).alpha == ground.color.value(atZoom: 16).alpha * 0.5)
+        #expect(tunnel.dash == [5, 3])
+        // A railway tunnel keeps the dash of the railway when the style gives none of its own.
+        let rail = try #require(MapStyle.standard.style(for: .railway))
+        #expect(rail.stroke(for: .tunnel)?.dash == [2, 3])
+        let plain = ClassStyle(stroke: .line(0, .constant(1), dash: [4, 4]), layer: 1, tunnel: TunnelStyle(opacity: 0.3))
+        #expect(plain.stroke(for: .tunnel)?.dash == [4, 4])
+        #expect(ClassStyle(layer: 1, bridge: nil).stroke(for: .bridge) == nil)
+        #expect(TunnelStyle(opacity: 7).opacity == 1 && TunnelStyle(opacity: -1).opacity == 0)
+    }
+
+    @Test func aSubclassByteTellsTheStructure() {
+        #expect(Structure(subclass: 4) == .ground)
+        #expect(Structure(subclass: 4 | SubclassBits.bridge) == .bridge)
+        #expect(Structure(subclass: 4 | SubclassBits.tunnel) == .tunnel)
+        #expect(Structure(subclass: SubclassBits.bridge | SubclassBits.tunnel) == .tunnel)
+    }
+
     @Test func watchStyleDrawsOnlyTheWatchProfile() {
         let watchClasses: Set<FeatureClass> = [
             .peak, .place, .poiAnchor, .path, .track, .roadMajor, .roadMinor, .railway, .waterLine, .waterArea,
