@@ -16,12 +16,17 @@ public struct MapStyle: Sendable, Equatable {
     public var background: MapColor
     /// The styles by class. A class that is not in the dictionary is not drawn.
     public var classes: [FeatureClass: ClassStyle]
+    /// How the data credit is shown on the map. See ``AttributionDisplay`` for the app's duty when this is hidden.
+    public var attribution: AttributionDisplay
 
     /// Creates a style.
-    public init(name: String, background: MapColor, classes: [FeatureClass: ClassStyle]) {
+    public init(
+        name: String, background: MapColor, classes: [FeatureClass: ClassStyle], attribution: AttributionDisplay = .full
+    ) {
         self.name = name
         self.background = background
         self.classes = classes
+        self.attribution = attribution
     }
 
     /// The style of a class, or `nil` if the class is hidden in this style.

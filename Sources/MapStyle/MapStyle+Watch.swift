@@ -46,5 +46,6 @@ extension MapStyle {
                 label: LabelStyle(
                     size: .constant(13), color: .white, haloColor: .black, haloWidth: 2, priority: 50),
                 visibleZoom: 12...24, layer: 60),
-        ])
+        ],
+        attribution: .compact)
 }

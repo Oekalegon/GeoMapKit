@@ -16,7 +16,7 @@ public struct CoreGraphicsRenderer: MapRenderer {
 
     /// Draws the scene into a context in screen points (origin top-left, y down).
     ///
-    /// The data credit of the scene is drawn last, in the bottom-right corner.
+    /// The data credit of the scene is drawn last, in the bottom-right corner, as the style's ``MapStyle/attribution`` asks.
     public func draw(_ scene: MapScene, style: MapStyle, into context: CGContext) {
         let viewport = scene.viewport
         let zoom = viewport.zoom
@@ -44,18 +44,20 @@ public struct CoreGraphicsRenderer: MapRenderer {
             }
         }
         drawLabels(scene, style: style, in: context)
-        drawAttribution(scene, in: context)
+        drawAttribution(scene, display: style.attribution, in: context)
     }
 
     /// Draws the data credit in the bottom-right corner, small, on a light halo so it stays readable.
-    private func drawAttribution(_ scene: MapScene, in context: CGContext) {
-        guard !scene.attribution.isEmpty else { return }
+    ///
+    /// What is drawn follows the style's ``AttributionDisplay``: the full credit, a short mark, or nothing.
+    private func drawAttribution(_ scene: MapScene, display: AttributionDisplay, in context: CGContext) {
+        guard let text = display.text(for: scene.attribution) else { return }
         let fontSize = 8.0
-        let size = Self.measure(scene.attribution, fontSize)
+        let size = Self.measure(text, fontSize)
         let origin = ScreenPoint(
             x: max(scene.viewport.width - size.width - 4, 2), y: max(scene.viewport.height - size.height - 3, 0))
         let label = PlacedLabel(
-            text: scene.attribution, origin: origin, width: size.width, height: size.height, fontSize: fontSize,
+            text: text, origin: origin, width: size.width, height: size.height, fontSize: fontSize,
             style: LabelStyle(size: ZoomValue(constant: fontSize), color: MapColor(hex: 0x333333), haloWidth: 2))
         drawLabel(label, in: context)
     }

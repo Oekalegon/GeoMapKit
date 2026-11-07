@@ -12,9 +12,11 @@ public enum RenderArgument {
     ///   - scale: `--scale S`, pixels per point, default 2, 1 to 4.
     ///   - style: `--style standard|watch`, default `standard`.
     ///   - output: `--output file.png`, required.
+    ///   - attribution: `--attribution full|compact|none`; default is the style's own choice.
     /// - Throws: ``ToolError`` for a missing or invalid option.
     public static func parse(
-        center: String?, zoom: String?, size: String?, scale: String?, style: String?, output: String?
+        center: String?, zoom: String?, size: String?, scale: String?, style: String?, output: String?,
+        attribution: String? = nil
     ) throws -> RenderRequest {
         guard let center else { throw ToolError("render needs --center lat,lon") }
         let parts = center.split(separator: ",", omittingEmptySubsequences: false).map { Double($0.trimmingCharacters(in: .whitespaces)) }
@@ -53,8 +55,17 @@ public enum RenderArgument {
             chosen = value
         }
 
+        var credit: RenderRequest.Attribution?
+        if let attribution {
+            guard let value = RenderRequest.Attribution(rawValue: attribution) else {
+                throw ToolError("--attribution expects full, compact or none, not '\(attribution)'")
+            }
+            credit = value
+        }
+
         guard let output, !output.isEmpty else { throw ToolError("render needs --output <file.png>") }
         return RenderRequest(
-            center: coordinate, zoom: zoomValue, width: width, height: height, scale: scaleValue, style: chosen, output: output)
+            center: coordinate, zoom: zoomValue, width: width, height: height, scale: scaleValue, style: chosen, output: output,
+            attribution: credit)
     }
 }

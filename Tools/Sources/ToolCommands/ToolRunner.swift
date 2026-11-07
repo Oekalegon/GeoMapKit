@@ -128,7 +128,14 @@ public enum ToolRunner {
         } catch {
             throw ToolError("Cannot read \(store.path): \(error)")
         }
-        let style: MapStyle = request.style == .watch ? .watch : .standard
+        var style: MapStyle = request.style == .watch ? .watch : .standard
+        if let attribution = request.attribution {
+            switch attribution {
+            case .full: style.attribution = .full
+            case .compact: style.attribution = .compact
+            case .none: style.attribution = .hidden
+            }
+        }
         let viewport = MapViewport(
             center: request.center, zoom: request.zoom, width: Double(request.width), height: Double(request.height))
 
