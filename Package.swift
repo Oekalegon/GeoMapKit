@@ -20,6 +20,7 @@ let package = Package(
         .library(name: "FeatureStoreBuilder", targets: ["FeatureStoreBuilder"]),
         .library(name: "MapStyle", targets: ["MapStyle"]),
         .library(name: "MapRender", targets: ["MapRender"]),
+        .library(name: "MapUI", targets: ["MapUI"]),
         .library(name: "Regions", targets: ["Regions"]),
     ],
     targets: [
@@ -41,6 +42,9 @@ let package = Package(
         // Renderer protocol and the Canvas / Core Graphics backend.
         .target(name: "MapRender", dependencies: ["GeoCore", "FeatureStore", "MapStyle"]),
 
+        // SwiftUI map view: cached image, pan and zoom. Builds for all four platforms.
+        .target(name: "MapUI", dependencies: ["GeoCore", "FeatureStore", "MapStyle", "MapRender"]),
+
         // Region manifest, downloads, attribution.
         .target(name: "Regions", dependencies: ["GeoCore", "FeatureStore"]),
 
@@ -52,6 +56,7 @@ let package = Package(
         .testTarget(name: "FeatureStoreBuilderTests", dependencies: ["FeatureStoreBuilder", "FeatureStore", "GeoCore", "OSMPBF", "PBFTestSupport"]),
         .testTarget(name: "MapStyleTests", dependencies: ["MapStyle", "FeatureStore"]),
         .testTarget(name: "MapRenderTests", dependencies: ["MapRender", "MapStyle", "FeatureStore", "GeoCore"]),
+        .testTarget(name: "MapUITests", dependencies: ["MapUI", "MapRender", "MapStyle", "FeatureStore", "GeoCore"]),
         .testTarget(name: "FeatureStoreTests", dependencies: ["FeatureStore", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
