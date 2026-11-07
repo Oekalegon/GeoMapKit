@@ -4,7 +4,7 @@ import FeatureStore
 /// Those names are part of the file format: renaming a case needs a format version bump or an alias, and
 /// `StyleJSONTests` pins the list.
 extension MapStyle: Codable {
-    private enum Keys: String, CodingKey, CaseIterable { case formatVersion, name, background, attribution, classes }
+    private enum Keys: String, CodingKey, CaseIterable { case formatVersion, name, background, attribution, labels, classes }
 
     public init(from decoder: Decoder) throws {
         try decoder.requireKnownKeys(Keys.self)
@@ -26,7 +26,8 @@ extension MapStyle: Codable {
         }
         self.init(
             name: try c.decode(String.self, forKey: .name), background: try c.decode(MapColor.self, forKey: .background),
-            classes: classes, attribution: try c.decodeIfPresent(AttributionDisplay.self, forKey: .attribution) ?? .full)
+            classes: classes, attribution: try c.decodeIfPresent(AttributionDisplay.self, forKey: .attribution) ?? .full,
+            labels: try c.decodeIfPresent(LabelSettings.self, forKey: .labels) ?? LabelSettings())
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -35,6 +36,7 @@ extension MapStyle: Codable {
         try c.encode(name, forKey: .name)
         try c.encode(background, forKey: .background)
         try c.encode(attribution, forKey: .attribution)
+        try c.encode(labels, forKey: .labels)
         var raw = c.nestedContainer(keyedBy: StyleKey.self, forKey: .classes)
         for (featureClass, style) in classes {
             try raw.encode(style, forKey: StyleKey(stringValue: String(describing: featureClass)))

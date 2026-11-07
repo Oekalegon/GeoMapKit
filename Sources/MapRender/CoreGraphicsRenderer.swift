@@ -136,7 +136,8 @@ public struct CoreGraphicsRenderer: MapRenderer {
     private func drawLabels(_ scene: MapScene, style: MapStyle, in context: CGContext) {
         let candidates = LabelCandidates.collect(from: scene, style: style)
         let labels = LabelPlacer.place(
-            candidates, viewWidth: scene.viewport.width, viewHeight: scene.viewport.height, measure: Self.measure)
+            candidates, viewWidth: scene.viewport.width, viewHeight: scene.viewport.height,
+            padding: style.labels.padding, maximumCount: style.labels.maximumCount, measure: Self.measure)
         for label in labels { drawLabel(label, in: context) }
     }
 

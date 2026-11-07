@@ -18,15 +18,19 @@ public struct MapStyle: Sendable, Equatable {
     public var classes: [FeatureClass: ClassStyle]
     /// How the data credit is shown on the map. See ``AttributionDisplay`` for the app's duty when this is hidden.
     public var attribution: AttributionDisplay
+    /// How many labels are shown and how closely they may sit together. See ``LabelSettings``.
+    public var labels: LabelSettings
 
     /// Creates a style.
     public init(
-        name: String, background: MapColor, classes: [FeatureClass: ClassStyle], attribution: AttributionDisplay = .full
+        name: String, background: MapColor, classes: [FeatureClass: ClassStyle], attribution: AttributionDisplay = .full,
+        labels: LabelSettings = LabelSettings()
     ) {
         self.name = name
         self.background = background
         self.classes = classes
         self.attribution = attribution
+        self.labels = labels
     }
 
     /// The style of a class, or `nil` if the class is hidden in this style.
