@@ -28,6 +28,15 @@ let package = Package(
                 .product(name: "MapRender", package: "GeoMapKit"),
             ]
         ),
+        // A Mac test app for MapView: swift run mapviewer [file.gmk].
+        .executableTarget(
+            name: "mapviewer",
+            dependencies: [
+                .product(name: "GeoCore", package: "GeoMapKit"), .product(name: "FeatureStore", package: "GeoMapKit"),
+                .product(name: "MapStyle", package: "GeoMapKit"), .product(name: "MapUI", package: "GeoMapKit"),
+                .product(name: "MapRender", package: "GeoMapKit"),
+            ]
+        ),
         // A thin executable: parse the command line, call ToolCommands, print.
         .executableTarget(
             name: "geomapkit",

@@ -56,6 +56,21 @@ struct MapModelTests {
         #expect(zoomed.viewport.zoom == 17)
     }
 
+    @Test func aPanPastHalfTheMarginDrawsTheNextFrameBeforeTheEdgeShows() async throws {
+        let (store, centre) = try file()
+        let model = MapModel(file: store, style: .standard)
+        let view = MapViewport(center: centre, zoom: 16, width: 200, height: 100)
+        model.request(viewport: view, scale: 1, interacting: true)
+        let first = try await waitForFrame(model)
+        // The margin is 100 points, so the limit is 50. Move 70 points while the gesture is still going: the frame
+        // still covers the view, but the next one must start now, not when the edge shows.
+        let moved = MapViewport(center: view.coordinate(at: ScreenPoint(x: 170, y: 50)), zoom: 16, width: 200, height: 100)
+        #expect(MapFramePlan(frame: first.viewport, requested: moved).coversView)
+        model.request(viewport: moved, scale: 1, interacting: true)
+        let next = try await waitForFrame(model, differentFrom: first.viewport)
+        #expect(abs(next.viewport.center.longitude - moved.center.longitude) < 1e-9)
+    }
+
     @Test func aFrameThatIsOutOfDateWhenItArrivesIsCorrected() async throws {
         let (store, centre) = try file()
         let model = MapModel(file: store, style: .standard)

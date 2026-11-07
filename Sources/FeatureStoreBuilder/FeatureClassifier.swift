@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 2
+    public static let version: UInt16 = 3
 
     /// Creates a classifier.
     public init() {}
@@ -23,7 +23,14 @@ public struct FeatureClassifier: Sendable {
     ///   multipolygons are areas, and a closed way is an area if its tags say so
     ///   (see ``isArea(_:)``) and a line otherwise.
     public func classify(_ tags: some ClassifierTags, shape: ElementShape) -> Classification {
-        let outcome = firstOutcome(in: tags) ?? Self.fallback
+        var outcome = firstOutcome(in: tags) ?? Self.fallback
+        // A national border is an administrative boundary of level 2; the rule table matches one key only. Borders in
+        // the sea (`maritime=yes`, the limit of territorial waters) stay boundaries, so no wide band is drawn on water.
+        if outcome.featureClass == .boundary, tags.value(forKey: "boundary") == "administrative",
+            tags.value(forKey: "admin_level") == "2", tags.value(forKey: "maritime") != "yes"
+        {
+            outcome = ClassifierOutcome(featureClass: .countryBorder, subclass: 0, band: outcome.band, watch: false)
+        }
         var subclass = outcome.subclass
         switch outcome.featureClass {
         case .track:

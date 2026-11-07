@@ -4,6 +4,9 @@ public struct StrokeStyle: Sendable, Equatable {
     ///
     /// The renderer strokes the casing first, at `width + 2 × extraPoints`, and the line on top,
     /// so the road shows as a fill with an outline. Both widths follow the road's real width.
+    ///
+    /// A casing colour with an alpha below 1 is translucent: the renderer blends all casings of a draw step as one
+    /// group, so where two lines overlap or join the band is no darker than elsewhere.
     public struct Casing: Sendable, Equatable {
         /// The casing colour.
         public var color: ZoomValue<MapColor>
