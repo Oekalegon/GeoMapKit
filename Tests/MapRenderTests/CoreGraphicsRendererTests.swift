@@ -79,8 +79,8 @@ struct CoreGraphicsRendererTests {
                 SceneStep(step: DrawStep(featureClass: .countryBorder, part: .body), lines: [line(1, y: 40), line(2, y: 40), line(3, y: 140)]),
             ], cellCount: 1)
         let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 1))
-        // Eight points off the line, inside the band: the doubled line must look like the single one.
-        let doubled = pixel(image, x: 50, y: 32), single = pixel(image, x: 50, y: 132)
+        // Four points off the line, inside the band (6.75 points at zoom 16): the doubled line must look like the single one.
+        let doubled = pixel(image, x: 50, y: 36), single = pixel(image, x: 50, y: 136)
         #expect(doubled == single)
         #expect(!close(single, to: MapStyle.standard.background), "the band is visible")
     }
