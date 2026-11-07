@@ -1,3 +1,5 @@
+import FeatureStore
+import FeatureStoreBuilder
 import Foundation
 import OSMPBF
 import ToolSupport
@@ -45,6 +47,45 @@ public enum ReportFormatter {
             "  nodes referenced but missing from the file: \(summary.missingNodes)",
             "  way vertices: \(Formatting.count(summary.wayVertices))",
             "  extract in memory: \(Formatting.bytes(Int64(summary.memoryBytes)))",
+        ]
+        return lines.joined(separator: "\n")
+    }
+
+    /// The text for a build: the cut, then the file and what went into it.
+    public static func text(for report: BuildCommandReport) -> String {
+        let statistics = report.statistics
+        let counters = report.report
+        var lines = [
+            text(for: report.cut),
+            "",
+            "Build (\(report.profile == .full ? "full" : "watch") profile)",
+            "  cut:   \(Formatting.seconds(report.cut.totalTime))",
+            "  build: \(Formatting.seconds(report.buildTime))",
+            "  file:  \(report.outputName), \(Formatting.bytes(Int64(statistics.fileBytes))), \(Formatting.count(statistics.cellCount)) cells written (verified)",
+            "  parts: cells \(Formatting.bytes(Int64(statistics.cellBytes))), strings \(Formatting.bytes(Int64(statistics.stringTableBytes))) (\(Formatting.count(statistics.stringCount)) strings), relations \(Formatting.bytes(Int64(statistics.relationTableBytes)))",
+            "",
+            "\(pad("Band", 8)) \(pad("bytes", 12, left: true)) \(pad("features", 10, left: true))",
+        ]
+        for band in ZoomBand.allCases {
+            let bytes = statistics.bandBytes[band, default: 0]
+            let features = statistics.featureCounts[band, default: 0]
+            lines.append("\(pad(String(describing: band), 8)) \(pad(Formatting.bytes(Int64(bytes)), 12, left: true)) \(pad(Formatting.count(features), 10, left: true))")
+        }
+        lines += ["", "Features per class (detail band)"]
+        let byClass = statistics.detailFeaturesByClass.sorted { $0.key < $1.key }
+        for (rawValue, count) in byClass {
+            let name = FeatureClass(rawValue: rawValue).map { String(describing: $0) } ?? "unknown(\(rawValue))"
+            lines.append("  \(pad(name, 16)) \(pad(Formatting.count(count), 9, left: true))")
+        }
+        lines += [
+            "",
+            "Builder",
+            "  nodes stored:     \(Formatting.count(counters.nodesStored))",
+            "  ways:             \(Formatting.count(counters.waysStored)) stored, \(Formatting.count(counters.waysSuppressed)) suppressed (multipolygon members)",
+            "  relations stored: \(Formatting.count(counters.relationsStored))",
+            "  multipolygons:    \(Formatting.count(counters.multipolygonsAssembled)) assembled, \(Formatting.count(counters.multipolygonsIncomplete)) incomplete",
+            "  pieces outside the cells: \(Formatting.count(counters.piecesOutsideCells))",
+            "  features skipped by the profile: \(Formatting.count(counters.featuresSkippedByProfile))",
         ]
         return lines.joined(separator: "\n")
     }

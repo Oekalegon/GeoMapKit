@@ -22,14 +22,22 @@ let package = Package(
                 "ToolSupport",
                 .product(name: "OSMPBF", package: "GeoMapKit"),
                 .product(name: "GeoCore", package: "GeoMapKit"),
+                .product(name: "FeatureStore", package: "GeoMapKit"),
+                .product(name: "FeatureStoreBuilder", package: "GeoMapKit"),
             ]
         ),
         // A thin executable: parse the command line, call ToolCommands, print.
-        .executableTarget(name: "geomapkit", dependencies: ["ToolSupport", "ToolCommands"]),
+        .executableTarget(
+            name: "geomapkit",
+            dependencies: ["ToolSupport", "ToolCommands", .product(name: "FeatureStoreBuilder", package: "GeoMapKit")]
+        ),
         .testTarget(name: "ToolSupportTests", dependencies: ["ToolSupport", .product(name: "GeoCore", package: "GeoMapKit")]),
         .testTarget(
             name: "ToolCommandsTests",
-            dependencies: ["ToolCommands", .product(name: "OSMPBF", package: "GeoMapKit"), .product(name: "GeoCore", package: "GeoMapKit")]
+            dependencies: [
+                "ToolCommands", .product(name: "OSMPBF", package: "GeoMapKit"), .product(name: "GeoCore", package: "GeoMapKit"),
+                .product(name: "FeatureStore", package: "GeoMapKit"), .product(name: "FeatureStoreBuilder", package: "GeoMapKit"),
+            ]
         ),
     ],
     swiftLanguageModes: [.v6]
