@@ -96,8 +96,8 @@ struct ExtractAccessorTests {
         #expect(nodeTags.count == 1 && nodeTags[0].count == 2)
         #expect(wayTags.count == 1 && wayTags[0].count == 2)
         // They are separate keys with their own values, and the order is by key bytes: "caf\u{00E9}" (c3 a9) before "cafe\u{0301}" (65).
-        let byBytes = nodeTags[0].map { Array($0.key.utf8) }
-        #expect(byBytes == [Array("cafe\u{0301}".utf8), Array("caf\u{00E9}".utf8)].sorted { $0.lexicographicallyPrecedes($1) })
+        // "cafe" + combining accent has the byte 0x65 after "caf", the precomposed é starts with 0xC3, so the decomposed key sorts first.
+        #expect(nodeTags[0].map { Array($0.key.utf8) } == [Array(decomposed.utf8), Array(precomposed.utf8)])
         #expect(Set(nodeTags[0].map { Array($0.key.utf8) }).count == 2)
         #expect(nodeTags[0].first { $0.key.utf8.elementsEqual(precomposed.utf8) }?.value == "v1")
         #expect(nodeTags[0].first { $0.key.utf8.elementsEqual(decomposed.utf8) }?.value == "v2")
@@ -150,6 +150,21 @@ struct ExtractAccessorTests {
         #expect(fromDictionary == fromList)
         #expect(fromList.orderedTags.map(\.key) == ["a", "b"])
         #expect(fromList.tags == ["a": "1", "b": "2"])
+        // Already-sorted and single-tag lists are returned as they are; unsorted lists are sorted, stably for equal keys.
+        let tags = [OSMTag(key: "b", value: "1"), OSMTag(key: "a", value: "2"), OSMTag(key: "b", value: "3"), OSMTag(key: "a", value: "4")]
+        #expect(OSMTag.sortedByKeyBytes(tags).map(\.value) == ["2", "4", "1", "3"])
+        #expect(OSMTag.sortedByKeyBytes([]).isEmpty && OSMTag.sortedByKeyBytes([tags[0]]) == [tags[0]])
+    }
+
+    @Test("tagValue(forKey:) compares bytes")
+    func tagValueIsByteExact() {
+        let precomposed = "caf\u{00E9}", decomposed = "cafe\u{0301}"
+        let way = OSMWay(id: 1, nodeIDs: [1, 2], orderedTags: [OSMTag(key: precomposed, value: "x")])
+        #expect(way.tagValue(forKey: precomposed) == "x")
+        #expect(way.tagValue(forKey: decomposed) == nil)
+        #expect(way.tagValue(forKey: "missing") == nil)
+        let relation = OSMRelation(id: 1, members: [], orderedTags: [OSMTag(key: "a", value: "1"), OSMTag(key: "a", value: "2")])
+        #expect(relation.tagValue(forKey: "a") == "1")
     }
 
     @Test("Looking up a tag key compares bytes, not Swift string equality")

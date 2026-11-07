@@ -9,7 +9,7 @@ import Foundation
 /// ```swift
 /// let reader = try PBFReader(url: fileURL)
 /// try reader.forEachBlock { block in
-///     for way in block.ways where way.tags["highway"] != nil { /* ... */ }
+///     for way in block.ways where way.tagValue(forKey: "highway") != nil { /* ... */ }
 /// }
 /// ```
 public struct PBFReader: Sendable {

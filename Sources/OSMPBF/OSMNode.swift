@@ -19,7 +19,15 @@ public struct OSMNode: Hashable, Sendable {
     /// A convenience only: it is lossy, because a `[String: String]` treats keys that differ only in Unicode
     /// normalization as the same key, and a repeated key keeps its last value. Use ``orderedTags`` where
     /// nothing may be lost.
+    ///
+    /// The dictionary is built on every access, so for a single lookup use ``tagValue(forKey:)``.
     public var tags: [String: String] { OSMTag.dictionary(orderedTags) }
+
+    /// The value of a tag, compared byte for byte (UTF-8) so keys that differ only in Unicode normalization stay distinct.
+    ///
+    /// - Parameter key: The tag key.
+    /// - Returns: The value of the first tag with exactly this key, or `nil` if there is none.
+    public func tagValue(forKey key: String) -> String? { OSMTag.value(forKey: key, in: orderedTags) }
 
     /// Creates a node.
     ///
