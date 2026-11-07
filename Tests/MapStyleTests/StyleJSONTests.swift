@@ -112,6 +112,19 @@ struct StyleJSONTests {
         #expect(reason(document().replacingOccurrences(of: "roadMajor", with: "motorway")).contains("unknown feature class 'motorway'"))
     }
 
+    @Test func aStyleFileWithoutCountryBorderDrawsBordersWithTheBoundaryStyle() throws {
+        var object = try #require(JSONSerialization.jsonObject(with: MapStyle.standard.jsonData()) as? [String: Any])
+        var classes = try #require(object["classes"] as? [String: Any])
+        #expect(classes.removeValue(forKey: "countryBorder") != nil)
+        object["classes"] = classes
+        let old = try MapStyle(json: JSONSerialization.data(withJSONObject: object))
+        #expect(old.style(for: .countryBorder) == old.style(for: .boundary))
+        // A file that has the class keeps its own style.
+        #expect(try MapStyle(json: MapStyle.standard.jsonData()).style(for: .countryBorder)?.stroke?.casing != nil)
+        // And a style without boundaries (the Watch) still has no border.
+        #expect(MapStyle.watch.style(for: .countryBorder) == nil)
+    }
+
     @Test func classNamesInTheFileFormatArePinned() throws {
         // These names are the file format. Renaming a FeatureClass case must not silently break users' style files.
         let names = [
@@ -122,7 +135,8 @@ struct StyleJSONTests {
         #expect(FeatureClass.allCases.map { String(describing: $0) } == names)
         for name in names {
             let json = document().replacingOccurrences(of: "roadMajor", with: name)
-            #expect(try parse(json).classes.count == 1)
+            // `boundary` also fills in `countryBorder` for files written before that class existed.
+            #expect(try parse(json).classes.count == (name == "boundary" ? 2 : 1), "class \(name)")
         }
     }
 

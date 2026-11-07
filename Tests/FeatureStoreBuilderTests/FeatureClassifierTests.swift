@@ -261,6 +261,9 @@ struct FeatureClassifierTests {
         }
         #expect(classify(["boundary": "administrative"], .openWay).featureClass == .boundary)
         #expect(classify(["boundary": "protected_area", "admin_level": "2"], .openWay).featureClass == .boundary)
+        #expect(
+            classify(["boundary": "administrative", "admin_level": "2", "maritime": "yes"], .openWay).featureClass == .boundary,
+            "a border in the sea is not a land border")
     }
 
     @Test("The rule table version is 3, and the class IDs of earlier versions did not change")
