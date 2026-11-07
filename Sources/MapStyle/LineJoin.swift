@@ -1,5 +1,5 @@
 /// How two segments of a stroked line meet.
-public enum LineJoin: Sendable, Equatable {
+public enum LineJoin: String, Sendable, Equatable {
     /// A sharp corner (limited by the renderer's miter limit).
     case miter
     /// A rounded corner.

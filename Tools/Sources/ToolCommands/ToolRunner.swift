@@ -112,6 +112,33 @@ public enum ToolRunner {
         return (extract, report)
     }
 
+    /// Writes a built-in style as a JSON style file, as a starting point for a custom style.
+    ///
+    /// - Parameters:
+    ///   - name: `standard` or `watch`.
+    ///   - output: The path of the JSON file.
+    ///   - overwrite: Whether an existing file may be replaced. By default an existing file is left alone, because
+    ///     it is probably a style that was edited by hand.
+    /// - Returns: The number of bytes written.
+    /// - Throws: ``ToolError`` for an unknown name, an unwritable path or an existing file without `overwrite`.
+    public static func exportStyle(name: String, output: URL, overwrite: Bool = false) throws -> Int {
+        guard let kind = RenderRequest.Style(rawValue: name) else {
+            throw ToolError("style expects standard or watch, not '\(name)'")
+        }
+        try checkWritable(output)
+        if !overwrite, FileManager.default.fileExists(atPath: output.path) {
+            throw ToolError("\(output.path) already exists; use --force to replace it")
+        }
+        let data: Data
+        do {
+            data = try (kind == .watch ? MapStyle.watch : MapStyle.standard).jsonData()
+            try data.write(to: output, options: .atomic)
+        } catch {
+            throw ToolError("Cannot write \(output.path): \(error)")
+        }
+        return data.count
+    }
+
     /// Draws a map from a feature store file into a PNG.
     ///
     /// - Parameters:
@@ -129,6 +156,15 @@ public enum ToolRunner {
             throw ToolError("Cannot read \(store.path): \(error)")
         }
         var style: MapStyle = request.style == .watch ? .watch : .standard
+        if let styleFile = request.styleFile {
+            do {
+                style = try MapStyle(json: Data(contentsOf: URL(fileURLWithPath: styleFile)))
+            } catch let error as MapStyleError {
+                throw ToolError("\(styleFile): \(error)")
+            } catch {
+                throw ToolError("Cannot read style file \(styleFile): \(error.localizedDescription)")
+            }
+        }
         if let attribution = request.attribution {
             switch attribution {
             case .full: style.attribution = .full

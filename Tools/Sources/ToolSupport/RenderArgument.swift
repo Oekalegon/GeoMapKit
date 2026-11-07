@@ -10,7 +10,7 @@ public enum RenderArgument {
     ///   - zoom: `--zoom Z`, required, 0 to 24.
     ///   - size: `--size WxH` in points, default `800x600`, each side 16 to 4096.
     ///   - scale: `--scale S`, pixels per point, default 2, 1 to 4.
-    ///   - style: `--style standard|watch`, default `standard`.
+    ///   - style: `--style standard|watch|file.json`, default `standard`.
     ///   - output: `--output file.png`, required.
     ///   - attribution: `--attribution full|compact|none`; default is the style's own choice.
     /// - Throws: ``ToolError`` for a missing or invalid option.
@@ -48,11 +48,15 @@ public enum RenderArgument {
         }
 
         var chosen = RenderRequest.Style.standard
+        var styleFile: String?
         if let style {
-            guard let value = RenderRequest.Style(rawValue: style) else {
-                throw ToolError("--style expects standard or watch, not '\(style)'")
+            if let value = RenderRequest.Style(rawValue: style) {
+                chosen = value
+            } else if style.lowercased().hasSuffix(".json") {
+                styleFile = style
+            } else {
+                throw ToolError("--style expects standard, watch or the path of a .json style file, not '\(style)'")
             }
-            chosen = value
         }
 
         var credit: RenderRequest.Attribution?
@@ -66,6 +70,6 @@ public enum RenderArgument {
         guard let output, !output.isEmpty else { throw ToolError("render needs --output <file.png>") }
         return RenderRequest(
             center: coordinate, zoom: zoomValue, width: width, height: height, scale: scaleValue, style: chosen, output: output,
-            attribution: credit)
+            attribution: credit, styleFile: styleFile)
     }
 }

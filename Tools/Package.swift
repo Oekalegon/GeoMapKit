@@ -38,7 +38,7 @@ let package = Package(
             name: "ToolCommandsTests",
             dependencies: [
                 "ToolCommands", .product(name: "OSMPBF", package: "GeoMapKit"), .product(name: "GeoCore", package: "GeoMapKit"),
-                .product(name: "FeatureStore", package: "GeoMapKit"), .product(name: "FeatureStoreBuilder", package: "GeoMapKit"),
+                .product(name: "FeatureStore", package: "GeoMapKit"), .product(name: "FeatureStoreBuilder", package: "GeoMapKit"), .product(name: "MapStyle", package: "GeoMapKit"),
             ]
         ),
     ],

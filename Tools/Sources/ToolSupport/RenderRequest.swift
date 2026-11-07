@@ -32,6 +32,8 @@ public struct RenderRequest: Equatable, Sendable {
 
     /// The style.
     public var style: Style
+    /// A style file (JSON) that replaces the built-in style, or `nil`.
+    public var styleFile: String?
     /// The credit display chosen on the command line, or `nil` for the style's default.
     public var attribution: Attribution?
     /// The PNG path.
@@ -39,7 +41,8 @@ public struct RenderRequest: Equatable, Sendable {
 
     /// Creates a request.
     public init(center: Coordinate, zoom: Double, width: Int, height: Int, scale: Double, style: Style, output: String,
-        attribution: Attribution? = nil
+        attribution: Attribution? = nil,
+        styleFile: String? = nil
     ) {
         self.center = center
         self.zoom = zoom
@@ -49,5 +52,6 @@ public struct RenderRequest: Equatable, Sendable {
         self.style = style
         self.output = output
         self.attribution = attribution
+        self.styleFile = styleFile
     }
 }

@@ -6,19 +6,26 @@ public struct CommandLineArguments: Equatable {
     public private(set) var positional: [String] = []
 
     private var options: [String: String] = [:]
+    private var flags: Set<String> = []
 
     /// Parses arguments (without the program name).
     ///
     /// - Parameters:
     ///   - arguments: The raw arguments.
     ///   - knownOptions: The option names that take a value, without the leading `--`.
+    ///   - knownFlags: The switch names that take no value, without the leading `--`.
     /// - Throws: ``ToolError`` for an unknown option or an option without a value.
-    public init(_ arguments: [String], knownOptions: Set<String>) throws {
+    public init(_ arguments: [String], knownOptions: Set<String>, knownFlags: Set<String> = []) throws {
         var index = 0
         while index < arguments.count {
             let argument = arguments[index]
             if argument.hasPrefix("--") {
                 let name = String(argument.dropFirst(2))
+                if knownFlags.contains(name) {
+                    flags.insert(name)
+                    index += 1
+                    continue
+                }
                 guard knownOptions.contains(name) else { throw ToolError("Unknown option --\(name)") }
                 guard index + 1 < arguments.count else { throw ToolError("Option --\(name) needs a value") }
                 options[name] = arguments[index + 1]
@@ -28,6 +35,11 @@ public struct CommandLineArguments: Equatable {
                 index += 1
             }
         }
+    }
+
+    /// Whether a switch such as `--force` was given.
+    public func hasFlag(_ name: String) -> Bool {
+        flags.contains(name)
     }
 
     /// The value of an option, if given.

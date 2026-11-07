@@ -3,6 +3,7 @@ import Testing
 import FeatureStore
 import FeatureStoreBuilder
 import GeoCore
+import MapStyle
 import OSMPBF
 import ToolSupport
 @testable import ToolCommands
@@ -242,6 +243,37 @@ struct RenderCommandTests {
         #expect(report.pngBytes == data.count)
         #expect(report.band == .detail)
         #expect(ReportFormatter.text(for: report).contains("400 x 300 px"))
+    }
+
+    @Test("an exported style can be edited and used for rendering; a bad style file names its path")
+    func customStyleFile() throws {
+        let input = temporary("in.osm.pbf"), store = temporary("s.gmk"), png = temporary("m.png"), json = temporary("style.json")
+        defer { for url in [input, store, png, json] { try? FileManager.default.removeItem(at: url) } }
+        try TinyPBF.make().write(to: input)
+        _ = try ToolRunner.build(
+            url: input, area: BoundingBox(south: 47, west: 9, north: 48, east: 10), output: store, profile: .full)
+
+        #expect(try ToolRunner.exportStyle(name: "watch", output: json) > 100)
+        #expect(try MapStyle(json: Data(contentsOf: json)) == .watch)
+        #expect(throws: ToolError.self) { try ToolRunner.exportStyle(name: "dark", output: json) }
+        #expect(throws: ToolError.self) { try ToolRunner.exportStyle(name: "standard", output: json) }
+        #expect(try MapStyle(json: Data(contentsOf: json)) == .watch, "an existing file is left alone")
+        #expect(try ToolRunner.exportStyle(name: "standard", output: json, overwrite: true) > 100)
+        #expect(try MapStyle(json: Data(contentsOf: json)) == .standard)
+        _ = try ToolRunner.exportStyle(name: "watch", output: json, overwrite: true)
+
+        let centre = Coordinate(latitude: 47.5, longitude: 9.5)
+        var request = RenderRequest(
+            center: centre, zoom: 15, width: 64, height: 64, scale: 1, style: .standard, output: png.path, styleFile: json.path)
+        _ = try ToolRunner.render(store: store, request: request)
+        #expect(Array(try Data(contentsOf: png).prefix(4)) == [0x89, 0x50, 0x4E, 0x47])
+
+        try Data("{\"formatVersion\": 1}".utf8).write(to: json)
+        request.styleFile = json.path
+        #expect(throws: ToolError.self) { try ToolRunner.render(store: store, request: request) }
+        do { _ = try ToolRunner.render(store: store, request: request) } catch let error as ToolError {
+            #expect(error.description.contains(json.path) && error.description.contains("missing key"))
+        }
     }
 
     @Test("a missing store is a ToolError and nothing is written")
