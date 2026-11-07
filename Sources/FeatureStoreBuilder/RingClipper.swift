@@ -25,6 +25,22 @@ enum RingClipper {
 
     private enum Boundary { case west, east, south, north }
 
+    /// A ring without consecutive duplicates or a repeated closing vertex, with the projected y of every vertex,
+    /// computed once so that clipping it to many cells does not repeat the projection.
+    struct PreparedRing {
+        let points: [PackedPoint]
+        let projectedY: [Double]
+
+        init(_ ring: [PackedPoint]) {
+            var points: [PackedPoint] = []
+            points.reserveCapacity(ring.count)
+            for point in ring where point != points.last { points.append(point) }
+            if points.count > 1, points.first == points.last { points.removeLast() }
+            self.points = points
+            self.projectedY = points.map { Mercator.y(latitude: Double($0.latitude)) }
+        }
+    }
+
     /// Clips a closed ring to a cell.
     ///
     /// - Parameters:
@@ -32,14 +48,18 @@ enum RingClipper {
     ///   - rect: The cell.
     /// - Returns: The clipped ring, closed, or `nil` if nothing with an area is left.
     static func clip(_ ring: [PackedPoint], to rect: CellRect) -> ClippedRing? {
-        var vertices: [Vertex] = []
-        for point in ring where vertices.isEmpty || !equal(vertices[vertices.count - 1], point) {
-            vertices.append(Vertex(
-                x: Double(point.longitude), y: Mercator.y(latitude: Double(point.latitude)),
-                exactLongitude: point.longitude, exactLatitude: point.latitude, artificial: false))
+        clip(PreparedRing(ring), to: rect)
+    }
+
+    /// Clips a prepared ring to a cell; see ``clip(_:to:)``.
+    static func clip(_ prepared: PreparedRing, to rect: CellRect) -> ClippedRing? {
+        guard prepared.points.count >= 3 else { return nil }
+        var vertices = prepared.points.indices.map { index in
+            let point = prepared.points[index]
+            return Vertex(
+                x: Double(point.longitude), y: prepared.projectedY[index],
+                exactLongitude: point.longitude, exactLatitude: point.latitude, artificial: false)
         }
-        if vertices.count > 1, let first = ring.first, equal(vertices[vertices.count - 1], first) { vertices.removeLast() }
-        guard vertices.count >= 3 else { return nil }
 
         for boundary in [Boundary.west, .east, .south, .north] {
             vertices = clip(vertices, to: boundary, rect: rect)
@@ -161,10 +181,6 @@ enum RingClipper {
             sum += ax * by - bx * ay
         }
         return sum
-    }
-
-    private static func equal(_ vertex: Vertex, _ point: PackedPoint) -> Bool {
-        vertex.x == Double(point.longitude) && vertex.exactLatitude == point.latitude
     }
 
     private static func clamp(_ value: Double, _ low: Int32, _ high: Int32) -> Int32 {

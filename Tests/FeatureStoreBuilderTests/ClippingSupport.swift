@@ -1,6 +1,7 @@
 import FeatureStore
 import Foundation
 import GeoCore
+import Testing
 
 @testable import FeatureStoreBuilder
 
@@ -19,14 +20,16 @@ struct SplitMix64: RandomNumberGenerator {
 
 /// A 3 by 3 block of cells around a centre cell near Liechtenstein, with a way to place points by cell fractions.
 struct Block {
-    let centre = TileID(zoom: 13, x: 4_312, y: 2_848)!
+    let centre: TileID
     let rect: CellRect
     let west: Double, east: Double, northY: Double, southY: Double
 
-    init() {
+    /// Places the block around the cell that contains a position. The default is near Vaduz (47.1 N).
+    init(latitude: Double = 47.14, longitude: Double = 9.52) {
+        centre = TileID.containing(Coordinate(latitude: latitude, longitude: longitude), zoom: 13)!
         rect = CellRect(tile: centre)
         let outer = (
-            CellRect(tile: TileID(zoom: 13, x: 4_311, y: 2_847)!), CellRect(tile: TileID(zoom: 13, x: 4_313, y: 2_849)!)
+            CellRect(tile: TileID(zoom: 13, x: centre.x - 1, y: centre.y - 1)!), CellRect(tile: TileID(zoom: 13, x: centre.x + 1, y: centre.y + 1)!)
         )
         west = Double(outer.0.west)
         east = Double(outer.1.east)
@@ -58,4 +61,19 @@ func projectedArea(_ ring: [PackedPoint]) -> Double {
         sum += ax * by - bx * ay
     }
     return abs(sum) / 2
+}
+
+/// Places to run the property tests: the Alps, northern Norway, and the equator, where a border is exactly 0.
+struct Location: CustomTestStringConvertible, Sendable {
+    let name: String
+    let latitude: Double
+    let longitude: Double
+    var testDescription: String { name }
+
+    static let all = [
+        Location(name: "Vaduz 47 N", latitude: 47.14, longitude: 9.52),
+        Location(name: "Tromsø 69.6 N", latitude: 69.65, longitude: 18.95),
+        Location(name: "Equator", latitude: 0.0001, longitude: 10),
+        Location(name: "Southern hemisphere", latitude: -33.9, longitude: 151.2),
+    ]
 }

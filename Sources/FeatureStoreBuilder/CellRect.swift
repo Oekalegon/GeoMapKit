@@ -52,7 +52,8 @@ struct CellRect {
 
     /// The cells at `zoom` that may overlap the bounding box of `points`, with one cell of margin.
     ///
-    /// Cells that only touch the geometry yield no pieces when clipped.
+    /// Cells that only touch the geometry yield no pieces when clipped. The result has one entry per cell of the
+    /// bounding box, so a country-sized polygon gives a very large array; callers split such features first.
     static func tiles(covering points: [PackedPoint], zoom: Int) -> [TileID] {
         guard let first = points.first else { return [] }
         var minLon = first.longitude, maxLon = first.longitude, minLat = first.latitude, maxLat = first.latitude

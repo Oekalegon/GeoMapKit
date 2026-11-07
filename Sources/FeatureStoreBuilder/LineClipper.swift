@@ -21,6 +21,28 @@ enum LineClipper {
         var endIsOriginal: Bool
     }
 
+    /// A line with consecutive duplicates removed and the distance along it to every vertex,
+    /// computed once so that clipping it to many cells does not repeat that work.
+    struct PreparedLine {
+        let points: [PackedPoint]
+        /// Metres from the start to each vertex.
+        let cumulative: [Double]
+
+        init(_ line: [PackedPoint]) {
+            var points: [PackedPoint] = []
+            points.reserveCapacity(line.count)
+            for point in line where point != points.last { points.append(point) }
+            var cumulative = [Double](repeating: 0, count: points.count)
+            if points.count > 1 {
+                for index in 1..<points.count {
+                    cumulative[index] = cumulative[index - 1] + Geodesy.distance(points[index - 1], points[index])
+                }
+            }
+            self.points = points
+            self.cumulative = cumulative
+        }
+    }
+
     /// Clips a line to a cell.
     ///
     /// - Parameters:
@@ -28,12 +50,14 @@ enum LineClipper {
     ///   - rect: The cell.
     /// - Returns: The pieces inside the cell in line order, each with its flags and the offset along the line of its first vertex.
     static func clip(_ line: [PackedPoint], to rect: CellRect) -> [ClippedLine] {
-        let points = removingDuplicates(line)
+        clip(PreparedLine(line), to: rect)
+    }
+
+    /// Clips a prepared line to a cell; see ``clip(_:to:)``.
+    static func clip(_ prepared: PreparedLine, to rect: CellRect) -> [ClippedLine] {
+        let points = prepared.points
+        let cumulative = prepared.cumulative
         guard points.count >= 2 else { return [] }
-        var cumulative = [Double](repeating: 0, count: points.count)
-        for index in 1..<points.count {
-            cumulative[index] = cumulative[index - 1] + Geodesy.distance(points[index - 1], points[index])
-        }
 
         var pieces: [ClippedLine] = []
         var current: ClippedLine?
@@ -69,6 +93,10 @@ enum LineClipper {
     // MARK: Segments
 
     private static func clipSegment(_ a: PackedPoint, _ b: PackedPoint, rect: CellRect) -> SegmentClip? {
+        // Most segments of a long line are far from the cell; reject them with integer compares before any projection.
+        if (a.longitude < rect.west && b.longitude < rect.west) || (a.longitude > rect.east && b.longitude > rect.east)
+            || (a.latitude < rect.south && b.latitude < rect.south) || (a.latitude > rect.north && b.latitude > rect.north)
+        { return nil }
         let swapped = (b.longitude, b.latitude) < (a.longitude, a.latitude)
         let p = swapped ? b : a, q = swapped ? a : b
         let py = Mercator.y(latitude: Double(p.latitude)), qy = Mercator.y(latitude: Double(q.latitude))
@@ -143,13 +171,6 @@ enum LineClipper {
         if !rect.isLastColumn, piece.points.allSatisfy({ $0.longitude == rect.east }) { return false }
         if !rect.isLastRow, piece.points.allSatisfy({ $0.latitude == rect.south }) { return false }
         return true
-    }
-
-    private static func removingDuplicates(_ line: [PackedPoint]) -> [PackedPoint] {
-        var result: [PackedPoint] = []
-        result.reserveCapacity(line.count)
-        for point in line where point != result.last { result.append(point) }
-        return result
     }
 
     private static func centimetres(_ metres: Double) -> UInt32 {

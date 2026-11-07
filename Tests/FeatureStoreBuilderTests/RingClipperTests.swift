@@ -100,8 +100,9 @@ struct RingClipperTests {
         #expect(clip([p, block.point(1.6, 1.5), block.point(1.7, 1.5), p], in: 1, 1) == nil)
     }
 
-    @Test("Random star-shaped polygons: area is preserved, edges are consistent, neighbours agree")
-    func randomPolygons() throws {
+    @Test("Random star-shaped polygons: area is preserved, edges are consistent, neighbours agree", arguments: Location.all)
+    func randomPolygons(location: Location) throws {
+        let block = Block(latitude: location.latitude, longitude: location.longitude)
         var generator = SplitMix64(seed: 7)
         for trial in 0..<200 {
             // One vertex per angular sector, so the polygon is simple and star-shaped around the centre.

@@ -87,8 +87,9 @@ struct LineClipperTests {
         #expect(abs(length(middle.points) - length(line) / 2) < length(line) * 0.02)
     }
 
-    @Test("Random lines: pieces stay in their cell, keep their length, and chain across borders")
-    func randomLines() throws {
+    @Test("Random lines: pieces stay in their cell, keep their length, and chain across borders", arguments: Location.all)
+    func randomLines(location: Location) throws {
+        let block = Block(latitude: location.latitude, longitude: location.longitude)
         var generator = SplitMix64(seed: 42)
         for trial in 0..<300 {
             let count = Int.random(in: 2...25, using: &generator)
@@ -116,5 +117,14 @@ struct LineClipperTests {
             }
             #expect(ordered.first?.continuesBefore == false && ordered.last?.continuesAfter == false)
         }
+    }
+
+    @Test("At the edge of the world a piece along the east or south border stays with its only cell")
+    func worldEdge() {
+        let last = CellRect(tile: TileID(zoom: 13, x: 8_191, y: 8_191)!)
+        let alongEast = [PackedPoint(longitude: last.east, latitude: last.south + 1_000), PackedPoint(longitude: last.east, latitude: last.north - 1_000)]
+        #expect(LineClipper.clip(alongEast, to: last).count == 1)
+        let alongSouth = [PackedPoint(longitude: last.west + 1_000, latitude: last.south), PackedPoint(longitude: last.east - 1_000, latitude: last.south)]
+        #expect(LineClipper.clip(alongSouth, to: last).count == 1)
     }
 }
