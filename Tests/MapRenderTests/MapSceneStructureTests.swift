@@ -121,4 +121,40 @@ struct MapSceneStructureTests {
         #expect(try !line(4).flatStart && !line(4).flatEnd, "the end of a road at the end of another is not a T junction")
         #expect(try !line(5).flatStart && !line(5).flatEnd, "paths keep their round ends")
     }
+
+    @Test("Two roads of one class that continue each other with different lane counts blend to the mean width")
+    func tapers() throws {
+        var writer = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 47.0, west: 9.4, north: 47.3, east: 9.7), attribution: "© OpenStreetMap contributors, ODbL")
+        let cell = try #require(TileID.containing(Coordinate(latitude: 47.1, longitude: 9.5), zoom: 13))
+        let west = Int32((cell.northWest.longitude * 1e7).rounded())
+        func point(_ x: Int32, _ y: Int32) -> PackedPoint { PackedPoint(longitude: west + x, latitude: latitude + y) }
+        func add(_ id: Int64, _ featureClass: FeatureClass, lanes: String?, _ points: [PackedPoint]) throws {
+            let tags = lanes.map { [StoredTag(key: writer.intern("lanes"), value: writer.intern($0))] } ?? []
+            try writer.add(
+                StoredFeature(classID: featureClass.rawValue, subclass: 4, kind: .line, objectType: .way, objectID: id, tags: tags, parts: [GeometryPart(points: points)]),
+                band: .detail, cell: cell)
+        }
+        try add(1, .roadMajor, lanes: "1", [point(2_000, 0), point(6_000, 0)])        // one lane, ends at the node
+        try add(2, .roadMajor, lanes: "3", [point(6_000, 0), point(10_000, 0)])       // three lanes, starts there
+        try add(3, .roadMajor, lanes: "2", [point(6_000, 0), point(6_000, 4_000)])    // a side road at a right angle
+        try add(4, .roadMinor, lanes: "1", [point(12_000, 0), point(14_000, 0)])
+        try add(5, .roadMinor, lanes: "1", [point(14_000, 0), point(16_000, 0)])      // same lanes: no blend
+        try add(6, .roadMajor, lanes: "2", [point(16_000, 0), point(18_000, 0)])      // another class continues it: no blend
+        let file = try FeatureStoreFile(data: try writer.data())
+        let centre = Coordinate(latitude: Double(latitude) / 1e7, longitude: Double(west + 10_000) / 1e7)
+        let view = MapViewport(center: centre, zoom: 18, width: 800, height: 400)
+        let scene = try MapSceneBuilder(file: file, style: .standard).scene(for: view)
+        func line(_ id: Int64) throws -> SceneLine { try #require(scene.steps.flatMap(\.lines).first { $0.objectID == id }) }
+        let ground = try #require(MapStyle.standard.style(for: .roadMajor)?.stroke?.width)
+        let one = ground.resolved(atZoom: 18, metresPerPoint: view.metresPerPoint, lanes: 1)
+        let three = ground.resolved(atZoom: 18, metresPerPoint: view.metresPerPoint, lanes: 3)
+        #expect(three - one > 5, "the lane counts give clearly different widths at this zoom")
+        let mean = (one + three) / 2
+        #expect(try abs((line(1).endWidth ?? 0) - mean) < 1e-9 && line(1).startWidth == nil)
+        #expect(try abs((line(2).startWidth ?? 0) - mean) < 1e-9 && line(2).endWidth == nil)
+        #expect(try line(3).startWidth == nil && line(3).endWidth == nil, "a side road is not a continuation")
+        #expect(try line(4).endWidth == nil && line(5).startWidth == nil, "equal widths need no blend")
+        #expect(try line(6).startWidth == nil, "a road of another class does not continue it")
+    }
 }

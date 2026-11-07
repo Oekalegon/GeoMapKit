@@ -24,12 +24,20 @@ public struct SceneLine: Sendable, Equatable {
     public var flatStart: Bool
     /// The line ends where a bridge or a tunnel starts or ends, or at the side of another road; see ``flatStart``.
     public var flatEnd: Bool
+    /// For a road: the width in points to blend to at the start, where another road of the same class continues it with a
+    /// different lane count; `nil` for none. The renderer tapers the first stretch of the line from this width to its own.
+    public var startWidth: Double?
+    /// The width in points to blend to at the end; see ``startWidth``.
+    public var endWidth: Double?
 
     /// Creates a line.
     public init(
         featureClass: FeatureClass, objectID: Int64, points: [ScreenPoint], lanes: Int? = nil, name: String? = nil,
-        structure: Structure = .ground, flatStart: Bool = false, flatEnd: Bool = false
+        structure: Structure = .ground, flatStart: Bool = false, flatEnd: Bool = false,
+        startWidth: Double? = nil, endWidth: Double? = nil
     ) {
+        self.startWidth = startWidth
+        self.endWidth = endWidth
         self.structure = structure
         self.flatStart = flatStart
         self.flatEnd = flatEnd

@@ -138,6 +138,37 @@ struct CoreGraphicsRendererTests {
         #expect(close(pixel(tunnel, x: 27, y: 50), to: MapStyle.standard.background), "a road leaves a tunnel with a flat end")
     }
 
+    @Test func aRoadBlendsFromTheWidthOfItsContinuationAtTheEnd() throws {
+        let view = MapViewport(center: Coordinate(latitude: 47.1, longitude: 9.5), zoom: 18, width: 200, height: 100)
+        let own = try #require(MapStyle.standard.style(for: .roadMinor)?.stroke?.width.resolved(atZoom: 18, metresPerPoint: view.metresPerPoint, lanes: nil))
+        // A road along y = 50 from x = 10 to x = 190 that narrows to 2 points at its end.
+        let line = SceneLine(
+            featureClass: .roadMinor, objectID: 1, points: [ScreenPoint(x: 10, y: 50), ScreenPoint(x: 190, y: 50)], endWidth: 2)
+        let scene = MapScene(
+            viewport: view, band: .detail, steps: [SceneStep(step: DrawStep(featureClass: .roadMinor, part: .body), lines: [line])], cellCount: 1)
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 1))
+        let fill = try #require(MapStyle.standard.style(for: .roadMinor)?.stroke?.color.value(atZoom: 18))
+        let offset = Int((own / 2 - 1).rounded(.down))
+        #expect(own > 8)
+        #expect(close(pixel(image, x: 80, y: 50 + offset), to: fill), "the full width in the middle")
+        #expect(close(pixel(image, x: 188, y: 50 + offset), to: MapStyle.standard.background), "narrow at the end")
+        #expect(close(pixel(image, x: 188, y: 50), to: fill), "but still there")
+        // The blend is gradual: the width at three quarters of the stretch is between the two.
+        let stretch = CoreGraphicsRenderer.taperLength(for: view)
+        let half = Int((190 - stretch / 2).rounded())
+        let halfWidth = (own + 2) / 4
+        #expect(close(pixel(image, x: half, y: 50 + Int((halfWidth - 1).rounded(.down))), to: fill), "half way, the width is the mean of the two")
+        #expect(close(pixel(image, x: half, y: 50 + Int((halfWidth + 2).rounded(.up))), to: MapStyle.standard.background))
+    }
+
+    @Test func slicingAPolylineKeepsTheVerticesBetween() {
+        let points = [ScreenPoint(x: 0, y: 0), ScreenPoint(x: 10, y: 0), ScreenPoint(x: 10, y: 10)]
+        let cumulative = [0.0, 10, 20]
+        let piece = CoreGraphicsRenderer.slice(points, cumulative: cumulative, from: 5, to: 15)
+        #expect(piece == [ScreenPoint(x: 5, y: 0), ScreenPoint(x: 10, y: 0), ScreenPoint(x: 10, y: 5)])
+        #expect(CoreGraphicsRenderer.slice(points, cumulative: cumulative, from: 0, to: 20).count == 3)
+    }
+
     @Test func sceneIsNotFlippedVertically() throws {
         let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene(), style: .standard, scale: 1))
         let water = try #require(MapStyle.standard.style(for: .waterArea)?.fill?.color.value(atZoom: 16))

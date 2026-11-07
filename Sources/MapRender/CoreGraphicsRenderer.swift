@@ -47,7 +47,9 @@ public struct CoreGraphicsRenderer: MapRenderer {
                 let opaque = MapColor(red: color.red, green: color.green, blue: color.blue)
                 for line in sceneStep.lines {
                     let width = stroke.width.resolved(atZoom: zoom, metresPerPoint: viewport.metresPerPoint, lanes: line.lanes)
-                    strokeLine(line, width: width + 2 * extra, stroke: stroke, dashed: false, color: opaque, in: context)
+                    strokeLine(
+                        line, width: width + 2 * extra, stroke: stroke, dashed: false, color: opaque, extra: extra,
+                        taperLength: Self.taperLength(for: viewport), in: context)
                 }
                 if translucent { context.endTransparencyLayer() }
                 context.restoreGState()
@@ -106,7 +108,9 @@ public struct CoreGraphicsRenderer: MapRenderer {
             let color = stroke.color.value(atZoom: zoom)
             for line in step.lines {
                 let width = stroke.width.resolved(atZoom: zoom, metresPerPoint: viewport.metresPerPoint, lanes: line.lanes)
-                strokeLine(line, width: width, stroke: stroke, dashed: true, color: color, in: context)
+                strokeLine(
+                    line, width: width, stroke: stroke, dashed: true, color: color, extra: 0,
+                    taperLength: Self.taperLength(for: viewport), in: context)
             }
         }
         if let point = classStyle.point {
@@ -127,9 +131,21 @@ public struct CoreGraphicsRenderer: MapRenderer {
     /// Strokes a line. A line that ends flat at one end or both (where a bridge or a tunnel starts) is stroked with flat
     /// caps, and the end that is not flat gets its round cap drawn as a circle, so a junction with another road stays filled.
     /// A dashed line has its own dash caps and is only given flat ends.
+    ///
+    /// A road with a ``SceneLine/startWidth`` or ``SceneLine/endWidth`` is stroked in short pieces whose width changes
+    /// from that width to its own over the first or last stretch (``taperLength(for:)``), so a change in lane count is a
+    /// gradual widening instead of a step. A dashed line is not tapered.
     private func strokeLine(
-        _ line: SceneLine, width: Double, stroke: StrokeStyle, dashed: Bool, color: MapColor, in context: CGContext
+        _ line: SceneLine, width: Double, stroke: StrokeStyle, dashed: Bool, color: MapColor, extra: Double, taperLength: Double,
+        in context: CGContext
     ) {
+        let solid = !(dashed && !stroke.dash.isEmpty)
+        if solid, line.points.count >= 2, line.startWidth != nil || line.endWidth != nil {
+            strokeTapered(
+                line, width: width, stroke: stroke, color: color, startWidth: line.startWidth.map { $0 + 2 * extra },
+                endWidth: line.endWidth.map { $0 + 2 * extra }, taperLength: taperLength, in: context)
+            return
+        }
         guard line.flatStart || line.flatEnd, stroke.cap == .round else {
             strokePath(line.points, width: width, stroke: stroke, dashed: dashed, in: context)
             return
@@ -143,6 +159,83 @@ public struct CoreGraphicsRenderer: MapRenderer {
             guard let end else { continue }
             context.fillEllipse(in: CGRect(x: end.x - width / 2, y: end.y - width / 2, width: width, height: width))
         }
+    }
+
+    /// The length of the stretch over which a road blends from one width to another: about 15 m, and not less than 8 points.
+    static func taperLength(for viewport: MapViewport) -> Double {
+        max(8, 15 / max(viewport.metresPerPoint, 1e-9))
+    }
+
+    private func strokeTapered(
+        _ line: SceneLine, width: Double, stroke: StrokeStyle, color: MapColor, startWidth: Double?, endWidth: Double?,
+        taperLength: Double, in context: CGContext
+    ) {
+        let points = line.points
+        var cumulative = [0.0]
+        for index in 1..<points.count {
+            cumulative.append(cumulative[index - 1] + hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y))
+        }
+        let total = cumulative[cumulative.count - 1]
+        guard total > 0 else { return }
+        let startLength = startWidth == nil ? 0 : min(taperLength, total * 0.45)
+        let endLength = endWidth == nil ? 0 : min(taperLength, total * 0.45)
+        func widthAt(_ distance: Double) -> Double {
+            if let startWidth, startLength > 0, distance < startLength {
+                return startWidth + (width - startWidth) * distance / startLength
+            }
+            if let endWidth, endLength > 0, distance > total - endLength {
+                return endWidth + (width - endWidth) * (total - distance) / endLength
+            }
+            return width
+        }
+        // Piece boundaries: short pieces over the blends, one piece for what lies between them.
+        let pieceLength = 3.0
+        var bounds = [0.0]
+        if startLength > 0 {
+            let count = max(4, Int((startLength / pieceLength).rounded(.up)))
+            bounds += (1...count).map { startLength * Double($0) / Double(count) }
+        }
+        if endLength > 0 {
+            let coreEnd = total - endLength
+            if coreEnd > bounds[bounds.count - 1] + 1e-6 { bounds.append(coreEnd) }
+            let count = max(4, Int((endLength / pieceLength).rounded(.up)))
+            bounds += (1...count).map { coreEnd + endLength * Double($0) / Double(count) }
+        } else if bounds[bounds.count - 1] < total {
+            bounds.append(total)
+        }
+        let overlap = 0.75
+        var flat = stroke
+        flat.cap = .butt
+        for index in 1..<bounds.count where bounds[index] > bounds[index - 1] {
+            // Each piece runs a little into its neighbours, so anti-aliasing leaves no seam between them.
+            let piece = Self.slice(
+                points, cumulative: cumulative, from: max(bounds[index - 1] - overlap, 0), to: min(bounds[index] + overlap, total))
+            strokePath(piece, width: widthAt((bounds[index - 1] + bounds[index]) / 2), stroke: flat, dashed: false, in: context)
+        }
+        // The ends that are not flat get their round cap as a circle of the width they have.
+        context.setFillColor(color.cgColor)
+        for (isFlat, end, distance) in [(line.flatStart, points[0], 0.0), (line.flatEnd, points[points.count - 1], total)] where !isFlat {
+            let diameter = widthAt(distance)
+            guard diameter > 0 else { continue }
+            context.fillEllipse(in: CGRect(x: end.x - diameter / 2, y: end.y - diameter / 2, width: diameter, height: diameter))
+        }
+    }
+
+    /// The part of a polyline between two distances along it.
+    static func slice(_ points: [ScreenPoint], cumulative: [Double], from start: Double, to end: Double) -> [ScreenPoint] {
+        func point(at distance: Double) -> ScreenPoint {
+            var index = 0
+            while index < points.count - 2, cumulative[index + 1] < distance { index += 1 }
+            let span = cumulative[index + 1] - cumulative[index]
+            let t = span > 0 ? min(max((distance - cumulative[index]) / span, 0), 1) : 0
+            return ScreenPoint(
+                x: points[index].x + (points[index + 1].x - points[index].x) * t,
+                y: points[index].y + (points[index + 1].y - points[index].y) * t)
+        }
+        var result = [point(at: start)]
+        for index in points.indices where cumulative[index] > start && cumulative[index] < end { result.append(points[index]) }
+        result.append(point(at: end))
+        return result
     }
 
     private func strokePath(_ points: [ScreenPoint], width: Double, stroke: StrokeStyle, dashed: Bool, in context: CGContext) {
