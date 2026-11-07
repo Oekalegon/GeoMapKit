@@ -78,26 +78,37 @@ public struct MapSceneBuilder: Sendable {
         var joined: [(key: LineKey, info: (lanes: Int?, name: String?, structure: Structure), polyline: [PackedPoint])] = []
         // The ends of the lines that are drawn as bridges or tunnels: the lines on the ground that end there end flat.
         var structureEnds = Set<PackedPoint>()
+        // The vertices in the middle of the roads: a road that ends at one meets another road side on (a T junction).
+        var throughPoints = Set<PackedPoint>()
         for (key, pieces) in linePieces {
             let info = lineInfo[key] ?? (nil, nil, .ground)
-            let drawn = style.style(for: key.featureClass)?.drawnStructure(for: info.structure) ?? .ground
+            let classStyle = style.style(for: key.featureClass)
+            let drawn = classStyle?.drawnStructure(for: info.structure) ?? .ground
+            let isRoad = classStyle?.stroke?.width.ground != nil
             for polyline in LineJoiner.join(pieces) {
                 joined.append((key, info, polyline))
                 if drawn != .ground, let first = polyline.first, let last = polyline.last {
                     structureEnds.insert(first)
                     structureEnds.insert(last)
                 }
+                if isRoad, polyline.count > 2 { throughPoints.formUnion(polyline[1..<(polyline.count - 1)]) }
             }
         }
         var lines: [FeatureClass: [SceneLine]] = [:]
         for (key, info, polyline) in joined {
             let screen = polyline.map(viewport.screenPoint(for:))
             guard let bounds = ScreenBounds(of: screen), bounds.intersects(visible) else { continue }
-            let onGround = (style.style(for: key.featureClass)?.drawnStructure(for: info.structure) ?? .ground) == .ground
+            let classStyle = style.style(for: key.featureClass)
+            let onGround = (classStyle?.drawnStructure(for: info.structure) ?? .ground) == .ground
+            let isRoad = classStyle?.stroke?.width.ground != nil
+            // A road ends flat where a bridge or a tunnel starts, and where it meets the side of another road.
+            func endsFlat(_ end: PackedPoint?) -> Bool {
+                guard onGround, let end else { return false }
+                return structureEnds.contains(end) || (isRoad && throughPoints.contains(end))
+            }
             lines[key.featureClass, default: []].append(SceneLine(
                 featureClass: key.featureClass, objectID: key.objectID, points: screen, lanes: info.lanes, name: info.name,
-                structure: info.structure, flatStart: onGround && polyline.first.map(structureEnds.contains) == true,
-                flatEnd: onGround && polyline.last.map(structureEnds.contains) == true))
+                structure: info.structure, flatStart: endsFlat(polyline.first), flatEnd: endsFlat(polyline.last)))
         }
         // Dictionary order is not stable; sort so the same input always gives the same scene.
         for featureClass in lines.keys { lines[featureClass]?.sort { ($0.objectID, $0.points[0].x) < ($1.objectID, $1.points[0].x) } }

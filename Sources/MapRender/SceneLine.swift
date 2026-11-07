@@ -18,10 +18,11 @@ public struct SceneLine: Sendable, Equatable {
     public var name: String?
     /// Whether the line is on the ground, a bridge or a tunnel, as the subclass byte of the feature says.
     public var structure: Structure
-    /// The line starts where a bridge or a tunnel starts or ends, so the renderer ends it flat there: a road that comes
-    /// out of a tunnel mouth should not start with a round cap.
+    /// The line starts where a bridge or a tunnel starts or ends, or (for a road) at a vertex in the middle of another road,
+    /// so the renderer ends it flat there: a road that comes out of a tunnel mouth, or ends at the side of another road,
+    /// should not start with a round cap.
     public var flatStart: Bool
-    /// The line ends where a bridge or a tunnel starts or ends; see ``flatStart``.
+    /// The line ends where a bridge or a tunnel starts or ends, or at the side of another road; see ``flatStart``.
     public var flatEnd: Bool
 
     /// Creates a line.
