@@ -10,7 +10,7 @@ import FeatureStore
 /// it is open sea; one with no coastline at all is land, which is the default.
 ///
 /// A coastline that starts or ends inside the box (the extract stops there, or the line is broken) cannot be closed
-/// without guessing which side is water, so then no sea is built at all (``Result/openEnds`` counts them). Only the
+/// without guessing which side is water, so then no sea is built at all (``Result/openEnds`` counts them, and the pieces that do not close into a polygon). Only the
 /// coastline pieces the extract holds are used: a coastline way with no vertex inside the cut area is not in the
 /// extract (see the cutter's known limitation), and a box crossed only by such a way is then taken for land.
 enum SeaBuilder {
@@ -21,7 +21,7 @@ enum SeaBuilder {
         var seaPolygons = 0
         /// The number of islands cut out of them.
         var islands = 0
-        /// Coastline pieces that start or end inside the box; when there are any, no sea is built.
+        /// Coastline pieces that start or end inside the box, or that do not close into a polygon; when there are any, no sea is built.
         var openEnds = 0
     }
 
@@ -56,7 +56,14 @@ enum SeaBuilder {
         }.count
         if result.openEnds > 0 { return result }
 
-        seaRings.append(contentsOf: join(pieces, in: box))
+        let walked = join(pieces, in: box)
+        // Pieces that did not close into a polygon (their sides do not alternate, so the data is inconsistent) count as
+        // open ends: a partial sea would be worse than none.
+        if walked.unclosed > 0 {
+            result.openEnds = walked.unclosed
+            return result
+        }
+        seaRings.append(contentsOf: walked.polygons)
         if seaRings.isEmpty && pieces.isEmpty && !islands.isEmpty { seaRings = [boxRing(box)] }
         guard !seaRings.isEmpty else { return result }
         result.seaPolygons = seaRings.count
@@ -85,8 +92,8 @@ enum SeaBuilder {
     // MARK: Walking the border
 
     /// Joins pieces into sea polygons by walking the border clockwise from each end to the next start.
-    private static func join(_ pieces: [[PackedPoint]], in box: CellRect) -> [[PackedPoint]] {
-        guard !pieces.isEmpty else { return [] }
+    private static func join(_ pieces: [[PackedPoint]], in box: CellRect) -> (polygons: [[PackedPoint]], unclosed: Int) {
+        guard !pieces.isEmpty else { return ([], 0) }
         let width = Int64(box.east) - Int64(box.west), height = Int64(box.north) - Int64(box.south)
         let perimeter = 2 * (width + height)
 
@@ -108,6 +115,7 @@ enum SeaBuilder {
 
         var used = [Bool](repeating: false, count: pieces.count)
         var polygons: [[PackedPoint]] = []
+        var unclosed = 0
         for start in pieces.indices where !used[start] {
             used[start] = true
             var ring = pieces[start]
@@ -134,9 +142,11 @@ enum SeaBuilder {
             if closed, ring.count >= 3 {
                 if ring.first != ring.last { ring.append(ring[0]) }
                 polygons.append(ring)
+            } else {
+                unclosed += 1
             }
         }
-        return polygons
+        return (polygons, unclosed)
     }
 
     private static func boxRing(_ box: CellRect) -> [PackedPoint] {
