@@ -1,4 +1,5 @@
 import FeatureStore
+import MapStyle
 
 /// A line ready to draw, in screen points.
 ///
@@ -15,9 +16,15 @@ public struct SceneLine: Sendable, Equatable {
     public var lanes: Int?
     /// The `name`, if any.
     public var name: String?
+    /// Whether the line is on the ground, a bridge or a tunnel, as the subclass byte of the feature says.
+    public var structure: Structure
 
     /// Creates a line.
-    public init(featureClass: FeatureClass, objectID: Int64, points: [ScreenPoint], lanes: Int? = nil, name: String? = nil) {
+    public init(
+        featureClass: FeatureClass, objectID: Int64, points: [ScreenPoint], lanes: Int? = nil, name: String? = nil,
+        structure: Structure = .ground
+    ) {
+        self.structure = structure
         self.featureClass = featureClass
         self.objectID = objectID
         self.points = points

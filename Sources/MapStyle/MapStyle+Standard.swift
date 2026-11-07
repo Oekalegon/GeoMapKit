@@ -26,9 +26,12 @@ extension MapStyle {
                 layer: 20),
             .waterLine: ClassStyle(
                 stroke: .line(0x6FB3DB, ZoomValue((8, 0.6), (12, 1.2), (17, 3))),
-                label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x2F6F9F), priority: 20), layer: 21),
+                label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x2F6F9F), priority: 20), layer: 21,
+                tunnel: TunnelStyle(opacity: 0.6, dash: [3, 2])),
             .railway: ClassStyle(
-                stroke: .line(0x777777, ZoomValue((8, 0.6), (14, 1.4)), dash: [4, 3]), layer: 22),
+                stroke: .line(0x777777, ZoomValue((8, 0.6), (14, 1.4)), dash: [4, 3]), layer: 22,
+                bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((10, 0.4), (16, 1.2)))),
+                tunnel: TunnelStyle(opacity: 0.4, dash: [2, 3])),
             .powerLine: ClassStyle(
                 stroke: .line(0x9A9A9A, .constant(0.6)), visibleZoom: 13...24, layer: 23),
             .aerialway: ClassStyle(
@@ -43,7 +46,9 @@ extension MapStyle {
                         points: ZoomValue((12, 0.8), (16, 2.5)),
                         ground: GroundWidth(metresPerLane: 3, defaultLanes: 2)),
                     casing: .init(color: .color(0xAAAAAA), extraPoints: ZoomValue((13, 0), (15, 0.6), (18, 1.2)))),
-                visibleZoom: 12...24, layer: 30, casingLayer: 29),
+                visibleZoom: 12...24, layer: 30, casingLayer: 29,
+                bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.6), (16, 1.8)))),
+                tunnel: TunnelStyle(opacity: 0.5, dash: [5, 3])),
             .roadMajor: ClassStyle(
                 stroke: StrokeStyle(
                     color: .color(0xFDD27F),
@@ -51,7 +56,9 @@ extension MapStyle {
                         points: ZoomValue((8, 0.8), (12, 1.8), (16, 3.5)),
                         ground: GroundWidth(metresPerLane: 3, defaultLanes: 2)),
                     casing: .init(color: .color(0xB8862E), extraPoints: ZoomValue((10, 0.3), (14, 0.7), (18, 1.5)))),
-                label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x555555), priority: 15), layer: 31, casingLayer: 29),
+                label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x555555), priority: 15), layer: 31, casingLayer: 29,
+                bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.6), (16, 1.8)))),
+                tunnel: TunnelStyle(opacity: 0.5, dash: [5, 3])),
             // Sidewalks and crossings: part of the street, so fainter and thinner than the paths a runner chooses.
             .pavement: ClassStyle(
                 stroke: .line(0xE4B5A9, ZoomValue((15, 0.5), (18, 1.2))), visibleZoom: 15...24, layer: 38),
@@ -59,10 +66,14 @@ extension MapStyle {
                 stroke: .line(0x8C8279, ZoomValue((13, 0.8), (17, 1.6))), visibleZoom: 13...24, layer: 26),
             .track: ClassStyle(
                 stroke: .line(0x8B5A2B, ZoomValue((12, 1.0), (16, 2.0)), dash: [6, 2]), visibleZoom: 12...24,
-                layer: 40),
+                layer: 40,
+                bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.5), (16, 1.2)))),
+                tunnel: TunnelStyle(opacity: 0.45)),
             .path: ClassStyle(
                 stroke: .line(0xD2381C, ZoomValue((12, 1.0), (16, 2.0)), dash: [3, 2]), visibleZoom: 12...24,
-                layer: 41),
+                layer: 41,
+                bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.5), (16, 1.2)))),
+                tunnel: TunnelStyle(opacity: 0.45)),
             .barrier: ClassStyle(stroke: .line(0x8A8A8A, .constant(0.6)), visibleZoom: 16...24, layer: 45),
             .tree: ClassStyle(
                 point: PointStyle(radius: .constant(2), color: .color(0x7DB36B), outlineWidth: 0),

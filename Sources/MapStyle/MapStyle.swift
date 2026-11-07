@@ -10,6 +10,12 @@ import FeatureStore
 /// ``standard`` is the style for iOS, iPadOS and macOS; ``watch`` is the reduced,
 /// high-contrast style for the Watch.
 public struct MapStyle: Sendable, Equatable {
+    /// The amount added to the layers of a class for its bridges, so they are drawn after all lines on the ground. Class layers
+    /// stay below it.
+    public static let bridgeLayerOffset = 100
+    /// The layer of tunnels: above the area fills (layers up to 14) and below the lines on the ground (20 and up).
+    public static let tunnelLayer = 15
+
     /// A name for diagnostics.
     public var name: String
     /// The colour behind everything.
@@ -59,6 +65,11 @@ public struct MapStyle: Sendable, Equatable {
     /// (or on its own layer when that is `nil`) and a ``DrawStep/Part/body`` step on its layer. Casing steps
     /// come before body steps of the same layer. A renderer draws every feature of a step before the next
     /// step, which is what makes outlines of crossing roads join.
+    ///
+    /// A class with a ``ClassStyle/bridge`` gets further steps for its bridges, on its layers plus
+    /// ``bridgeLayerOffset``: a casing step and a body step, so bridges come after every line on the ground. A class with a
+    /// ``ClassStyle/tunnel`` gets a body step for its tunnels on layer ``tunnelLayer``, above the area fills and below the
+    /// lines on the ground. The steps on the ground then draw only the lines that are on the ground.
     public func drawSteps(atZoom zoom: Double) -> [DrawStep] {
         var steps: [(layer: Int, phase: Int, raw: UInt8, step: DrawStep)] = []
         for featureClass in visibleClasses(atZoom: zoom) {
@@ -68,6 +79,17 @@ public struct MapStyle: Sendable, Equatable {
                 steps.append((layer, 0, featureClass.rawValue, DrawStep(featureClass: featureClass, part: .casing)))
             }
             steps.append((style.layer, 1, featureClass.rawValue, DrawStep(featureClass: featureClass, part: .body)))
+            guard style.stroke != nil else { continue }
+            if style.bridge != nil {
+                let casingLayer = Self.bridgeLayerOffset + (style.casingLayer ?? style.layer)
+                steps.append((casingLayer, 0, featureClass.rawValue, DrawStep(featureClass: featureClass, part: .casing, structure: .bridge)))
+                steps.append((
+                    Self.bridgeLayerOffset + style.layer, 1, featureClass.rawValue,
+                    DrawStep(featureClass: featureClass, part: .body, structure: .bridge)))
+            }
+            if style.tunnel != nil {
+                steps.append((Self.tunnelLayer, 1, featureClass.rawValue, DrawStep(featureClass: featureClass, part: .body, structure: .tunnel)))
+            }
         }
         steps.sort { ($0.layer, $0.phase, $0.raw) < ($1.layer, $1.phase, $1.raw) }
         return steps.map(\.step)
