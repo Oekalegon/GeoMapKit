@@ -4,7 +4,7 @@ import FeatureStore
 public struct Classification: Hashable, Sendable {
     /// The derived class.
     public let featureClass: FeatureClass
-    /// The subclass byte, see ``SubclassBits``.
+    /// The subclass byte, see `SubclassBits` in `FeatureStore`.
     public let subclass: UInt8
     /// Point, line or area.
     public let kind: FeatureKind

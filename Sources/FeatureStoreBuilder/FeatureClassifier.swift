@@ -4,7 +4,7 @@ import FeatureStore
 ///
 /// The rules are an ordered table; the first match wins, so one object has one
 /// class. The result is derived data: the builder also stores all raw tags, and
-/// objects that match no rule get class ``FeatureClass/other``. The table has a
+/// objects that match no rule get class `FeatureClass.other`. The table has a
 /// version, ``version``, that goes into the file header; change it whenever a rule
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
