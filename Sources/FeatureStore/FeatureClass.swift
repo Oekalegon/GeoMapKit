@@ -38,4 +38,18 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     case poi = 15
     /// Administrative and protected-area boundaries.
     case boundary = 16
+    /// Power lines and pylons (towers): landmarks in open terrain. Added in rule table version 2.
+    case powerLine = 17
+    /// Ski pistes and other `piste:type` ways. Added in rule table version 2.
+    case piste = 18
+    /// Cable cars, gondolas, lifts and their stations. Added in rule table version 2.
+    case aerialway = 19
+    /// Individual trees and tree rows. Added in rule table version 2.
+    case tree = 20
+    /// Fences, walls, gates, hedges and other barriers. Added in rule table version 2.
+    case barrier = 21
+    /// Bus stops, public transport stops and platforms, railway stations. Added in rule table version 2.
+    case transportStop = 22
+    /// Road details at a point: crossings, traffic signals, street lamps and similar. Added in rule table version 2.
+    case roadPoint = 23
 }

@@ -86,10 +86,38 @@ struct FeatureClassifierTests {
         Case(tags: ["historic": "ruins"], featureClass: .poi, band: .detail, watch: false),
         Case(tags: ["man_made": "tower"], featureClass: .poi, band: .detail, watch: false),
         Case(tags: ["emergency": "phone"], featureClass: .poi, band: .detail, watch: false),
-        Case(tags: ["barrier": "gate"], featureClass: .other, band: .detail, watch: false),
+        // Rule table version 2.
+        Case(tags: ["power": "line"], featureClass: .powerLine, band: .mid, watch: true),
+        Case(tags: ["power": "minor_line"], featureClass: .powerLine, band: .mid, watch: true),
+        Case(tags: ["power": "cable"], featureClass: .powerLine, band: .mid, watch: true),
+        Case(tags: ["power": "tower"], featureClass: .powerLine, band: .detail, watch: true),
+        Case(tags: ["aerialway": "cable_car"], featureClass: .aerialway, band: .mid, watch: true),
+        Case(tags: ["aerialway": "chair_lift"], featureClass: .aerialway, band: .mid, watch: true),
+        Case(tags: ["aerialway": "t-bar"], featureClass: .aerialway, band: .mid, watch: true),
+        Case(tags: ["aerialway": "station"], featureClass: .aerialway, band: .detail, watch: true),
+        Case(tags: ["piste:type": "downhill"], featureClass: .piste, band: .mid, watch: true),
+        Case(tags: ["piste:type": "nordic", "piste:difficulty": "easy"], featureClass: .piste, band: .mid, watch: true),
+        Case(tags: ["piste:type": "something_new"], featureClass: .piste, band: .mid, watch: true),
+        Case(tags: ["natural": "tree"], featureClass: .tree, band: .detail, watch: false),
+        Case(tags: ["natural": "tree_row"], featureClass: .tree, band: .detail, watch: false),
+        Case(tags: ["barrier": "fence"], featureClass: .barrier, band: .detail, watch: false),
+        Case(tags: ["barrier": "gate"], featureClass: .barrier, band: .detail, watch: false),
+        Case(tags: ["barrier": "something_new"], featureClass: .barrier, band: .detail, watch: false),
+        Case(tags: ["highway": "bus_stop"], featureClass: .transportStop, band: .detail, watch: false),
+        Case(tags: ["public_transport": "platform"], featureClass: .transportStop, band: .detail, watch: false),
+        Case(tags: ["public_transport": "something_new"], featureClass: .transportStop, band: .detail, watch: false),
+        Case(tags: ["railway": "station"], featureClass: .transportStop, band: .detail, watch: false),
+        Case(tags: ["railway": "tram_stop"], featureClass: .transportStop, band: .detail, watch: false),
+        Case(tags: ["highway": "crossing"], featureClass: .roadPoint, band: .detail, watch: false),
+        Case(tags: ["highway": "traffic_signals"], featureClass: .roadPoint, band: .detail, watch: false),
+        Case(tags: ["highway": "street_lamp"], featureClass: .roadPoint, band: .detail, watch: false),
+        // Still not classified: poles, pylons of lifts, wind turbines.
+        Case(tags: ["power": "pole"], featureClass: .other, band: .detail, watch: false),
+        Case(tags: ["aerialway": "pylon"], featureClass: .other, band: .detail, watch: false),
+        Case(tags: ["power": "generator", "generator:source": "wind"], featureClass: .other, band: .detail, watch: false),
+        Case(tags: ["barrier": "no"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["highway": "construction"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["highway": "proposed"], featureClass: .other, band: .detail, watch: false),
-        Case(tags: ["power": "line"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["waterway": "dam"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["place": "island"], featureClass: .other, band: .detail, watch: false),
         Case(tags: [:], featureClass: .other, band: .detail, watch: false),
@@ -206,8 +234,26 @@ struct FeatureClassifierTests {
         #expect(a == b)
     }
 
-    @Test("The rule table version is set")
+    @Test("A ski trail that is also a hiking path stays a path, and bridges and tunnels are marked on lifts and lines")
+    func version2Priority() {
+        #expect(classify(["highway": "path", "piste:type": "nordic"]).featureClass == .path)
+        #expect(classify(["highway": "track", "piste:type": "nordic"]).featureClass == .track)
+        #expect(classify(["piste:type": "nordic"]).subclass == 2)
+        #expect(classify(["aerialway": "gondola"]).subclass == 2 && classify(["aerialway": "station"], .node).kind == .point)
+        #expect(classify(["natural": "tree"], .node).kind == .point && classify(["natural": "tree_row"], .closedWay).kind == .line)
+        // A bus stop that is also a shelter is a shelter, as before; a platform footway is still a path.
+        #expect(classify(["highway": "bus_stop", "amenity": "shelter"], .node).featureClass == .poiAnchor)
+        #expect(classify(["highway": "footway", "public_transport": "platform"]).featureClass == .path)
+        // A barrier that is a closed way stays a line.
+        #expect(classify(["barrier": "fence"], .closedWay).kind == .line)
+        // Power towers are points and lines stay lines.
+        #expect(classify(["power": "tower"], .node).kind == .point && classify(["power": "line"], .openWay).kind == .line)
+    }
+
+    @Test("The rule table version is 2, and the class IDs of version 1 did not change")
     func version() {
-        #expect(FeatureClassifier.version == 1)
+        #expect(FeatureClassifier.version == 2)
+        #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
+        #expect(FeatureClass.allCases.count == 24)
     }
 }

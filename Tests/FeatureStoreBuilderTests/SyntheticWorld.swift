@@ -100,6 +100,12 @@ struct SyntheticWorld {
         world.way(700, [60, 61])
         world.node(62, 0.3, 0.2); world.node(63, 0.5, 0.25); world.node(64, 0.7, 0.3); world.node(65, 0.9, 0.2)
         world.way(800, [62, 63, 999, 64, 65], [("highway", "track"), ("tracktype", "grade2")])
+        // Landmarks (rule table version 2): a power line, a ski piste and a tree.
+        world.node(80, 1.1, 0.9); world.node(81, 1.9, 0.95)
+        world.way(1000, [80, 81], [("power", "line")])
+        world.node(82, 0.2, 1.8); world.node(83, 0.8, 1.9)
+        world.way(1001, [82, 83], [("piste:type", "nordic"), ("piste:difficulty", "easy")])
+        world.node(6, 0.8, 0.8, [("natural", "tree")])
         let house = world.rectangle(first: 70, 1.1, 1.1, 1.2, 1.2)
         world.way(900, house, [("building", "yes")])
         return world

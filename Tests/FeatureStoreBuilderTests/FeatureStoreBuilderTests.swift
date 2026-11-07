@@ -45,8 +45,8 @@ struct FeatureStoreBuilderTests {
     @Test("The report counts what was stored, suppressed and skipped")
     func report() throws {
         let report = try built().result.report
-        #expect(report.nodesStored == 5)
-        #expect(report.waysStored == 6)                 // 100, 101, 200, 700, 800, 900
+        #expect(report.nodesStored == 6)
+        #expect(report.waysStored == 8)                 // 100, 101, 200, 700, 800, 900, 1000, 1001
         #expect(report.waysSuppressed == 5)             // 301, 302, 401, 451 (untagged members) and 501 (tags adopted)
         #expect(report.waysWithMissingNodes == 1 && report.waysWithoutGeometry == 0)
         #expect(report.relationsStored == 5)
@@ -218,12 +218,18 @@ struct FeatureStoreBuilderTests {
         let all = try features(watch)
         #expect(all.allSatisfy { $0.feature.tags.isEmpty })
         let classes = Set(all.map(\.feature.classID))
-        #expect(classes.isSubset(of: [FeatureClass.path, .track, .forest, .peak, .waterArea, .landcover, .poiAnchor].map(\.rawValue)))
+        #expect(classes.isSubset(of: [FeatureClass.path, .track, .forest, .peak, .waterArea, .landcover, .poiAnchor, .powerLine, .piste, .aerialway].map(\.rawValue)))
         #expect(!classes.contains(FeatureClass.building.rawValue) && !classes.contains(FeatureClass.poi.rawValue) && !classes.contains(FeatureClass.other.rawValue))
         #expect(try watch.relation(withID: 600) == nil && watchResult.report.relationsStored == 0)
         #expect(watchResult.report.featuresSkippedByProfile > 0)
         #expect(watch.stringTableCount < full.stringTableCount)
         #expect(watchResult.data.count < fullResult.data.count)
+        // Power lines and pistes are on the Watch, trees are not.
+        #expect(pieces(all, type: .way, id: 1000).first?.feature.classID == FeatureClass.powerLine.rawValue)
+        #expect(pieces(all, type: .way, id: 1001).first?.feature.classID == FeatureClass.piste.rawValue)
+        #expect(pieces(all, type: .node, id: 6).isEmpty)
+        let fullPieces = pieces(try features(full), type: .node, id: 6)
+        #expect(fullPieces.first?.feature.classID == FeatureClass.tree.rawValue)
         // The names survive.
         let peak = try #require(pieces(all, type: .node, id: 1).first)
         #expect(watch.string(at: try #require(peak.feature.nameID)) == "Test Peak")
