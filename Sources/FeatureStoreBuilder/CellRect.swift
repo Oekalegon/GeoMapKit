@@ -50,6 +50,24 @@ struct CellRect {
         point.longitude >= west && point.longitude <= east && point.latitude >= south && point.latitude <= north
     }
 
+    /// The one cell that owns a point.
+    ///
+    /// A cell owns its west border and its north border, not its east and south borders, which belong to the
+    /// neighbours. This is the rule that decides where a piece lying along a border goes.
+    static func tile(owning point: PackedPoint, zoom: Int) -> TileID? {
+        let n = 1 << zoom
+        var column = Int(((Double(point.longitude) / 1e7 + 180) / 360 * Double(n)).rounded(.down))
+        column = max(0, min(n - 1, column))
+        while column > 0 && point.longitude < longitude(column: column, zoom: zoom) { column -= 1 }
+        while column < n - 1 && point.longitude >= longitude(column: column + 1, zoom: zoom) { column += 1 }
+        let y = Mercator.y(latitude: Double(point.latitude))
+        var row = Int(((1 - y / .pi) / 2 * Double(n)).rounded(.down))
+        row = max(0, min(n - 1, row))
+        while row > 0 && point.latitude > latitude(row: row, zoom: zoom) { row -= 1 }
+        while row < n - 1 && point.latitude <= latitude(row: row + 1, zoom: zoom) { row += 1 }
+        return TileID(zoom: zoom, x: column, y: row)
+    }
+
     /// The cells at `zoom` that may overlap the bounding box of `points`, with one cell of margin.
     ///
     /// Cells that only touch the geometry yield no pieces when clipped. The result has one entry per cell of the

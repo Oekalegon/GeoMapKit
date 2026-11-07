@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import PBFTestSupport
 @testable import OSMPBF
 
 /// A malformed file must fail with a specific error, never crash and never

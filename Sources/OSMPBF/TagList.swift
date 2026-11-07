@@ -25,6 +25,11 @@ public struct TagList: Sequence, Sendable {
         return nil
     }
 
+    /// The tags as an ordered list, byte for byte, in the order they are stored (key byte order).
+    public var orderedTags: [OSMTag] {
+        map { OSMTag(key: $0.key, value: $0.value) }
+    }
+
     /// The tags as a dictionary.
     ///
     /// A `[String: String]` uses Swift `String` equality, so two keys that differ only in

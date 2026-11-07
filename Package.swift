@@ -44,9 +44,12 @@ let package = Package(
         // Region manifest, downloads, attribution.
         .target(name: "Regions", dependencies: ["GeoCore", "FeatureStore"]),
 
+        // Builds small PBF files for tests (test-only; no product).
+        .target(name: "PBFTestSupport", path: "Tests/PBFTestSupport"),
+
         .testTarget(name: "GeoCoreTests", dependencies: ["GeoCore"]),
-        .testTarget(name: "OSMPBFTests", dependencies: ["OSMPBF", "GeoCore"]),
-        .testTarget(name: "FeatureStoreBuilderTests", dependencies: ["FeatureStoreBuilder", "FeatureStore", "GeoCore", "OSMPBF"]),
+        .testTarget(name: "OSMPBFTests", dependencies: ["OSMPBF", "GeoCore", "PBFTestSupport"]),
+        .testTarget(name: "FeatureStoreBuilderTests", dependencies: ["FeatureStoreBuilder", "FeatureStore", "GeoCore", "OSMPBF", "PBFTestSupport"]),
         .testTarget(name: "FeatureStoreTests", dependencies: ["FeatureStore", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]

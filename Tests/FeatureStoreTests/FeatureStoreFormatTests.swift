@@ -148,18 +148,22 @@ struct FeatureStoreFormatTests {
         #expect(file.stringBytes(at: tag.key) != file.stringBytes(at: tag.value))
     }
 
-    @Test("The most used string gets ID 0")
+    @Test("The most used string gets ID 0, and strings nothing uses are dropped")
     func frequencyRenumbering() throws {
         var writer = FeatureStoreWriter(boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: "x")
-        _ = writer.intern("rare")
+        let rare = writer.intern("rare")
+        _ = writer.intern("unused")
         let common = writer.intern("common")
         let cell = TileID(zoom: 13, x: 4_096, y: 4_096)!
         try writer.add(
             StoredFeature(classID: 0, kind: .point, objectType: .node, objectID: 1,
-                tags: [StoredTag(key: common, value: common)],
+                tags: [StoredTag(key: common, value: common), StoredTag(key: common, value: rare)],
                 parts: [GeometryPart(points: [PackedPoint(longitude: 1, latitude: 1)])]), band: .detail, cell: cell)
         let file = try FeatureStoreFile(data: try writer.data())
+        try file.verify()
         #expect(file.string(at: 0) == "common" && file.string(at: 1) == "rare")
+        #expect(file.stringTableCount == 2)
+        #expect(file.string(at: 2) == nil)
     }
 
     @Test("The writer rejects bad input")

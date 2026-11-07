@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import PBFTestSupport
 @testable import OSMPBF
 
 @Suite("ProtobufReader")

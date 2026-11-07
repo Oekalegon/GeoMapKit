@@ -57,7 +57,7 @@ A cross-cutting constraint. A trail run can last hours with GPS, heart rate and 
 |---|---|---|
 | `GeoCore` | Web Mercator maths, tile coordinates, bounding boxes, geometry | all |
 | `FeatureStore` | Own compact, spatially grouped feature format: writer, memory-mapped reader, `FeatureSource` protocol, cache | all |
-| `FeatureStoreBuilder` (planned) | Builds store files from an `OSMExtract`: classifier, clipping, simplification, multipolygon assembly. Depends on `OSMPBF`, so the Watch does not link it | iOS, macOS |
+| `FeatureStoreBuilder` | Builds store files from an `OSMExtract`: classifier, clipping, simplification, multipolygon assembly, `FeatureStoreBuilder.build`. Depends on `OSMPBF`, so the Watch does not link it | iOS, macOS |
 | `MapStyle` | Style model with zoom-dependent values | all |
 | `MapRender` | `MapRenderer` protocol, Canvas / Core Graphics backend, optional Metal backend | all |
 | `Routing` | `Graph` (CSR layout), `Router` (A*), `CostProfile` | all |
@@ -144,6 +144,15 @@ The Watch column is a flag per rule; the Watch profile is applied when the phone
 - **Incomplete (all or nothing):** a relation is incomplete if the extract flags it, a member way or node is missing, any ring does not close, or there is no usable outer ring. It then produces no polygon. Its rings and chains come out as **line features** (object type relation, the relation ID, class from the relation's tags, flag `incomplete`), clipped like lines with continuation flags and offsets; the renderer draws an outline and never fills.
 - **Tags:** the classifier gets the relation's tags without `type`. Old style: if the relation has no tags besides `type` and exactly one outer way, the way's tags are used and that way is not emitted a second time. Untagged member ways are not emitted separately; their geometry is in the area and their IDs in the relation's member list. Tagged member ways are emitted normally.
 - **Counted, not repaired:** an assembly report counts unclosed chains, rings without area or with fewer than four points, inner rings that no outer ring contains (ignored, the polygons stay valid), missing members and duplicate members. **Self-intersections are not detected** (a check is O(n^2) per ring, too slow for coastline-sized rings), so a self-intersecting ring is filled even-odd; this replaces the earlier idea that the report counts them.
+
+### Store builder (decided, `FeatureStoreBuilder.build(from:)`)
+
+- **Cells written:** only the cells that lie fully inside the extract's bounding box (a rectangle of columns and rows), because the extract is incomplete near its edge. Pieces that fall in other cells are dropped and counted (`piecesOutsideCells`). A box smaller than one cell gives an empty, valid store. The file's bounding box is that of the written cells. A cell owns its west and north border, not its east and south border, which also decides where a point or a piece lying along a border goes.
+- **What is stored:** every tagged node as a point (untagged nodes only as way vertices), every way as a line or area with all its tags, every relation in the relation table (all types, tags and members, `isIncomplete` mirrors the extract's flag). A feature is stored in its lowest band and every band above it; tags only in the detail band, the `name` value in all bands. Untagged ways that are members of a multipolygon are not stored separately, and a single outer way whose tags a tag-less multipolygon adopts is not stored twice; untagged ways in no relation are stored as `other` lines. A way with a node missing from the extract is split at the gap (the pieces are counted in `waysWithMissingNodes`), never drawn across it. Consecutive duplicate vertices are merged.
+- **Multipolygons:** assembled as described above; incomplete ones become line features of the relation's class with the `incomplete` flag (clipped as lines, with continuation flags and offsets).
+- **Watch copy (`BuildProfile.watch`, provisional):** only classes with the Watch flag, bands mid and detail only, only the `name` tag, and no relation table. The writer drops strings that nothing uses, so the Watch copy carries a pruned string table. The corridor cut for the Watch may refine this.
+- **Reporting:** `BuildReport` counts what was stored, suppressed and skipped; `FeatureStoreFile.statistics()` gives sizes and counts per band and class for measurements. Builds are deterministic.
+- **Cost:** the whole result is held in memory (one writer per block of cells), single-threaded, with cancellation checks.
 
 ## 5. Corridor (Watch data)
 
