@@ -16,6 +16,8 @@ struct ViewerOptions {
     var style: ViewerView.StyleChoice?
     var watchSize = false
     var snapshot: String?
+    /// Moves the view by this many points (east, south) in small steps before the snapshot, to test panning.
+    var pan: (x: Double, y: Double)?
 
     init(arguments: [String]) {
         var index = 0
@@ -26,6 +28,10 @@ struct ViewerOptions {
             case "--zoom": zoom = value().flatMap(Double.init); index += 1
             case "--style": style = value().flatMap { $0 == "watch" ? .watch : .standard }; index += 1
             case "--snapshot": snapshot = value(); index += 1
+            case "--pan":
+                let parts = value()?.split(separator: ",").compactMap { Double($0) } ?? []
+                if parts.count == 2 { pan = (parts[0], parts[1]) }
+                index += 1
             case "--watch-size": watchSize = true
             default: if path == nil, !argument.hasPrefix("--") { path = argument }
             }

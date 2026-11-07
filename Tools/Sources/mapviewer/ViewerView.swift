@@ -1,6 +1,7 @@
 import AppKit
 import FeatureStore
 import GeoCore
+import MapRender
 import MapStyle
 import MapUI
 import SwiftUI
@@ -80,6 +81,7 @@ struct ViewerView: View {
             if let zoom = options.zoom { self.zoom = zoom }
             if let style = options.style { choice = style }
             watchSize = options.watchSize
+            if let pan = options.pan { await scriptedPan(pan) }
             if let snapshot = options.snapshot { await takeSnapshot(to: snapshot) }
         }
     }
@@ -106,6 +108,17 @@ struct ViewerView: View {
             Text(String(format: "%.5f, %.5f", center.latitude, center.longitude)).monospacedDigit().foregroundStyle(.secondary)
         }
         .padding(8)
+    }
+
+    /// Moves the centre in 30 small steps, like a drag would, so panning can be checked without a mouse.
+    @MainActor
+    private func scriptedPan(_ pan: (x: Double, y: Double)) async {
+        try? await Task.sleep(for: .seconds(1.5))
+        for _ in 0..<30 {
+            let view = MapViewport(center: center, zoom: zoom, width: 900, height: 700)
+            center = view.coordinate(at: ScreenPoint(x: 450 + pan.x / 30, y: 350 + pan.y / 30))
+            try? await Task.sleep(for: .milliseconds(30))
+        }
     }
 
     /// Waits for the first frame, writes the window content to a PNG and quits.
