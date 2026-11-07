@@ -19,7 +19,10 @@ GeoMapKit tools
                   --output <file.gmk> [--profile full|watch] [--limit N]
       Cut an area, build a feature store file from it, write it atomically,
       verify it, and print times, sizes and what was stored. The default
-      profile is full; watch builds the reduced Watch copy.
+      profile is full; watch builds the reduced Watch copy. Only whole cells
+      are written, so the box is widened outward to cell borders (by less
+      than one cell, about 0.044 degrees, per side) and the file covers all
+      of it; the report shows the stored extent.
 
   geomapkit render <file.gmk> --center lat,lon --zoom Z --output <file.png>
                    [--size WxH] [--scale S] [--style standard|watch|file.json]
