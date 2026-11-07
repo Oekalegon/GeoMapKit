@@ -55,7 +55,9 @@ public struct MapSceneBuilder: Sendable {
                             continuesAfter: feature.flags.contains(.continuesAfter), offset: feature.offsetAlongLine))
                     }
                     if lineInfo[key] == nil {
-                        lineInfo[key] = (lanes(of: feature), name(of: feature))
+                        // Tags are looked up only where the style uses them: `lanes` for classes with a ground width.
+                        let usesLanes = style.style(for: featureClass)?.stroke?.width.ground != nil
+                        lineInfo[key] = (usesLanes ? lanes(of: feature) : nil, name(of: feature))
                     }
                 case .area:
                     if let area = makeArea(feature, featureClass: featureClass, viewport: viewport, visible: visible) {
