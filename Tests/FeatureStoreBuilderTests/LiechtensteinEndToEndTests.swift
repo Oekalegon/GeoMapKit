@@ -22,13 +22,24 @@ struct LiechtensteinEndToEndTests {
     }
 
 
-    private func build(radiusKilometres: Double, profile: BuildProfile = .full) throws -> Case {
-        let path = try #require(pbfPath)
-        let box = try #require(BoundingBox.around(Coordinate(latitude: 47.14, longitude: 9.52), radiusKilometres: radiusKilometres))
+    private struct Missing: Error {}
+
+    private static func make(radiusKilometres: Double, profile: BuildProfile) throws -> Case {
+        guard let path = pbfPath,
+            let box = BoundingBox.around(Coordinate(latitude: 47.14, longitude: 9.52), radiusKilometres: radiusKilometres)
+        else { throw Missing() }
         let extract = try AreaCutter().cut(try PBFReader(url: URL(fileURLWithPath: path)), to: box)
         let result = try FeatureStoreBuilder(profile: profile).build(from: extract)
-        let written = try #require(FeatureStoreBuilder.writtenCells(in: extract.boundingBox))
+        guard let written = FeatureStoreBuilder.writtenCells(in: extract.boundingBox) else { throw Missing() }
         return Case(extract: extract, result: result, file: try FeatureStoreFile(data: result.data), written: written)
+    }
+
+    /// The 10 km full build, made once and shared by the tests, which only read it.
+    private static let tenKilometres = Result { try make(radiusKilometres: 10, profile: .full) }
+
+    private func build(radiusKilometres: Double, profile: BuildProfile = .full) throws -> Case {
+        if radiusKilometres == 10, case .full = profile { return try Self.tenKilometres.get() }
+        return try Self.make(radiusKilometres: radiusKilometres, profile: profile)
     }
 
     private func point(_ extract: OSMExtract, node id: Int64) throws -> PackedPoint {
