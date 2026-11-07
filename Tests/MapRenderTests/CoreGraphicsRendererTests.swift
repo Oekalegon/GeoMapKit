@@ -132,6 +132,30 @@ struct CoreGraphicsRendererTests {
         #expect(maxColumn > image.width - 12 && minColumn > image.width / 2)
     }
 
+    /// Counts the pixels that differ from the background in the bottom-right corner of a 400x80 pt scene.
+    private func creditInk(style: MapStyle) throws -> Int {
+        let wide = MapViewport(center: viewport.center, zoom: 16, width: 400, height: 80)
+        let scene = MapScene(viewport: wide, band: .detail, steps: [], cellCount: 0, attribution: "© OpenStreetMap contributors, ODbL")
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: style, scale: 2))
+        var count = 0
+        for y in 0..<image.height {
+            for x in 0..<image.width where !close(pixel(image, x: x, y: y), to: style.background) { count += 1 }
+        }
+        return count
+    }
+
+    @Test func hiddenAttributionDrawsNothingAndCompactDrawsLessThanFull() throws {
+        var style = MapStyle.standard
+        style.attribution = .full
+        let full = try creditInk(style: style)
+        style.attribution = .compact
+        let compact = try creditInk(style: style)
+        style.attribution = .hidden
+        let hidden = try creditInk(style: style)
+        #expect(hidden == 0)
+        #expect(compact > 0 && compact < full)
+    }
+
     @Test func noAttributionMeansNoInk() throws {
         let scene = MapScene(viewport: viewport, band: .detail, steps: [], cellCount: 0)
         let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 2))

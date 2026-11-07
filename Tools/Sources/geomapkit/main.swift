@@ -23,8 +23,11 @@ GeoMapKit tools
 
   geomapkit render <file.gmk> --center lat,lon --zoom Z --output <file.png>
                    [--size WxH] [--scale S] [--style standard|watch]
+                   [--attribution full|compact|none]
       Draw a map from a feature store file into a PNG. Size is in points
-      (default 800x600), scale is pixels per point (default 2).
+      (default 800x600), scale is pixels per point (default 2). The data
+      credit follows the style (full for standard, compact for watch);
+      none leaves it off, so the app must show it elsewhere.
 """
 
 do {
@@ -70,11 +73,12 @@ do {
             url: URL(fileURLWithPath: path), area: area, output: URL(fileURLWithPath: output), profile: profile, options: options)
         print(ReportFormatter.text(for: report))
     case "render":
-        let parsed = try CommandLineArguments(rest, knownOptions: ["center", "zoom", "output", "size", "scale", "style"])
+        let parsed = try CommandLineArguments(rest, knownOptions: ["center", "zoom", "output", "size", "scale", "style", "attribution"])
         guard let path = parsed.positional.first else { throw ToolError("render needs a store file") }
         let request = try RenderArgument.parse(
             center: parsed.value(for: "center"), zoom: parsed.value(for: "zoom"), size: parsed.value(for: "size"),
-            scale: parsed.value(for: "scale"), style: parsed.value(for: "style"), output: parsed.value(for: "output"))
+            scale: parsed.value(for: "scale"), style: parsed.value(for: "style"), output: parsed.value(for: "output"),
+            attribution: parsed.value(for: "attribution"))
         print(ReportFormatter.text(for: try ToolRunner.render(store: URL(fileURLWithPath: path), request: request)))
     case "help", "--help", "-h":
         print(usage)

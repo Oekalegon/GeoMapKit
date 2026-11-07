@@ -115,9 +115,18 @@ struct ProfileArgumentTests {
 struct RenderArgumentTests {
     private func parse(
         center: String? = "47.14,9.52", zoom: String? = "15", size: String? = nil, scale: String? = nil,
-        style: String? = nil, output: String? = "out.png"
+        style: String? = nil, output: String? = "out.png", attribution: String? = nil
     ) throws -> RenderRequest {
-        try RenderArgument.parse(center: center, zoom: zoom, size: size, scale: scale, style: style, output: output)
+        try RenderArgument.parse(
+            center: center, zoom: zoom, size: size, scale: scale, style: style, output: output, attribution: attribution)
+    }
+
+    @Test("Attribution defaults to the style and accepts full, compact and none")
+    func attribution() throws {
+        #expect(try parse().attribution == nil)
+        #expect(try parse(attribution: "compact").attribution == .compact)
+        #expect(try parse(attribution: "none").attribution == RenderRequest.Attribution.none)
+        #expect(throws: ToolError.self) { try parse(attribution: "hidden") }
     }
 
     @Test("Defaults: 800x600 points, scale 2, standard style")
