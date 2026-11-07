@@ -96,6 +96,17 @@ struct MapStyleTests {
         #expect(MapStyle.watch.style(for: .railway)?.stroke?.dash.isEmpty == true)
     }
 
+    @Test func aRoadAreaIsFilledAndDrawnUnderTheRoads() throws {
+        let area = try #require(MapStyle.standard.style(for: .roadArea))
+        #expect(area.fill != nil, "a surface, filled")
+        let casingLayer = try #require(MapStyle.standard.style(for: .roadMinor)?.casingLayer)
+        #expect(area.layer < casingLayer, "under every road casing")
+        let building = try #require(MapStyle.standard.style(for: .building))
+        let landcover = try #require(MapStyle.standard.style(for: .landcover))
+        #expect(area.layer < building.layer && area.layer > landcover.layer, "over the land cover, under the buildings")
+        #expect(MapStyle.watch.style(for: .roadArea) == nil)
+    }
+
     @Test func aSubclassByteTellsTheStructure() {
         #expect(Structure(subclass: 4) == .ground)
         #expect(Structure(subclass: 4 | SubclassBits.bridge) == .bridge)

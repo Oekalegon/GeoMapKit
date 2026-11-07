@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 6
+    public static let version: UInt16 = 7
 
     /// Creates a classifier.
     public init() {}
@@ -62,6 +62,12 @@ public struct FeatureClassifier: Sendable {
         }
         // The shore of an island is a closed line even when the way also carries an area key such as `place`.
         if outcome.featureClass == .coastline, shape != .node { kind = .line }
+        // A road or path that is an area (a yard, a pedestrian square, a parking aisle drawn as a polygon) is not a line to
+        // stroke at the width of a road: it is a surface to fill.
+        if kind == .area, Self.roadClasses.contains(outcome.featureClass) {
+            return Classification(
+                featureClass: .roadArea, subclass: subclass, kind: .area, minimumBand: .detail, showsOnWatch: false)
+        }
         return Classification(
             featureClass: outcome.featureClass, subclass: subclass, kind: kind, minimumBand: outcome.band,
             showsOnWatch: outcome.watch)
@@ -88,6 +94,9 @@ public struct FeatureClassifier: Sendable {
         if let boundary = tags.value(forKey: "boundary"), boundary == "protected_area" || boundary == "national_park" { return true }
         return false
     }
+
+    /// The classes that are lines of the movement network; as areas they become `roadArea`.
+    private static let roadClasses: Set<FeatureClass> = [.roadMajor, .roadMinor, .path, .track, .pavement]
 
     /// The `footway` values that mark a footway as part of a street.
     private static let pavementKinds: Set<String> = ["sidewalk", "crossing", "traffic_island", "access_aisle"]
