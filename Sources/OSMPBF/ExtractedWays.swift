@@ -27,7 +27,7 @@ public struct ExtractedWays: RandomAccessCollection, Sendable {
     public var endIndex: Int { ids.count }
 
     public subscript(position: Int) -> OSMWay {
-        OSMWay(id: ids[position], nodeIDs: Array(nodeIDs(at: position)), tags: tags(at: position).dictionary)
+        OSMWay(id: ids[position], nodeIDs: Array(nodeIDs(at: position)), orderedTags: tags(at: position).orderedTags)
     }
 
     /// The node IDs along a way, in order.

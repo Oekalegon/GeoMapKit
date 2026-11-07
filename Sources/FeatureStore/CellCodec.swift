@@ -143,6 +143,21 @@ enum CellCodec {
         return BlockLayout(originLongitude: longitude, originLatitude: latitude, bands: bands)
     }
 
+    /// The number of features per class in a band, read from the class headers without decoding any feature.
+    static func featureCounts(data: Data, layout: BlockLayout, band: ZoomBand) throws -> [UInt8: Int] {
+        let range = layout.bands[Int(band.rawValue)]
+        guard !range.isEmpty else { return [:] }
+        var cursor = ByteCursor(data, range: range)
+        let classCount = try cursor.readCount(limit: 256)
+        var counts: [UInt8: Int] = [:]
+        for _ in 0..<classCount {
+            let classID = try cursor.readUInt8()
+            counts[classID] = try cursor.readCount(limit: cursor.remaining)
+            _ = try cursor.skip(try cursor.readCount(limit: cursor.remaining))
+        }
+        return counts
+    }
+
     /// Decodes the features of one band, optionally only those of the given classes.
     static func decodeBand(
         data: Data, layout: BlockLayout, band: ZoomBand, classes: Set<UInt8>?, stringCount: Int

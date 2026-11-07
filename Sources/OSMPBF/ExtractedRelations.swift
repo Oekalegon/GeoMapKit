@@ -42,7 +42,7 @@ public struct ExtractedRelations: RandomAccessCollection, Sendable {
             return OSMMember(type: type, id: memberIDs[index], role: role)
         }
         return ExtractedRelation(
-            relation: OSMRelation(id: ids[position], members: members, tags: tags(at: position).dictionary),
+            relation: OSMRelation(id: ids[position], members: members, orderedTags: tags(at: position).orderedTags),
             isComplete: complete[position]
         )
     }

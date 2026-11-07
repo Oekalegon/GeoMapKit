@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import GeoCore
+import PBFTestSupport
 @testable import OSMPBF
 
 @Suite("Extract accessors")
@@ -121,6 +122,9 @@ struct ExtractAccessorTests {
         #expect(tags[precomposed] == "v1")
         #expect(tags[decomposed] == "v2")
         #expect(Array(tags).count == 2)
+        // The element built on demand keeps both as well.
+        #expect(extract.nodes[0].orderedTags.count == 2)
+        #expect(extract.nodes[0].tagValue(forKey: precomposed) == "v1" && extract.nodes[0].tagValue(forKey: decomposed) == "v2")
     }
 
     @Test("Identical keys are all kept, in file order")

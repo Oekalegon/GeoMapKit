@@ -35,7 +35,7 @@ public struct ExtractedNodes: RandomAccessCollection, Sendable {
     public var endIndex: Int { ids.count }
 
     public subscript(position: Int) -> OSMNode {
-        OSMNode(id: ids[position], coordinate: coordinate(at: position), tags: tags(at: position).dictionary)
+        OSMNode(id: ids[position], coordinate: coordinate(at: position), orderedTags: tags(at: position).orderedTags)
     }
 
     /// The position of the coordinate of a node.

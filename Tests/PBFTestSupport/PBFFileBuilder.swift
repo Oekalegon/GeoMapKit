@@ -2,13 +2,15 @@ import Compression
 import Foundation
 
 /// Builds small PBF files for tests.
-struct PBFFileBuilder {
-    enum Compression { case raw, zlib }
+public struct PBFFileBuilder {
+    public init() {}
 
-    private(set) var file = Data()
+    public enum Compression { case raw, zlib }
+
+    public private(set) var file = Data()
 
     /// Appends one blob: `[4-byte header length][BlobHeader][Blob]`.
-    mutating func appendBlob(
+    public mutating func appendBlob(
         type: String, payload: Data, compression: Compression = .zlib,
         declaredRawSize: Int? = nil, extraBlobField: (field: Int, value: Data)? = nil
     ) {
@@ -25,7 +27,7 @@ struct PBFFileBuilder {
     }
 
     /// Appends a blob whose Blob message the caller has built.
-    mutating func appendRaw(type: String, blob: Data, declaredDataSize: Int? = nil) {
+    public mutating func appendRaw(type: String, blob: Data, declaredDataSize: Int? = nil) {
         var header = ProtobufWriter()
         header.string(1, type)
         header.int(3, Int64(declaredDataSize ?? blob.count))
@@ -36,7 +38,7 @@ struct PBFFileBuilder {
     }
 
     /// A zlib stream: header, raw deflate, big-endian Adler-32.
-    static func zlib(_ payload: Data) -> Data {
+    public static func zlib(_ payload: Data) -> Data {
         let source = [UInt8](payload)
         var destination = [UInt8](repeating: 0, count: source.count + 1024)
         let written = compression_encode_buffer(
@@ -50,7 +52,7 @@ struct PBFFileBuilder {
         return Data(out)
     }
 
-    static func adler32(_ bytes: [UInt8]) -> UInt32 {
+    public static func adler32(_ bytes: [UInt8]) -> UInt32 {
         var a: UInt32 = 1, b: UInt32 = 0
         for byte in bytes {
             a = (a + UInt32(byte)) % 65521
@@ -62,7 +64,7 @@ struct PBFFileBuilder {
     // MARK: Messages
 
     /// An `OSMHeader` payload.
-    static func headerPayload(
+    public static func headerPayload(
         required: [String] = ["OsmSchema-V0.6", "DenseNodes"], optional: [String] = [],
         bbox: (left: Int64, right: Int64, top: Int64, bottom: Int64)? = nil,
         program: String? = "GeoMapKitTests"
@@ -83,14 +85,14 @@ struct PBFFileBuilder {
     }
 
     /// A string table message.
-    static func stringTable(_ strings: [String]) -> Data {
+    public static func stringTable(_ strings: [String]) -> Data {
         var table = ProtobufWriter()
         strings.forEach { table.string(1, $0) }
         return table.data
     }
 
     /// A `DenseNodes` message. `tags[i]` are string-table index pairs for node `i`.
-    static func denseNodes(
+    public static func denseNodes(
         ids: [Int64], latitudes: [Int64], longitudes: [Int64], tags: [[(key: Int32, value: Int32)]]? = nil
     ) -> Data {
         var dense = ProtobufWriter()
@@ -108,7 +110,7 @@ struct PBFFileBuilder {
         return dense.data
     }
 
-    static func way(id: Int64, nodeIDs: [Int64], tags: [(key: UInt64, value: UInt64)]) -> Data {
+    public static func way(id: Int64, nodeIDs: [Int64], tags: [(key: UInt64, value: UInt64)]) -> Data {
         var way = ProtobufWriter()
         way.int(1, id)
         way.packed(2, tags.map(\.key))
@@ -117,7 +119,7 @@ struct PBFFileBuilder {
         return way.data
     }
 
-    static func relation(
+    public static func relation(
         id: Int64, members: [(id: Int64, role: Int32, type: UInt64)], tags: [(key: UInt64, value: UInt64)]
     ) -> Data {
         var relation = ProtobufWriter()
@@ -131,7 +133,7 @@ struct PBFFileBuilder {
     }
 
     /// A `PrimitiveBlock` with one group.
-    static func primitiveBlock(
+    public static func primitiveBlock(
         strings: [String], dense: Data? = nil, ways: [Data] = [], relations: [Data] = [],
         granularity: Int32? = nil, latitudeOffset: Int64? = nil, longitudeOffset: Int64? = nil
     ) -> Data {

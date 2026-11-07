@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import GeoCore
+import PBFTestSupport
 @testable import OSMPBF
 
 /// The expected content of the test file, in OSM's 1e-7 degree units.

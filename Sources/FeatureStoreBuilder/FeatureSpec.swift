@@ -1,0 +1,21 @@
+import FeatureStore
+import OSMPBF
+
+/// Everything the emitter needs to store one feature in all its bands and cells.
+struct FeatureSpec {
+    enum Geometry {
+        case point(PackedPoint)
+        /// Open lines; each is clipped separately and gets its own pieces.
+        case lines([[PackedPoint]])
+        /// Closed rings of one area; fill with the even-odd rule.
+        case rings([[PackedPoint]])
+    }
+
+    var classification: Classification
+    var objectType: StoredObjectType
+    var objectID: Int64
+    var tags: [OSMTag]
+    var geometry: Geometry
+    /// Flags added to every piece, for example `incomplete`.
+    var extraFlags: FeatureFlags = []
+}

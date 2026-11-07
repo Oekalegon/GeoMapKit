@@ -93,6 +93,54 @@ public struct FeatureStoreFile: Sendable {
         }
     }
 
+    // MARK: Statistics
+
+    /// Sizes and counts for measurements and reports.
+    public struct Statistics: Sendable, Equatable {
+        /// The total file size in bytes.
+        public var fileBytes: Int
+        /// The number of cells.
+        public var cellCount: Int
+        /// The number of strings in the string table.
+        public var stringCount: Int
+        /// The bytes of the string table (offsets and string bytes).
+        public var stringTableBytes: Int
+        /// The bytes of the relation table.
+        public var relationTableBytes: Int
+        /// The bytes of all cell blocks, including their headers.
+        public var cellBytes: Int
+        /// The bytes of the encoded features of each band.
+        public var bandBytes: [ZoomBand: Int]
+        /// The number of features of each band.
+        public var featureCounts: [ZoomBand: Int]
+        /// The number of features of each class in the detail band, which holds every feature.
+        public var detailFeaturesByClass: [UInt8: Int]
+    }
+
+    /// Walks the whole index and the class headers of every cell, without decoding features.
+    ///
+    /// - Throws: ``FeatureStoreError`` if the structure is damaged.
+    public func statistics() throws -> Statistics {
+        var bandBytes: [ZoomBand: Int] = [:]
+        var featureCounts: [ZoomBand: Int] = [:]
+        var detailByClass: [UInt8: Int] = [:]
+        for position in 0..<cellCount {
+            let block = try checkedBlock(try indexEntry(at: position))
+            let layout = try CellCodec.layout(of: data, block: block)
+            for band in ZoomBand.allCases {
+                bandBytes[band, default: 0] += layout.bands[Int(band.rawValue)].count
+                let counts = try CellCodec.featureCounts(data: data, layout: layout, band: band)
+                featureCounts[band, default: 0] += counts.values.reduce(0, +)
+                if band == .detail { for (classID, count) in counts { detailByClass[classID, default: 0] += count } }
+            }
+        }
+        return Statistics(
+            fileBytes: data.count, cellCount: cellCount, stringCount: stringCount,
+            stringTableBytes: header.range(of: .stringOffsets).count + header.range(of: .stringBytes).count,
+            relationTableBytes: header.range(of: .relations).count, cellBytes: header.range(of: .cells).count,
+            bandBytes: bandBytes, featureCounts: featureCounts, detailFeaturesByClass: detailByClass)
+    }
+
     // MARK: Strings
 
     /// The bytes of a string, or `nil` if the ID is out of range or the table is damaged.

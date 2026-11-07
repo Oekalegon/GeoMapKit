@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import GeoCore
+import PBFTestSupport
 @testable import OSMPBF
 
 /// A world with an area of interest (the box below) and objects around it:

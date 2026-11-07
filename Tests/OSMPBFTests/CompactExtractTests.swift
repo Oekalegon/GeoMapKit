@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import GeoCore
+import PBFTestSupport
 @testable import OSMPBF
 
 @Suite("StringInterner")

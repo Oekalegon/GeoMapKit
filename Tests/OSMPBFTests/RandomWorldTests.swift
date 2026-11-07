@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import GeoCore
+import PBFTestSupport
 @testable import OSMPBF
 
 /// A small deterministic random number generator, so a failing world can be reproduced from its seed.

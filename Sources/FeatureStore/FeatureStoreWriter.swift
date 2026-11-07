@@ -6,8 +6,8 @@ import GeoCore
 /// Usage: intern strings with ``intern(_:)`` and use the returned IDs in features
 /// and relations, add features per cell and band with ``add(_:band:cell:)``, then
 /// call ``data()`` or ``write(to:)``. At the end the strings are renumbered by how
-/// often they are used (common strings get one-byte IDs), and all IDs are
-/// remapped, so the IDs seen while building are provisional. The output is
+/// often they are used (common strings get one-byte IDs), strings that nothing uses are
+/// dropped, and all IDs are remapped, so the IDs seen while building are provisional. The output is
 /// deterministic: the same input in any order gives the same bytes.
 ///
 /// Strings are compared byte for byte, never with Swift `String` equality, so two
@@ -110,8 +110,9 @@ public struct FeatureStoreWriter: Sendable {
             for tag in relation.tags { count(tag.key); count(tag.value) }
             for member in relation.members { count(member.role) }
         }
-        let order = (0..<strings.count).sorted { uses[$0] != uses[$1] ? uses[$0] > uses[$1] : $0 < $1 }
-        var remap = [UInt32](repeating: 0, count: strings.count)
+        // Strings that nothing refers to are left out, so a filtered copy (for the Watch) carries no dead strings.
+        let order = (0..<strings.count).filter { uses[$0] > 0 }.sorted { uses[$0] != uses[$1] ? uses[$0] > uses[$1] : $0 < $1 }
+        var remap = [UInt32](repeating: .max, count: strings.count)
         for (newID, oldID) in order.enumerated() { remap[oldID] = UInt32(newID) }
 
         var file = ByteWriter()
@@ -125,7 +126,7 @@ public struct FeatureStoreWriter: Sendable {
             let origin = Self.origin(of: tile)
             var bands: [ZoomBand: [StoredFeature]] = [:]
             for (band, features) in cells[key] ?? [:] { bands[band] = features.map { remapped($0, remap) } }
-            blocks.append((key, try CellCodec.encode(originLongitude: origin.longitude, originLatitude: origin.latitude, bands: bands, stringCount: strings.count)))
+            blocks.append((key, try CellCodec.encode(originLongitude: origin.longitude, originLatitude: origin.latitude, bands: bands, stringCount: order.count)))
         }
         let indexStart = file.count
         let cellsStartOffset = indexStart + blocks.count * 24
