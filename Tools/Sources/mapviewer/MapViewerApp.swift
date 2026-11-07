@@ -1,12 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// A small Mac app to try `MapView` on a feature store file: `swift run mapviewer [file.gmk]`.
-///
-/// It is a test tool, not a product: it shows the map with pan (drag) and zoom (pinch, or the buttons), lets you pick
-/// the standard or Watch style or a JSON style file, and can shrink the view to a Watch screen size. Start it from
-/// the `Tools` package; it has no bundle, so it activates itself.
-/// The command line of the viewer: `[file.gmk] [--zoom Z] [--style standard|watch] [--watch-size] [--snapshot out.png]`.
+/// The command line of the viewer: `[file.gmk] [--zoom Z] [--style standard|watch] [--watch-size] [--pan EAST,SOUTH] [--snapshot out.png]`.
 ///
 /// `--snapshot` writes the window content to a PNG after the map has been drawn and quits, so the view can be
 /// checked without a screen recording permission.
@@ -65,6 +60,11 @@ final class ViewerAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
 
+/// A small Mac app to try `MapView` on a feature store file: `swift run mapviewer [file.gmk]`.
+///
+/// It is a test tool, not a product: it shows the map with pan (drag) and zoom (pinch, or the buttons), lets you pick
+/// the standard or Watch style or a JSON style file, and can shrink the view to a Watch screen size. Start it from
+/// the `Tools` package; it has no bundle, so it activates itself.
 @main
 enum MapViewerMain {
     @MainActor
