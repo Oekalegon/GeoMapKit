@@ -92,15 +92,15 @@ struct PrimitiveBlockDecoder {
         return strings[Int(index)]
     }
 
-    /// Builds a tag dictionary from parallel key and value index arrays.
-    func tags(keys: [UInt64], values: [UInt64]) throws -> [String: String] {
+    /// Builds the tag list from parallel key and value index arrays, in file order and byte for byte.
+    func tags(keys: [UInt64], values: [UInt64]) throws -> [OSMTag] {
         guard keys.count == values.count else {
             throw PBFError.inconsistentBlock("\(keys.count) tag keys but \(values.count) values")
         }
-        var tags: [String: String] = [:]
+        var tags: [OSMTag] = []
         tags.reserveCapacity(keys.count)
         for (key, value) in zip(keys, values) {
-            tags[try string(at: key)] = try string(at: value)
+            tags.append(OSMTag(key: try string(at: key), value: try string(at: value)))
         }
         return tags
     }

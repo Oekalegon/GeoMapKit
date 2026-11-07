@@ -10,9 +10,26 @@ public struct OSMWay: Hashable, Sendable {
     /// The node IDs along the way, in order.
     public let nodeIDs: [Int64]
 
-    /// All tags of the way. Nothing is dropped, except that keys differing only in Unicode
-    /// normalization collapse into one (see `architecture.md`, question 46).
-    public let tags: [String: String]
+    /// All tags of the way, with nothing dropped, ordered by the UTF-8 bytes of their keys.
+    ///
+    /// Identical keys, which OSM forbids, are all kept in file order. Keys that differ only in Unicode
+    /// normalization stay separate (see `architecture.md`, question 46).
+    public let orderedTags: [OSMTag]
+
+    /// The tags as a dictionary.
+    ///
+    /// A convenience only: it is lossy, because a `[String: String]` treats keys that differ only in Unicode
+    /// normalization as the same key, and a repeated key keeps its last value. Use ``orderedTags`` where
+    /// nothing may be lost.
+    ///
+    /// The dictionary is built on every access, so for a single lookup use ``tagValue(forKey:)``.
+    public var tags: [String: String] { OSMTag.dictionary(orderedTags) }
+
+    /// The value of a tag, compared byte for byte (UTF-8) so keys that differ only in Unicode normalization stay distinct.
+    ///
+    /// - Parameter key: The tag key.
+    /// - Returns: The value of the first tag with exactly this key, or `nil` if there is none.
+    public func tagValue(forKey key: String) -> String? { OSMTag.value(forKey: key, in: orderedTags) }
 
     /// Creates a way.
     ///
@@ -23,7 +40,19 @@ public struct OSMWay: Hashable, Sendable {
     public init(id: Int64, nodeIDs: [Int64], tags: [String: String]) {
         self.id = id
         self.nodeIDs = nodeIDs
-        self.tags = tags
+        self.orderedTags = OSMTag.sortedByKeyBytes(tags.map { OSMTag(key: $0.key, value: $0.value) })
+    }
+
+    /// Creates a way with an ordered tag list. The tags are put in key byte order; nothing is merged.
+    ///
+    /// - Parameters:
+    ///   - id: The OSM way ID.
+    ///   - nodeIDs: The node IDs along the way, in order.
+    ///   - orderedTags: The tags.
+    public init(id: Int64, nodeIDs: [Int64], orderedTags: [OSMTag]) {
+        self.id = id
+        self.nodeIDs = nodeIDs
+        self.orderedTags = OSMTag.sortedByKeyBytes(orderedTags)
     }
 
     /// Whether the first and last node are the same (a ring).

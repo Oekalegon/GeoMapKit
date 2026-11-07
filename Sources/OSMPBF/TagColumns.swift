@@ -5,11 +5,11 @@ struct TagColumns {
     var keys: [UInt32] = []
     var values: [UInt32] = []
 
-    /// Appends the tags of one object, sorted by key so the order is deterministic.
-    mutating func append(_ tags: [String: String], interner: inout StringInterner) throws {
-        for (key, value) in tags.sorted(by: { $0.key < $1.key }) {
-            keys.append(try interner.intern(key))
-            values.append(try interner.intern(value))
+    /// Appends the tags of one object, which are already in key byte order.
+    mutating func append(_ tags: [OSMTag], interner: inout StringInterner) throws {
+        for tag in tags {
+            keys.append(try interner.intern(tag.key))
+            values.append(try interner.intern(tag.value))
         }
         offsets.append(try CheckedOffset.make(keys.count))
     }

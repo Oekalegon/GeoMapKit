@@ -23,7 +23,7 @@ extension PrimitiveBlockDecoder {
         return OSMNode(
             id: id,
             coordinate: Coordinate(latitude: latitude(latitudeValue), longitude: longitude(longitudeValue)),
-            tags: try tags(keys: keys, values: values)
+            orderedTags: try tags(keys: keys, values: values)
         )
     }
 
@@ -59,7 +59,7 @@ extension PrimitiveBlockDecoder {
             latitudeValue = latitudeValue &+ latitudes[index]
             longitudeValue = longitudeValue &+ longitudes[index]
 
-            var tags: [String: String] = [:]
+            var tags: [OSMTag] = []
             if !keysValues.isEmpty {
                 while true {
                     guard cursor < keysValues.count else {
@@ -73,13 +73,13 @@ extension PrimitiveBlockDecoder {
                     }
                     let value = keysValues[cursor]
                     cursor += 1
-                    tags[try string(at: Int(key))] = try string(at: Int(value))
+                    tags.append(OSMTag(key: try string(at: Int(key)), value: try string(at: Int(value))))
                 }
             }
             nodes.append(OSMNode(
                 id: id,
                 coordinate: Coordinate(latitude: latitude(latitudeValue), longitude: longitude(longitudeValue)),
-                tags: tags
+                orderedTags: tags
             ))
         }
         guard keysValues.isEmpty || cursor == keysValues.count else {
