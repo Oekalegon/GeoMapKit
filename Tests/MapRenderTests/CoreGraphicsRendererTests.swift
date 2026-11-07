@@ -108,6 +108,19 @@ struct CoreGraphicsRendererTests {
         #expect(close(pixel(image, x: 50, y: Int((50 + half + extra + 3).rounded(.up))), to: MapStyle.standard.background))
     }
 
+    @Test func aRoadEndsFlatAtATunnelMouthAndRoundAtTheOtherEnd() throws {
+        let view = MapViewport(center: Coordinate(latitude: 47.1, longitude: 9.5), zoom: 16, width: 100, height: 100)
+        let line = SceneLine(
+            featureClass: .roadMinor, objectID: 1, points: [ScreenPoint(x: 30, y: 50), ScreenPoint(x: 70, y: 50)], flatEnd: true)
+        let scene = MapScene(
+            viewport: view, band: .detail, steps: [SceneStep(step: DrawStep(featureClass: .roadMinor, part: .body), lines: [line])], cellCount: 1)
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 1))
+        let fill = try #require(MapStyle.standard.style(for: .roadMinor)?.stroke?.color.value(atZoom: 16))
+        #expect(close(pixel(image, x: 29, y: 50), to: fill), "the start is round: a circle past the end of the line")
+        #expect(close(pixel(image, x: 71, y: 50), to: MapStyle.standard.background), "the end at the tunnel mouth is flat")
+        #expect(close(pixel(image, x: 69, y: 50), to: fill))
+    }
+
     @Test func aBridgeAndATunnelEndFlat() throws {
         let view = MapViewport(center: Coordinate(latitude: 47.1, longitude: 9.5), zoom: 16, width: 100, height: 100)
         func render(_ structure: Structure, _ part: DrawStep.Part...) throws -> (width: Int, height: Int, rgba: [UInt8]) {

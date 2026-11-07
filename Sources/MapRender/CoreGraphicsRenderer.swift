@@ -44,9 +44,10 @@ public struct CoreGraphicsRenderer: MapRenderer {
                     context.beginTransparencyLayer(auxiliaryInfo: nil)
                 }
                 context.setStrokeColor(MapColor(red: color.red, green: color.green, blue: color.blue).cgColor)
+                let opaque = MapColor(red: color.red, green: color.green, blue: color.blue)
                 for line in sceneStep.lines {
                     let width = stroke.width.resolved(atZoom: zoom, metresPerPoint: viewport.metresPerPoint, lanes: line.lanes)
-                    strokePath(line.points, width: width + 2 * extra, stroke: stroke, dashed: false, in: context)
+                    strokeLine(line, width: width + 2 * extra, stroke: stroke, dashed: false, color: opaque, in: context)
                 }
                 if translucent { context.endTransparencyLayer() }
                 context.restoreGState()
@@ -102,9 +103,10 @@ public struct CoreGraphicsRenderer: MapRenderer {
         }
         if let stroke = classStyle.stroke(for: step.step.structure) {
             context.setStrokeColor(stroke.color.value(atZoom: zoom).cgColor)
+            let color = stroke.color.value(atZoom: zoom)
             for line in step.lines {
                 let width = stroke.width.resolved(atZoom: zoom, metresPerPoint: viewport.metresPerPoint, lanes: line.lanes)
-                strokePath(line.points, width: width, stroke: stroke, dashed: true, in: context)
+                strokeLine(line, width: width, stroke: stroke, dashed: true, color: color, in: context)
             }
         }
         if let point = classStyle.point {
@@ -119,6 +121,27 @@ public struct CoreGraphicsRenderer: MapRenderer {
                     context.strokeEllipse(in: rect)
                 }
             }
+        }
+    }
+
+    /// Strokes a line. A line that ends flat at one end or both (where a bridge or a tunnel starts) is stroked with flat
+    /// caps, and the end that is not flat gets its round cap drawn as a circle, so a junction with another road stays filled.
+    /// A dashed line has its own dash caps and is only given flat ends.
+    private func strokeLine(
+        _ line: SceneLine, width: Double, stroke: StrokeStyle, dashed: Bool, color: MapColor, in context: CGContext
+    ) {
+        guard line.flatStart || line.flatEnd, stroke.cap == .round else {
+            strokePath(line.points, width: width, stroke: stroke, dashed: dashed, in: context)
+            return
+        }
+        var flat = stroke
+        flat.cap = .butt
+        strokePath(line.points, width: width, stroke: flat, dashed: dashed, in: context)
+        guard !(dashed && !stroke.dash.isEmpty), width > 0 else { return }
+        context.setFillColor(color.cgColor)
+        for (isFlat, end) in [(line.flatStart, line.points.first), (line.flatEnd, line.points.last)] where !isFlat {
+            guard let end else { continue }
+            context.fillEllipse(in: CGRect(x: end.x - width / 2, y: end.y - width / 2, width: width, height: width))
         }
     }
 
