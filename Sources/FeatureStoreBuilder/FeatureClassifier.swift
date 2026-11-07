@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 5
+    public static let version: UInt16 = 6
 
     /// Creates a classifier.
     public init() {}
@@ -37,6 +37,11 @@ public struct FeatureClassifier: Sendable {
         {
             outcome = ClassifierOutcome(featureClass: .pavement, subclass: outcome.subclass, band: .detail, watch: false)
         }
+        // A coastline is a coastline whatever else the way says: islands are often also `place=islet` or `place=island`, and
+        // the rule table would take the first key it knows and leave the island without its shore line.
+        if tags.value(forKey: "natural") == "coastline", shape != .node {
+            outcome = ClassifierOutcome(featureClass: .coastline, subclass: 1, band: .overview, watch: false)
+        }
         var subclass = outcome.subclass
         switch outcome.featureClass {
         case .track:
@@ -48,13 +53,15 @@ public struct FeatureClassifier: Sendable {
         default:
             break
         }
-        let kind: FeatureKind
+        var kind: FeatureKind
         switch shape {
         case .node: kind = .point
         case .openWay: kind = .line
         case .multipolygon: kind = .area
         case .closedWay: kind = Self.isArea(tags) ? .area : .line
         }
+        // The shore of an island is a closed line even when the way also carries an area key such as `place`.
+        if outcome.featureClass == .coastline, shape != .node { kind = .line }
         return Classification(
             featureClass: outcome.featureClass, subclass: subclass, kind: kind, minimumBand: outcome.band,
             showsOnWatch: outcome.watch)

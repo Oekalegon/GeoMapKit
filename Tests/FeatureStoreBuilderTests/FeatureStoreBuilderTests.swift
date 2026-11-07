@@ -319,4 +319,20 @@ struct FeatureStoreBuilderTests {
         #expect(result.report.seaOpenEnds > 0 && result.report.seaPolygons == 0 && result.report.featuresByClass[.sea] == nil)
         #expect(result.report.featuresByClass[.coastline] == 1)
     }
+
+    @Test("An island mapped as a multipolygon of a coastline way gets its shore as a line, not as an area")
+    func coastlineRelation() throws {
+        var world = SyntheticWorld()
+        let ring = world.rectangle(first: 1, 1.2, 1.2, 1.8, 1.8)
+        world.way(10, ring, [("natural", "coastline")])
+        world.relation(20, [(10, "outer", 1)], [("type", "multipolygon")])
+        let extract = try world.extract()
+        let result = try FeatureStoreBuilder().build(from: extract)
+        let file = try FeatureStoreFile(data: result.data)
+        let all = try file.cells().flatMap { try file.features(in: $0, band: .detail) }
+        let shore = all.filter { $0.classID == FeatureClass.coastline.rawValue }
+        #expect(!shore.isEmpty && shore.allSatisfy { $0.kind == .line }, "the shore is a line")
+        #expect(shore.allSatisfy { $0.objectType == .relation && $0.objectID == 20 })
+        #expect(!all.contains { $0.classID == FeatureClass.coastline.rawValue && $0.kind == .area })
+    }
 }
