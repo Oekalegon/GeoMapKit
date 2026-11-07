@@ -281,6 +281,19 @@ struct FeatureClassifierTests {
             "a border in the sea is not a land border")
     }
 
+    @Test("A coastline is a coastline line even when the way is also a place or another area")
+    func coastlineWins() {
+        for extra in [["place": "islet"], ["place": "island", "name": "Holmen"], ["natural": "coastline", "landuse": "grass"]] {
+            var tags = extra
+            tags["natural"] = "coastline"
+            let result = classify(tags, .closedWay)
+            #expect(result.featureClass == .coastline && result.kind == .line, "\(extra)")
+            #expect(result.minimumBand == .overview && !result.showsOnWatch)
+        }
+        #expect(classify(["natural": "coastline"], .openWay).kind == .line)
+        #expect(classify(["place": "islet"], .closedWay).featureClass == .place, "an islet without a coastline tag stays a place")
+    }
+
     @Test("A sidewalk or a crossing is pavement; other footways stay paths")
     func pavement() {
         for kind in ["sidewalk", "crossing", "traffic_island", "access_aisle"] {
@@ -304,9 +317,9 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
-    @Test("The rule table version is 5, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 6, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 5)
+        #expect(FeatureClassifier.version == 6)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
