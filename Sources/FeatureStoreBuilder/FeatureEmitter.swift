@@ -95,9 +95,29 @@ struct FeatureEmitter {
                 }
             }
             for cell in partsByCell.keys.sorted(by: { ($0.y, $0.x) < ($1.y, $1.x) }) {
-                guard let parts = partsByCell[cell] else { continue }
+                guard let parts = Self.withoutCancellingSquares(partsByCell[cell] ?? [], in: cell), !parts.isEmpty else { continue }
                 try writer.add(feature(kind: .area, flags: [], offset: 0, parts: parts), band: band, cell: cell)
             }
         }
+    }
+
+    /// Removes the pairs of parts that are the whole cell square.
+    ///
+    /// The fill rule is even-odd, so an outer ring that covers the cell and a hole that covers it too cancel: the cell
+    /// holds nothing of the area. Storing both would cost bytes in every band, and the renderer would fill the square
+    /// twice and leave a faint seam along the cell border where anti-aliasing does not cancel exactly. This happens for
+    /// every cell inside an island in the sea. An odd number leaves one square.
+    static func withoutCancellingSquares(_ parts: [GeometryPart], in cell: TileID) -> [GeometryPart]? {
+        let rect = CellRect(tile: cell)
+        let corners: Set<PackedPoint> = [
+            PackedPoint(longitude: rect.west, latitude: rect.north), PackedPoint(longitude: rect.east, latitude: rect.north),
+            PackedPoint(longitude: rect.east, latitude: rect.south), PackedPoint(longitude: rect.west, latitude: rect.south),
+        ]
+        func isSquare(_ part: GeometryPart) -> Bool { part.points.count == 5 && Set(part.points) == corners }
+        let squares = parts.filter(isSquare)
+        guard squares.count >= 2 else { return parts }
+        var result = parts.filter { !isSquare($0) }
+        if squares.count % 2 == 1 { result.append(squares[0]) }
+        return result
     }
 }

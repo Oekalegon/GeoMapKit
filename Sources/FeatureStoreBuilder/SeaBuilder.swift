@@ -23,6 +23,34 @@ enum SeaBuilder {
         var islands = 0
         /// Coastline pieces that start or end inside the box, or that do not close into a polygon; when there are any, no sea is built.
         var openEnds = 0
+        /// Whether any coastline lies in the box. When none does, the box is all land or all sea, which the lines cannot say.
+        var touchesBox = false
+    }
+
+    /// Coastlines prepared once, so that building the sea for many boxes (every cell) does not repeat the preparation.
+    struct Lines {
+        struct Ring {
+            let line: LineClipper.PreparedLine
+            let west: Int32, east: Int32, south: Int32, north: Int32
+            /// Twice the signed area: positive for a counter-clockwise ring (an island).
+            let area: Int64
+        }
+        let chains: [LineClipper.PreparedLine]
+        let rings: [Ring]
+
+        init(rings: [[PackedPoint]], chains: [[PackedPoint]]) {
+            self.chains = chains.map(LineClipper.PreparedLine.init)
+            self.rings = rings.compactMap { ring in
+                let line = LineClipper.PreparedLine(ring)
+                guard line.points.count >= 4, let first = line.points.first else { return nil }
+                var west = first.longitude, east = first.longitude, south = first.latitude, north = first.latitude
+                for point in line.points {
+                    west = min(west, point.longitude); east = max(east, point.longitude)
+                    south = min(south, point.latitude); north = max(north, point.latitude)
+                }
+                return Ring(line: line, west: west, east: east, south: south, north: north, area: SeaBuilder.signedArea(line.points))
+            }
+        }
     }
 
     /// - Parameters:
@@ -30,17 +58,24 @@ enum SeaBuilder {
     ///   - chains: Coastlines that are not closed.
     ///   - box: The block of cells the store covers.
     static func build(rings: [[PackedPoint]], chains: [[PackedPoint]], box: CellRect) -> Result {
+        build(lines: Lines(rings: rings, chains: chains), box: box)
+    }
+
+    /// Builds the sea in a box from prepared coastlines; see ``build(rings:chains:box:)``.
+    static func build(lines: Lines, box: CellRect) -> Result {
         var result = Result()
         var pieces: [[PackedPoint]] = []
         var islands: [[PackedPoint]] = []
         var seaRings: [[PackedPoint]] = []
 
-        for chain in chains { pieces.append(contentsOf: clipped(chain, to: box)) }
-        for ring in rings {
-            if ring.allSatisfy(box.contains) {
-                if signedArea(ring) > 0 { islands.append(ring) } else if signedArea(ring) < 0 { seaRings.append(ring) }
+        for chain in lines.chains { pieces.append(contentsOf: LineClipper.clip(chain, to: box).map(\.points)) }
+        for ring in lines.rings {
+            // A ring far from the box has nothing in it; one wholly inside is an island or a lake; one across the border is cut.
+            if ring.east < box.west || ring.west > box.east || ring.north < box.south || ring.south > box.north { continue }
+            if ring.west >= box.west && ring.east <= box.east && ring.south >= box.south && ring.north <= box.north {
+                if ring.area > 0 { islands.append(ring.line.points) } else if ring.area < 0 { seaRings.append(ring.line.points) }
             } else {
-                var parts = clipped(ring, to: box)
+                var parts = LineClipper.clip(ring.line, to: box).map(\.points)
                 // A ring that starts inside the box is cut in two at its start: the last part continues into the first.
                 if parts.count > 1, let first = parts.first, let last = parts.last, !onBorder(first[0], box) {
                     parts[0] = last + first.dropFirst()
@@ -50,6 +85,7 @@ enum SeaBuilder {
             }
         }
 
+        result.touchesBox = !pieces.isEmpty || !islands.isEmpty || !seaRings.isEmpty
         result.openEnds = pieces.filter { piece in
             guard let first = piece.first, let last = piece.last else { return true }
             return !onBorder(first, box) || !onBorder(last, box)
@@ -80,13 +116,53 @@ enum SeaBuilder {
 
     // MARK: Pieces
 
-    /// The parts of a polyline inside the box.
-    private static func clipped(_ line: [PackedPoint], to box: CellRect) -> [[PackedPoint]] {
-        LineClipper.clip(line, to: box).map(\.points)
-    }
-
     private static func onBorder(_ point: PackedPoint, _ box: CellRect) -> Bool {
         point.longitude == box.west || point.longitude == box.east || point.latitude == box.south || point.latitude == box.north
+    }
+
+    // MARK: One cell
+
+    /// The sea inside one cell, as parts to store.
+    ///
+    /// The sea is built again for every cell from the coastline pieces in it, so a part is a real polygon bounded by
+    /// coastline and cell border. Storing the whole sea ring cut to the cell, plus the islands as holes, would make
+    /// parts that share edges along the cell border; the renderer then leaves a faint seam there where anti-aliasing
+    /// does not cancel.
+    ///
+    /// - Parameters:
+    ///   - cell: The cell.
+    ///   - lines: The coastlines.
+    ///   - sea: The sea of the whole block (``build(lines:box:)``), which says whether a cell with no coastline in it is
+    ///     sea or land.
+    static func parts(in cell: CellRect, lines: Lines, sea: [[PackedPoint]]) -> [GeometryPart] {
+        let result = build(lines: lines, box: cell)
+        var rings = result.rings
+        if rings.isEmpty && !result.touchesBox {
+            let centre = PackedPoint(
+                longitude: Int32((Int64(cell.west) + Int64(cell.east)) / 2), latitude: Int32((Int64(cell.south) + Int64(cell.north)) / 2))
+            if contains(sea, centre) { rings = [boxRing(cell)] }
+        }
+        return rings.map { ring in GeometryPart(points: ring, artificialEdges: artificialRuns(of: ring, in: cell)) }
+    }
+
+    /// The runs of edges that lie along the cell border (both ends on the same border line).
+    private static func artificialRuns(of ring: [PackedPoint], in cell: CellRect) -> [Range<Int>] {
+        func onSameBorder(_ a: PackedPoint, _ b: PackedPoint) -> Bool {
+            (a.longitude == cell.west && b.longitude == cell.west) || (a.longitude == cell.east && b.longitude == cell.east)
+                || (a.latitude == cell.south && b.latitude == cell.south) || (a.latitude == cell.north && b.latitude == cell.north)
+        }
+        var runs: [Range<Int>] = []
+        var start: Int?
+        for index in 0..<(ring.count - 1) {
+            if onSameBorder(ring[index], ring[index + 1]) {
+                if start == nil { start = index }
+            } else if let begin = start {
+                runs.append(begin..<index)
+                start = nil
+            }
+        }
+        if let begin = start { runs.append(begin..<(ring.count - 1)) }
+        return runs
     }
 
     // MARK: Walking the border
@@ -149,7 +225,7 @@ enum SeaBuilder {
         return (polygons, unclosed)
     }
 
-    private static func boxRing(_ box: CellRect) -> [PackedPoint] {
+    static func boxRing(_ box: CellRect) -> [PackedPoint] {
         let northWest = PackedPoint(longitude: box.west, latitude: box.north)
         return [
             northWest, PackedPoint(longitude: box.east, latitude: box.north), PackedPoint(longitude: box.east, latitude: box.south),
@@ -160,7 +236,7 @@ enum SeaBuilder {
     // MARK: Geometry
 
     /// Twice the signed area in longitude and latitude (east and north as positive): positive for a counter-clockwise ring.
-    private static func signedArea(_ ring: [PackedPoint]) -> Int64 {
+    static func signedArea(_ ring: [PackedPoint]) -> Int64 {
         guard let origin = ring.first, ring.count >= 4 else { return 0 }
         var sum: Int64 = 0
         for index in 1..<(ring.count - 1) {
