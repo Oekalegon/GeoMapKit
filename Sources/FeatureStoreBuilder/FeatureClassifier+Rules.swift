@@ -56,6 +56,21 @@ extension FeatureClassifier {
             make(.railway, .overview, watch: true, [("rail", 1), ("light_rail", 2), ("narrow_gauge", 3), ("funicular", 4)]),
             make(.railway, .detail, watch: true, [("tram", 5)]))))
 
+        // Landmarks that a runner navigates by (rule table version 2).
+        rules.append(ClassifierRule("power", merged(
+            make(.powerLine, .mid, watch: true, [("line", 1), ("minor_line", 2), ("cable", 3)]),
+            make(.powerLine, .detail, watch: true, [("tower", 4)]))))
+        rules.append(ClassifierRule("aerialway", merged(
+            make(.aerialway, .mid, watch: true,
+                [("cable_car", 1), ("gondola", 2), ("chair_lift", 3), ("mixed_lift", 4), ("drag_lift", 5), ("t-bar", 6),
+                 ("j-bar", 7), ("platter", 8), ("rope_tow", 9), ("magic_carpet", 10), ("zip_line", 11), ("goods", 12)]),
+            make(.aerialway, .detail, watch: true, [("station", 20)]))))
+        // After `highway`, so a ski trail that is also a hiking path stays a path.
+        rules.append(ClassifierRule("piste:type", make(.piste, .mid, watch: true,
+            [("downhill", 1), ("nordic", 2), ("skitour", 3), ("sled", 4), ("hike", 5), ("sleigh", 6), ("snow_park", 7),
+             ("ice_skate", 8), ("snowshoe", 9), ("ski_jump", 10), ("playground", 11), ("connection", 12)])))
+        rules.append(ClassifierRule("piste:type", any: one(.piste, .mid, watch: true)))
+
         // Water, forest, boundaries.
         rules.append(ClassifierRule("waterway", merged(
             make(.waterLine, .overview, watch: true, [("river", 1), ("canal", 2)]),
@@ -66,6 +81,7 @@ extension FeatureClassifier {
         rules.append(ClassifierRule("landuse", make(.waterArea, .overview, watch: true, [("reservoir", 3), ("basin", 4)])))
         rules.append(ClassifierRule("natural", make(.forest, .overview, watch: true, [("wood", 1)])))
         rules.append(ClassifierRule("landuse", make(.forest, .overview, watch: true, [("forest", 2)])))
+        rules.append(ClassifierRule("natural", make(.tree, .detail, watch: false, [("tree", 1), ("tree_row", 2)])))
         rules.append(ClassifierRule("boundary", make(.boundary, .overview, watch: false,
             [("administrative", 1), ("protected_area", 2), ("national_park", 3)])))
 
@@ -81,9 +97,23 @@ extension FeatureClassifier {
         rules.append(ClassifierRule("landuse", make(.landuseUrban, .mid, watch: false,
             [("residential", 1), ("industrial", 2), ("commercial", 3), ("retail", 4), ("construction", 5), ("military", 6)])))
 
-        // Buildings, then other points of interest.
+        // Buildings, then barriers, stops and road details, then other points of interest.
         rules.append(ClassifierRule("building", any: one(.building, .detail, watch: false)))
         rules.append(ClassifierRule("building:part", any: one(.building, .detail, watch: false)))
+        rules.append(ClassifierRule("barrier", make(.barrier, .detail, watch: false,
+            [("fence", 1), ("wall", 2), ("gate", 3), ("hedge", 4), ("retaining_wall", 5), ("bollard", 6), ("cattle_grid", 7),
+             ("stile", 8), ("kissing_gate", 9), ("lift_gate", 10), ("city_wall", 11), ("guard_rail", 12)])))
+        rules.append(ClassifierRule("barrier", any: one(.barrier, .detail, watch: false)))
+        rules.append(ClassifierRule("public_transport", make(.transportStop, .detail, watch: false,
+            [("stop_position", 1), ("platform", 2), ("station", 3), ("stop_area", 4)])))
+        rules.append(ClassifierRule("public_transport", any: one(.transportStop, .detail, watch: false)))
+        rules.append(ClassifierRule("highway", make(.transportStop, .detail, watch: false, [("bus_stop", 8)])))
+        rules.append(ClassifierRule("railway", make(.transportStop, .detail, watch: false,
+            [("station", 5), ("halt", 6), ("tram_stop", 7)])))
+        rules.append(ClassifierRule("highway", make(.roadPoint, .detail, watch: false,
+            [("crossing", 1), ("traffic_signals", 2), ("stop", 3), ("give_way", 4), ("street_lamp", 5), ("turning_circle", 6),
+             ("mini_roundabout", 7), ("motorway_junction", 8), ("milestone", 9), ("passing_place", 10), ("speed_camera", 11),
+             ("elevator", 12), ("turning_loop", 13)])))
         for (index, key) in ["amenity", "shop", "tourism", "historic", "leisure", "man_made", "emergency"].enumerated() {
             rules.append(ClassifierRule(key, any: one(.poi, .detail, watch: false, sub: UInt8(index + 1))))
         }

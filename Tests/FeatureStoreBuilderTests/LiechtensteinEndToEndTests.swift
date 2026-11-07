@@ -228,7 +228,7 @@ struct LiechtensteinEndToEndTests {
         try watch.file.verify()
         #expect(watch.file.bands == [.mid, .detail])
         #expect(watch.result.data.count < full.result.data.count * 6 / 10)
-        let allowed = Set([FeatureClass.path, .track, .roadMajor, .roadMinor, .railway, .waterLine, .waterArea, .forest, .landcover, .peak, .place, .poiAnchor].map(\.rawValue))
+        let allowed = Set([FeatureClass.path, .track, .roadMajor, .roadMinor, .railway, .waterLine, .waterArea, .forest, .landcover, .peak, .place, .poiAnchor, .powerLine, .piste, .aerialway].map(\.rawValue))
         for cell in try watch.file.cells() {
             for band in [ZoomBand.mid, .detail] {
                 for feature in try watch.file.features(in: cell, band: band) {
@@ -240,7 +240,7 @@ struct LiechtensteinEndToEndTests {
         // saddles), places (only city, town, village), anchors (not toilets, viewpoints) and waterways (not ditches
         // and drains) are in the profile in part, so they have fewer.
         let fullStats = try full.file.statistics(), watchStats = try watch.file.statistics()
-        let whole = [FeatureClass.path, .track, .roadMajor, .roadMinor, .railway, .waterArea, .forest, .landcover]
+        let whole = [FeatureClass.path, .track, .roadMajor, .roadMinor, .railway, .waterArea, .forest, .landcover, .powerLine, .piste, .aerialway]
         for featureClass in whole {
             #expect(watchStats.detailFeaturesByClass[featureClass.rawValue] == fullStats.detailFeaturesByClass[featureClass.rawValue], "\(featureClass)")
         }
