@@ -35,9 +35,24 @@ struct ViewerOptions {
 }
 
 /// Makes the executable a regular app with a window, since it has no bundle to say so.
+///
+/// The window is made by hand (an `NSWindow` hosting the SwiftUI view) rather than with a SwiftUI `App`: a SwiftUI
+/// scene is created before the activation policy of an unbundled executable can be set, and then no window appears.
+@MainActor
 final class ViewerAppDelegate: NSObject, NSApplicationDelegate {
+    private var window: NSWindow?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        let options = ViewerOptions(arguments: Array(CommandLine.arguments.dropFirst()))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.title = "GeoMapKit Viewer"
+        window.contentViewController = NSHostingController(rootView: ViewerView(options: options))
+        window.setContentSize(NSSize(width: 900, height: 700))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        self.window = window
         NSApp.activate()
     }
 
@@ -45,12 +60,13 @@ final class ViewerAppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct MapViewerApp: App {
-    @NSApplicationDelegateAdaptor(ViewerAppDelegate.self) private var delegate
-
-    var body: some Scene {
-        WindowGroup("GeoMapKit Viewer") {
-            ViewerView(options: ViewerOptions(arguments: Array(CommandLine.arguments.dropFirst())))
-        }
+enum MapViewerMain {
+    @MainActor
+    static func main() {
+        let application = NSApplication.shared
+        application.setActivationPolicy(.regular)
+        let delegate = ViewerAppDelegate()
+        application.delegate = delegate
+        application.run()
     }
 }
