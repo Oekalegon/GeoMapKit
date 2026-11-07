@@ -110,3 +110,44 @@ struct ProfileArgumentTests {
         #expect(throws: ToolError.self) { try ProfileArgument.parse("") }
     }
 }
+
+@Suite("RenderArgument")
+struct RenderArgumentTests {
+    private func parse(
+        center: String? = "47.14,9.52", zoom: String? = "15", size: String? = nil, scale: String? = nil,
+        style: String? = nil, output: String? = "out.png"
+    ) throws -> RenderRequest {
+        try RenderArgument.parse(center: center, zoom: zoom, size: size, scale: scale, style: style, output: output)
+    }
+
+    @Test("Defaults: 800x600 points, scale 2, standard style")
+    func defaults() throws {
+        let request = try parse()
+        #expect(request.width == 800 && request.height == 600 && request.scale == 2 && request.style == .standard)
+        #expect(request.center == Coordinate(latitude: 47.14, longitude: 9.52) && request.zoom == 15)
+    }
+
+    @Test("Reads size, scale and style")
+    func options() throws {
+        let request = try parse(zoom: "13.5", size: "320X240", scale: "3", style: "watch")
+        #expect(request.width == 320 && request.height == 240 && request.scale == 3 && request.style == .watch && request.zoom == 13.5)
+    }
+
+    @Test("Rejects missing and invalid values")
+    func invalid() {
+        #expect(throws: ToolError.self) { try parse(center: nil) }
+        #expect(throws: ToolError.self) { try parse(center: "47") }
+        #expect(throws: ToolError.self) { try parse(center: "95,9") }
+        #expect(throws: ToolError.self) { try parse(zoom: nil) }
+        #expect(throws: ToolError.self) { try parse(zoom: "25") }
+        #expect(throws: ToolError.self) { try parse(zoom: "nan") }
+        #expect(throws: ToolError.self) { try parse(size: "800") }
+        #expect(throws: ToolError.self) { try parse(size: "8x600") }
+        #expect(throws: ToolError.self) { try parse(size: "800x5000") }
+        #expect(throws: ToolError.self) { try parse(scale: "0.5") }
+        #expect(throws: ToolError.self) { try parse(scale: "5") }
+        #expect(throws: ToolError.self) { try parse(style: "dark") }
+        #expect(throws: ToolError.self) { try parse(output: nil) }
+        #expect(throws: ToolError.self) { try parse(output: "") }
+    }
+}

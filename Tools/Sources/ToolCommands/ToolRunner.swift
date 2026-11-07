@@ -2,6 +2,8 @@ import Foundation
 import FeatureStore
 import FeatureStoreBuilder
 import GeoCore
+import MapRender
+import MapStyle
 import OSMPBF
 import ToolSupport
 
@@ -108,6 +110,49 @@ public enum ToolRunner {
             peakFootprint: ProcessMemory.peakFootprintBytes(), peakResident: ProcessMemory.peakResidentBytes()
         )
         return (extract, report)
+    }
+
+    /// Draws a map from a feature store file into a PNG.
+    ///
+    /// - Parameters:
+    ///   - store: The `.gmk` file.
+    ///   - request: Centre, zoom, size, scale, style and output path.
+    /// - Returns: What was drawn and how long it took.
+    /// - Throws: ``ToolError`` for unreadable files or bad output paths, and the store or render errors.
+    public static func render(store: URL, request: RenderRequest) throws -> RenderReport {
+        let output = URL(fileURLWithPath: request.output)
+        try checkWritable(output)
+        let file: FeatureStoreFile
+        do {
+            file = try FeatureStoreFile(contentsOf: store)
+        } catch {
+            throw ToolError("Cannot read \(store.path): \(error)")
+        }
+        let style: MapStyle = request.style == .watch ? .watch : .standard
+        let viewport = MapViewport(
+            center: request.center, zoom: request.zoom, width: Double(request.width), height: Double(request.height))
+
+        let clock = ContinuousClock()
+        var started = clock.now
+        let scene = try MapSceneBuilder(file: file, style: style).scene(for: viewport)
+        let sceneTime = clock.now - started
+
+        started = clock.now
+        let png = try CoreGraphicsRenderer().pngData(for: scene, style: style, scale: request.scale)
+        let drawTime = clock.now - started
+        do {
+            try png.write(to: output, options: .atomic)
+        } catch {
+            throw ToolError("Cannot write \(output.path): \(error.localizedDescription)")
+        }
+        let featureCount = scene.steps.filter { $0.step.part == .body }.reduce(0) {
+            $0 + $1.lines.count + $1.areas.count + $1.points.count
+        }
+        return RenderReport(
+            outputName: output.lastPathComponent, pixelWidth: Int((Double(request.width) * request.scale).rounded()),
+            pixelHeight: Int((Double(request.height) * request.scale).rounded()), pngBytes: png.count, band: scene.band,
+            cellCount: scene.cellCount, stepCount: scene.steps.count, featureCount: featureCount, sceneTime: sceneTime,
+            drawTime: drawTime)
     }
 
     private static func checkWritable(_ output: URL) throws {

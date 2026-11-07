@@ -51,6 +51,16 @@ public enum ReportFormatter {
         return lines.joined(separator: "\n")
     }
 
+    /// The text for a render.
+    public static func text(for report: RenderReport) -> String {
+        [
+            "Render",
+            "  image: \(report.outputName), \(report.pixelWidth) x \(report.pixelHeight) px, \(Formatting.bytes(Int64(report.pngBytes)))",
+            "  scene: \(Formatting.seconds(report.sceneTime)), \(report.band) band, \(report.cellCount) cells, \(Formatting.count(report.featureCount)) features in \(report.stepCount) steps",
+            "  draw:  \(Formatting.seconds(report.drawTime)) (draw and PNG encode)",
+        ].joined(separator: "\n")
+    }
+
     /// The text for a build: the cut, then the file and what went into it.
     public static func text(for report: BuildCommandReport) -> String {
         let statistics = report.statistics

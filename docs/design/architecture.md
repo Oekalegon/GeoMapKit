@@ -181,7 +181,16 @@ The Watch column is a flag per rule; the Watch profile is applied when the phone
 - **`MapSceneBuilder` / `MapScene`:** reads only the cells in view, one band and the classes the style shows (the others are skipped by length in the file), joins line pieces, projects, culls and returns the steps in `MapStyle.drawSteps` order. It is rebuilt when position or zoom changes; on the Watch the app decides when (see Battery). The scene is plain `Sendable` data, so tests need no graphics context and any backend can draw it.
 - **Joining clipped lines (decided):** pieces of one way join when the first has `continuesAfter`, the second `continuesBefore`, and the end vertices are within 3 units of 1e-7 degree (about 3 cm; each cell rounds its own clip point). The order is the stored `offsetAlongLine`. A line that leaves and re-enters a cell stays two lines. Areas are not joined: each cell's piece is filled on its own, and its outline leaves out the artificial (cell-border) edges, merging a run that wraps around the ring start.
 - **Tags read for drawing:** `lanes` (detail band only) and `name`. Nothing else.
-- **Not in this part:** drawing, labels and their placement, the `MapRenderer` protocol, bridges and tunnels, a cache of decoded cells.
+- **Not yet:** bridges and tunnels, a cache of decoded cells, labels along lines.
+
+### Drawing backend (decided, `MapRender`, part 2)
+
+- **`MapRenderer`** is a protocol with one method, `draw(_:style:into:)`, and an associated `Target`. Everything that depends on data or style (decoding, band choice, joining, culling, ordering, label placement) happens before it, so another backend (Metal, SwiftUI `Canvas`) only has to turn steps into drawing calls. `CoreGraphicsRenderer` (target `CGContext`, screen points with the origin top-left and y down) is the first backend and the only one that uses Core Graphics and Core Text; it builds for all four platforms. A SwiftUI `Canvas` view can call it with the `CGContext` it gets from `Canvas`.
+- **Drawing order:** background, then each `SceneStep` in order (casings first, so outlines of crossing roads join), then labels on top.
+- **Areas:** filled with the even-odd rule (holes stay empty); an incomplete area is not filled, only outlined. A fill without outline gets a 0.5 pt hairline in the fill colour when it is opaque, which closes the seams between the pieces of neighbouring cells. The outline strokes real edges only.
+- **Labels (decided for v1):** horizontal text only (Core Text, Helvetica, halo as a wider stroke under the fill). `LabelCandidates` collects named points and areas that have a label style; `LabelPlacer` places them greedily by priority (then OSM ID, so the result is deterministic): points try right, left, above and below the symbol, areas are centred. A label must lie wholly in the view and may not overlap another label or any point symbol; otherwise it is dropped. One label per feature (the largest piece of an area wins). Lines are not labelled yet.
+- **PNG:** `pngData(for:style:scale:)` draws into an sRGB bitmap (scale 1 to 8, at most 16,384 px per side) and encodes with ImageIO. `geomapkit render` in `Tools/` uses it, and prints scene and draw times.
+- **Measured (Mac, release, Liechtenstein 10 km store):** a 900 × 700 pt view at zoom 16 reads one cell and draws 3,003 features in 18 steps: scene 0.01 s, draw and PNG encode 0.09 s at scale 2. At zoom 13.5 (mid band, 12 cells, 6,225 features) 0.01 s and 0.07 s. These are Mac figures; the Watch cost is not measured.
 
 ## 5. Corridor (Watch data)
 
