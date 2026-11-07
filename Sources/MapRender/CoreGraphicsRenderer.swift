@@ -212,7 +212,9 @@ public struct CoreGraphicsRenderer: MapRenderer {
                 points, cumulative: cumulative, from: max(bounds[index - 1] - overlap, 0), to: min(bounds[index] + overlap, total))
             strokePath(piece, width: widthAt((bounds[index - 1] + bounds[index]) / 2), stroke: flat, dashed: false, in: context)
         }
-        // The ends that are not flat get their round cap as a circle of the width they have.
+        // The ends that are not flat get their round cap as a circle of the width they have, if the line has round caps:
+        // a bridge or a tunnel has flat ends (see `ClassStyle.stroke(for:)`) and so gets none.
+        guard stroke.cap == .round else { return }
         context.setFillColor(color.cgColor)
         for (isFlat, end, distance) in [(line.flatStart, points[0], 0.0), (line.flatEnd, points[points.count - 1], total)] where !isFlat {
             let diameter = widthAt(distance)
