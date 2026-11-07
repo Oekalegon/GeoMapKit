@@ -22,12 +22,18 @@ public struct RenderReport: Equatable, Sendable {
     public let sceneTime: Duration
     /// The time to draw and encode.
     public let drawTime: Duration
+    /// The rule table version the store was built with, if it is older than the one this tool builds with; otherwise `nil`.
+    public let outdatedRuleTable: Int?
+    /// The rule table version this tool builds with, set when ``outdatedRuleTable`` is.
+    public let currentRuleTable: Int?
 
     /// Creates a report.
     public init(
         outputName: String, pixelWidth: Int, pixelHeight: Int, pngBytes: Int, band: ZoomBand, cellCount: Int, stepCount: Int,
-        featureCount: Int, sceneTime: Duration, drawTime: Duration
+        featureCount: Int, sceneTime: Duration, drawTime: Duration, outdatedRuleTable: Int? = nil, currentRuleTable: Int? = nil
     ) {
+        self.outdatedRuleTable = outdatedRuleTable
+        self.currentRuleTable = currentRuleTable
         self.outputName = outputName
         self.pixelWidth = pixelWidth
         self.pixelHeight = pixelHeight

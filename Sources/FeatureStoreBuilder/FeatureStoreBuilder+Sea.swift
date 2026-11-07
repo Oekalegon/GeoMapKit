@@ -22,10 +22,12 @@ extension FeatureStoreBuilder {
             ways.append(CoastlineJoiner.Way(
                 id: extract.ways.ids[position], nodeIDs: Array(extract.ways.nodeIDs(at: position)), points: runs[0]))
         }
+        emitter.report.coastlineWays = ways.count
+        // A coastline that could not be used at all must still be reported: the build has no sea, and the user should know why.
+        if ways.isEmpty && broken { emitter.report.seaOpenEnds = 1 }
         guard !ways.isEmpty, let block = CellRect(columns: columns, rows: rows, zoom: Self.zoom) else { return }
         let joined = CoastlineJoiner.join(ways)
         let whole = SeaBuilder.build(rings: joined.rings, chains: joined.chains, box: block)
-        emitter.report.coastlineWays = ways.count
         emitter.report.seaOpenEnds = whole.openEnds + (broken ? 1 : 0)
         guard !broken, !whole.rings.isEmpty else { return }
         emitter.report.seaPolygons = whole.seaPolygons

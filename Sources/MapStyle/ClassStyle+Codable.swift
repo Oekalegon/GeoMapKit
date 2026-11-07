@@ -13,11 +13,18 @@ extension ClassStyle: Codable {
             }
             range = bounds[0]...bounds[1]
         }
+        // The draw order puts bridges 100 layers above their class and tunnels on layer 15 (see `MapStyle.drawSteps(atZoom:)`),
+        // so class layers stay in 0 through 99.
+        let layer = try c.decode(Int.self, forKey: .layer)
+        let casingLayer = try c.decodeIfPresent(Int.self, forKey: .casingLayer)
+        for (value, key) in [(layer, Keys.layer), (casingLayer ?? 0, Keys.casingLayer)] where !(0...99).contains(value) {
+            throw DecodingError.dataCorruptedError(
+                forKey: key, in: c, debugDescription: "a layer must be between 0 and 99, not \(value)")
+        }
         self.init(
             fill: try c.decodeIfPresent(FillStyle.self, forKey: .fill), stroke: try c.decodeIfPresent(StrokeStyle.self, forKey: .stroke),
             point: try c.decodeIfPresent(PointStyle.self, forKey: .point), label: try c.decodeIfPresent(LabelStyle.self, forKey: .label),
-            visibleZoom: range, layer: try c.decode(Int.self, forKey: .layer),
-            casingLayer: try c.decodeIfPresent(Int.self, forKey: .casingLayer),
+            visibleZoom: range, layer: layer, casingLayer: casingLayer,
             bridge: try c.decodeIfPresent(BridgeStyle.self, forKey: .bridge),
             tunnel: try c.decodeIfPresent(TunnelStyle.self, forKey: .tunnel))
     }

@@ -329,6 +329,31 @@ struct RenderCommandTests {
         #expect(ReportFormatter.text(for: report).contains("400 x 300 px"))
     }
 
+    @Test("rendering a store built with an older rule table prints a note; a current store does not")
+    func staleStoreNote() throws {
+        let store = temporary("old.gmk"), png = temporary("o.png")
+        defer { for url in [store, png] { try? FileManager.default.removeItem(at: url) } }
+        var writer = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 47.0, west: 9.4, north: 47.3, east: 9.7), attribution: "© OpenStreetMap contributors, ODbL",
+            classifierVersion: 1)
+        let cell = try #require(TileID.containing(Coordinate(latitude: 47.1, longitude: 9.5), zoom: 13))
+        let line = GeometryPart(points: [PackedPoint(longitude: 95_000_000, latitude: 471_000_000), PackedPoint(longitude: 95_010_000, latitude: 471_000_000)])
+        try writer.add(
+            StoredFeature(classID: FeatureClass.roadMajor.rawValue, kind: .line, objectType: .way, objectID: 1, parts: [line]), band: .detail, cell: cell)
+        try writer.data().write(to: store)
+        let request = RenderRequest(center: Coordinate(latitude: 47.1, longitude: 9.5), zoom: 15, width: 100, height: 100, scale: 1, style: .standard, output: png.path)
+        let report = try ToolRunner.render(store: store, request: request)
+        #expect(report.outdatedRuleTable == 1 && report.currentRuleTable == Int(FeatureClassifier.version))
+        #expect(ReportFormatter.text(for: report).contains("note: the store was built with rule table 1"))
+        // A current store has no note.
+        let input = temporary("in.osm.pbf"), current = temporary("c.gmk")
+        defer { for url in [input, current] { try? FileManager.default.removeItem(at: url) } }
+        try TinyPBF.make().write(to: input)
+        _ = try ToolRunner.build(url: input, area: BoundingBox(south: 47, west: 9, north: 48, east: 10), output: current, profile: .full)
+        let fresh = try ToolRunner.render(store: current, request: request)
+        #expect(fresh.outdatedRuleTable == nil && !ReportFormatter.text(for: fresh).contains("note:"))
+    }
+
     @Test("an exported style can be edited and used for rendering; a bad style file names its path")
     func customStyleFile() throws {
         let input = temporary("in.osm.pbf"), store = temporary("s.gmk"), png = temporary("m.png"), json = temporary("style.json")

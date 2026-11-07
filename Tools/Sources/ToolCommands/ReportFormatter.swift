@@ -54,12 +54,17 @@ public enum ReportFormatter {
 
     /// The text for a render.
     public static func text(for report: RenderReport) -> String {
-        [
+        var lines = [
             "Render",
             "  image: \(report.outputName), \(report.pixelWidth) x \(report.pixelHeight) px, \(Formatting.bytes(Int64(report.pngBytes)))",
             "  scene: \(Formatting.seconds(report.sceneTime)), \(report.band) band, \(report.cellCount) cells, \(Formatting.count(report.featureCount)) features in \(report.stepCount) steps",
             "  draw:  \(Formatting.seconds(report.drawTime)) (draw and PNG encode)",
-        ].joined(separator: "\n")
+        ]
+        if let built = report.outdatedRuleTable, let current = report.currentRuleTable {
+            lines.append("")
+            lines.append("note: the store was built with rule table \(built), this tool builds with \(current). Classes added since (for example the sea, sidewalks and road areas) are missing; rebuild the store to get them.")
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// The text for an inspection.
