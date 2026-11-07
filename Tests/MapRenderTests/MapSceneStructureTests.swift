@@ -91,4 +91,34 @@ struct MapSceneStructureTests {
         let groundRoad = try #require(steps.firstIndex { $0.featureClass == .roadMajor && $0.structure == .ground })
         #expect(tunnel < groundRoad)
     }
+
+    @Test("A road that ends at a vertex in the middle of another road ends flat; one that ends in the open stays round")
+    func tJunctions() throws {
+        var writer = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 47.0, west: 9.4, north: 47.3, east: 9.7), attribution: "© OpenStreetMap contributors, ODbL")
+        let cell = try #require(TileID.containing(Coordinate(latitude: 47.1, longitude: 9.5), zoom: 13))
+        let west = Int32((cell.northWest.longitude * 1e7).rounded())
+        func point(_ x: Int32, _ y: Int32) -> PackedPoint { PackedPoint(longitude: west + x, latitude: latitude + y) }
+        func add(_ id: Int64, _ featureClass: FeatureClass, _ points: [PackedPoint]) throws {
+            try writer.add(
+                StoredFeature(classID: featureClass.rawValue, subclass: 4, kind: .line, objectType: .way, objectID: id, parts: [GeometryPart(points: points)]),
+                band: .detail, cell: cell)
+        }
+        // A through road with a vertex at (6000, 0); a side road that ends there; a road that ends in the open;
+        // a road whose end is the end of the through road (no T); and a path that ends at the vertex (paths keep round ends).
+        try add(1, .roadMajor, [point(2_000, 0), point(6_000, 0), point(10_000, 0)])
+        try add(2, .roadMinor, [point(6_000, 3_000), point(6_000, 0)])
+        try add(3, .roadMinor, [point(2_000, 3_000), point(4_000, 3_000)])
+        try add(4, .roadMinor, [point(10_000, 0), point(12_000, 2_000)])
+        try add(5, .path, [point(6_000, -3_000), point(6_000, 0)])
+        let file = try FeatureStoreFile(data: try writer.data())
+        let centre = Coordinate(latitude: Double(latitude) / 1e7, longitude: Double(west + 6_000) / 1e7)
+        let scene = try MapSceneBuilder(file: file, style: .standard).scene(for: MapViewport(center: centre, zoom: 16, width: 400, height: 400))
+        func line(_ id: Int64) throws -> SceneLine { try #require(scene.steps.flatMap(\.lines).first { $0.objectID == id }) }
+        #expect(try line(2).flatEnd && !line(2).flatStart, "the side road ends flat at the through road")
+        #expect(try !line(1).flatStart && !line(1).flatEnd, "the through road is not changed")
+        #expect(try !line(3).flatStart && !line(3).flatEnd, "a road that ends in the open keeps its round end")
+        #expect(try !line(4).flatStart && !line(4).flatEnd, "the end of a road at the end of another is not a T junction")
+        #expect(try !line(5).flatStart && !line(5).flatEnd, "paths keep their round ends")
+    }
 }
