@@ -14,12 +14,16 @@ public struct MapScene: Sendable, Equatable {
     public var steps: [SceneStep]
     /// The number of store cells that were read.
     public var cellCount: Int
+    /// The data credit of the store file (for OpenStreetMap data, the ODbL notice). A backend draws it in a corner
+    /// of the map; it must not be dropped from anything derived from OSM data.
+    public var attribution: String
 
     /// Creates a scene from its parts.
-    public init(viewport: MapViewport, band: ZoomBand, steps: [SceneStep], cellCount: Int) {
+    public init(viewport: MapViewport, band: ZoomBand, steps: [SceneStep], cellCount: Int, attribution: String = "") {
         self.viewport = viewport
         self.band = band
         self.steps = steps
         self.cellCount = cellCount
+        self.attribution = attribution
     }
 }

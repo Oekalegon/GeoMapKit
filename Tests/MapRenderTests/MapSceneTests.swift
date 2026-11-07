@@ -146,6 +146,10 @@ struct MapSceneTests {
         #expect(scene.steps.isEmpty)
     }
 
+    @Test func sceneCarriesTheFilesAttribution() throws {
+        #expect(try World().scene().attribution == "© OpenStreetMap contributors, ODbL")
+    }
+
     @Test func sameInputGivesTheSameScene() throws {
         let world = try World()
         #expect(try world.scene() == world.scene())

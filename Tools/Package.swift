@@ -24,6 +24,8 @@ let package = Package(
                 .product(name: "GeoCore", package: "GeoMapKit"),
                 .product(name: "FeatureStore", package: "GeoMapKit"),
                 .product(name: "FeatureStoreBuilder", package: "GeoMapKit"),
+                .product(name: "MapStyle", package: "GeoMapKit"),
+                .product(name: "MapRender", package: "GeoMapKit"),
             ]
         ),
         // A thin executable: parse the command line, call ToolCommands, print.
