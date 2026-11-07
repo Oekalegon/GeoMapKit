@@ -101,6 +101,7 @@ extension FeatureClassifier {
             [("residential", 1), ("industrial", 2), ("commercial", 3), ("retail", 4), ("construction", 5), ("military", 6),
              ("farmyard", 7), ("garages", 8), ("railway", 9)])))
         rules.append(ClassifierRule("natural", make(.cliff, .mid, watch: false, [("cliff", 1)])))
+        rules.append(ClassifierRule("natural", make(.coastline, .overview, watch: false, [("coastline", 1)])))
 
         // Buildings, then barriers, stops and road details, then other points of interest.
         rules.append(ClassifierRule("building", any: one(.building, .detail, watch: false)))

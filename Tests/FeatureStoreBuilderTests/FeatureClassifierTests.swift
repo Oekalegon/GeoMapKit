@@ -77,6 +77,7 @@ struct FeatureClassifierTests {
         Case(tags: ["landuse": "farmyard"], featureClass: .landuseUrban, band: .mid, watch: false),
         Case(tags: ["natural": "shrubbery"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["natural": "cliff"], featureClass: .cliff, band: .mid, watch: false),
+        Case(tags: ["natural": "coastline"], featureClass: .coastline, band: .overview, watch: false),
         Case(tags: ["place": "farm"], featureClass: .place, band: .detail, watch: false),
         Case(tags: ["place": "neighbourhood"], featureClass: .place, band: .detail, watch: false),
         Case(tags: ["railway": "subway"], featureClass: .railway, band: .detail, watch: false),
@@ -153,7 +154,8 @@ struct FeatureClassifierTests {
 
     @Test("Every class is reachable, and class IDs are unique")
     func allClassesCovered() {
-        let produced = Set(Self.table.map(\.featureClass))
+        // `sea` is made by the builder from the coastlines; no tags give it.
+        let produced = Set(Self.table.map(\.featureClass)).union([.sea])
         #expect(produced == Set(FeatureClass.allCases))
         #expect(Set(FeatureClass.allCases.map(\.rawValue)).count == FeatureClass.allCases.count)
     }
@@ -302,12 +304,12 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
-    @Test("The rule table version is 4, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 5, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 4)
+        #expect(FeatureClassifier.version == 5)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
-        #expect(FeatureClass.allCases.count == 28)
+        #expect(FeatureClass.allCases.count == 30)
     }
 }

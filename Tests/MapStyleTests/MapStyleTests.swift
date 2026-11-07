@@ -40,7 +40,7 @@ struct MapStyleTests {
     @Test func watchStyleDrawsOnlyTheWatchProfile() {
         let watchClasses: Set<FeatureClass> = [
             .peak, .place, .poiAnchor, .path, .track, .roadMajor, .roadMinor, .railway, .waterLine, .waterArea,
-            .forest, .landcover, .powerLine, .aerialway, .piste,
+            .forest, .landcover, .powerLine, .aerialway, .piste, .sea,
         ]
         #expect(Set(MapStyle.watch.classes.keys) == watchClasses)
     }

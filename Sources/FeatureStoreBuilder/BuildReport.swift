@@ -35,6 +35,15 @@ public struct BuildReport: Sendable, Equatable {
     public var featuresSkippedByProfile = 0
     /// Pieces (detail band) that fall in cells outside the written area, and were dropped.
     public var piecesOutsideCells = 0
+    /// Coastline ways found in the extract.
+    public var coastlineWays = 0
+    /// Sea polygons built from the coastlines.
+    public var seaPolygons = 0
+    /// Islands cut out of the sea.
+    public var seaIslands = 0
+    /// Coastline ends inside the stored area, or coastline ways with a node missing: when this is not zero no sea was
+    /// built, because the side the water is on could not be followed to the border of the area.
+    public var seaOpenEnds = 0
     /// The number of stored features per class (each feature counted once, not per band or piece).
     public var featuresByClass: [FeatureClass: Int] = [:]
 

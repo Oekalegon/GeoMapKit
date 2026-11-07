@@ -273,6 +273,32 @@ struct BuildCommandTests {
         #expect(text.contains("warning: the file covers less than the box you asked for (west by 0.092, north by 0.100 degrees)."))
         #expect(text.contains("Widen the box"))
     }
+
+    @Test("the report says when no sea was built, and counts the sea when there is one")
+    func seaLines() throws {
+        let cut = CutReport(
+            fileName: "x.osm.pbf", fileSize: 1, area: BoundingBox(south: 47, west: 9, north: 48, east: 10), passes: [],
+            totalTime: .zero,
+            summary: ExtractSummary(
+                nodes: 1, taggedNodes: 0, nodesOutsideBox: 0, ways: 1, wayVertices: 1,
+                relations: 0, incompleteRelations: 0, missingNodes: 0, memoryBytes: 1_000),
+            peakFootprint: nil, peakResident: 1)
+        let statistics = FeatureStoreFile.Statistics(
+            fileBytes: 1, cellCount: 4, stringCount: 0, stringTableBytes: 0, relationTableBytes: 0, cellBytes: 1,
+            bandBytes: [:], featureCounts: [:], detailFeaturesByClass: [:])
+        func text(_ counters: BuildReport) -> String {
+            ReportFormatter.text(for: BuildCommandReport(
+                profile: .full, outputName: "o.gmk", cut: cut, buildTime: .zero, requestedArea: cut.area,
+                storedExtent: cut.area, statistics: statistics, report: counters))
+        }
+        var built = BuildReport()
+        built.coastlineWays = 12; built.seaPolygons = 2; built.seaIslands = 5
+        #expect(text(built).contains("12 coastline ways, 2 sea polygons, 5 islands"))
+        #expect(!text(built).contains("no sea was drawn"))
+        var broken = BuildReport()
+        broken.coastlineWays = 3; broken.seaOpenEnds = 2
+        #expect(text(broken).contains("warning: no sea was drawn. 2 coastline end(s)"))
+    }
 }
 
 @Suite("Render command")

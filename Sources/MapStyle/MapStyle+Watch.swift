@@ -11,6 +11,7 @@ extension MapStyle {
         classes: [
             .landcover: ClassStyle(fill: FillStyle(color: .color(0x1E2A18)), visibleZoom: 12...24, layer: 10),
             .forest: ClassStyle(fill: FillStyle(color: .color(0x203A22)), visibleZoom: 12...24, layer: 11),
+            .sea: ClassStyle(fill: FillStyle(color: .color(0x123A5C)), visibleZoom: 12...24, layer: 9),
             .waterArea: ClassStyle(fill: FillStyle(color: .color(0x123A5C)), visibleZoom: 12...24, layer: 12),
             .waterLine: ClassStyle(
                 stroke: .line(0x3D8FD1, ZoomValue((12, 1.2), (17, 3))), visibleZoom: 12...24, layer: 20),

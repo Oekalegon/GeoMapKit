@@ -60,4 +60,8 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     case pavement = 26
     /// Cliffs (`natural=cliff`). Added in rule table version 4.
     case cliff = 27
+    /// The sea: a polygon the builder makes from the coastlines, with the islands as holes. Added in rule table version 5.
+    case sea = 28
+    /// A coastline (`natural=coastline`), land on the left. Added in rule table version 5.
+    case coastline = 29
 }
