@@ -16,7 +16,7 @@ public struct CoreGraphicsRenderer: MapRenderer {
 
     /// Draws the scene into a context in screen points (origin top-left, y down).
     ///
-    /// The data credit of the scene is drawn last, in the bottom-right corner, as the style's ``MapStyle/attribution`` asks.
+    /// The data credit of the scene is drawn last, in the bottom-right corner, as the style's `MapStyle.attribution` asks.
     public func draw(_ scene: MapScene, style: MapStyle, into context: CGContext) {
         let viewport = scene.viewport
         let zoom = viewport.zoom
@@ -49,7 +49,7 @@ public struct CoreGraphicsRenderer: MapRenderer {
 
     /// Draws the data credit in the bottom-right corner, small, on a light halo so it stays readable.
     ///
-    /// What is drawn follows the style's ``AttributionDisplay``: the full credit, a short mark, or nothing.
+    /// What is drawn follows the style's `AttributionDisplay`: the full credit, a short mark, or nothing.
     private func drawAttribution(_ scene: MapScene, display: AttributionDisplay, in context: CGContext) {
         guard let text = display.text(for: scene.attribution) else { return }
         let fontSize = 8.0
