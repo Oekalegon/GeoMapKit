@@ -10,7 +10,8 @@ public struct OSMRelation: Hashable, Sendable {
     /// The members, in file order.
     public let members: [OSMMember]
 
-    /// All tags of the relation. Nothing is dropped.
+    /// All tags of the relation. Nothing is dropped, except that keys differing only in Unicode
+    /// normalization collapse into one (see `architecture.md`, question 46).
     public let tags: [String: String]
 
     /// Creates a relation.

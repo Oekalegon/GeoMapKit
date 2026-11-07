@@ -337,7 +337,7 @@ struct SelectiveDecodingTests {
 @Suite("NodeTable")
 struct NodeTableTests {
     private func table(_ ids: [Int64]) -> NodeTable {
-        NodeTable(sorting: ids.map { NodeRecord(id: $0, latitude: 0, longitude: 0) })
+        NodeTable(sorting: ids.map { NodeRecord(id: $0, latitude: 0, longitude: 0, tagStart: 0, tagCount: 0) })
     }
 
     @Test("An empty table contains nothing")

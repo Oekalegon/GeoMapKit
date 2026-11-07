@@ -1,10 +1,3 @@
-/// A node position kept compactly while a file is scanned.
-struct NodeRecord {
-    var id: Int64
-    var latitude: Double
-    var longitude: Double
-}
-
 /// A table of node records sorted by ID, searched by binary search.
 ///
 /// Eight-byte IDs in a sorted array use far less memory than a hash set, and
@@ -13,9 +6,17 @@ struct NodeTable {
     private(set) var records: [NodeRecord]
 
     /// Creates a table, sorting the records by ID.
-    init(sorting records: [NodeRecord]) {
+    init(sorting records: consuming [NodeRecord]) {
+        // `consuming` lets the caller hand the array over, so sorting happens in place
+        // instead of on a second copy of what can be a hundred megabytes.
+        records.sort { $0.id < $1.id }
         self.records = records
-        self.records.sort { $0.id < $1.id }
+    }
+
+    /// Hands over the records and leaves the table empty, so the caller holds the only reference.
+    mutating func takeRecords() -> [NodeRecord] {
+        defer { records = [] }
+        return records
     }
 
     /// The index of the record with the given ID, or `nil`.

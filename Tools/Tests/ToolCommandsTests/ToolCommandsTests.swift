@@ -87,7 +87,7 @@ struct ReportFormatterTests {
             totalTime: .milliseconds(500),
             summary: ExtractSummary(
                 nodes: 358_095, taggedNodes: 20_152, nodesOutsideBox: 5_150, ways: 42_120, wayVertices: 455_641,
-                relations: 1_030, incompleteRelations: 184, missingNodes: 0
+                relations: 1_030, incompleteRelations: 184, missingNodes: 0, memoryBytes: 20_500_000
             ),
             peakFootprint: nil, peakResident: 52_000_000
         )
@@ -98,5 +98,6 @@ struct ReportFormatterTests {
         #expect(text.contains("358,095 (20,152 tagged, 5,150 outside the box)"))
         #expect(text.contains("1,030 (184 incomplete)"))
         #expect(text.contains("footprint n/a"))
+        #expect(text.contains("extract in memory: 20.5 MB"))
     }
 }

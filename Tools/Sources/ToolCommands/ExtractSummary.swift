@@ -11,10 +11,12 @@ public struct ExtractSummary: Equatable, Sendable {
     public let relations: Int
     public let incompleteRelations: Int
     public let missingNodes: Int
+    /// The memory used by the extract's data, in bytes.
+    public let memoryBytes: Int
 
     public init(
         nodes: Int, taggedNodes: Int, nodesOutsideBox: Int, ways: Int, wayVertices: Int,
-        relations: Int, incompleteRelations: Int, missingNodes: Int
+        relations: Int, incompleteRelations: Int, missingNodes: Int, memoryBytes: Int
     ) {
         self.nodes = nodes
         self.taggedNodes = taggedNodes
@@ -24,19 +26,22 @@ public struct ExtractSummary: Equatable, Sendable {
         self.relations = relations
         self.incompleteRelations = incompleteRelations
         self.missingNodes = missingNodes
+        self.memoryBytes = memoryBytes
     }
 
-    /// Summarizes an extract.
+    /// Summarizes an extract, reading the columns without building any object.
     public init(_ extract: OSMExtract) {
+        let nodes = extract.nodes
         self.init(
-            nodes: extract.nodes.count,
-            taggedNodes: extract.nodes.filter { !$0.tags.isEmpty }.count,
-            nodesOutsideBox: extract.nodes.filter { !extract.boundingBox.contains($0.coordinate) }.count,
+            nodes: nodes.count,
+            taggedNodes: nodes.indices.count(where: { nodes.hasTags(at: $0) }),
+            nodesOutsideBox: nodes.indices.count(where: { !extract.boundingBox.contains(nodes.coordinate(at: $0)) }),
             ways: extract.ways.count,
-            wayVertices: extract.ways.reduce(0) { $0 + $1.nodeIDs.count },
+            wayVertices: extract.ways.vertexCount,
             relations: extract.relations.count,
-            incompleteRelations: extract.relations.filter { !$0.isComplete }.count,
-            missingNodes: extract.missingNodeCount
+            incompleteRelations: extract.relations.indices.count(where: { !extract.relations.isComplete(at: $0) }),
+            missingNodes: extract.missingNodeCount,
+            memoryBytes: extract.memoryBytes
         )
     }
 }
