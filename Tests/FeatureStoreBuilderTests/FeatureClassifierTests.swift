@@ -291,7 +291,7 @@ struct FeatureClassifierTests {
         #expect(classify(["highway": "path", "footway": "sidewalk"], .openWay).featureClass == .path)
         // A bridge keeps its bit, and the footway value stays in the subclass.
         let bridge = classify(["highway": "footway", "footway": "sidewalk", "bridge": "yes"], .openWay)
-        #expect(bridge.featureClass == .pavement && bridge.subclass == 2)
+        #expect(bridge.featureClass == .pavement && bridge.subclass == (2 | SubclassBits.bridge))
     }
 
     @Test("A shop with an address is a point of interest; only the address alone is an address")

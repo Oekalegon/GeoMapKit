@@ -42,7 +42,7 @@ public struct FeatureClassifier: Sendable {
         case .track:
             subclass = Self.trackGrade(tags.value(forKey: "tracktype"))
             fallthrough
-        case .path, .roadMajor, .roadMinor, .railway, .waterLine:
+        case .path, .pavement, .roadMajor, .roadMinor, .railway, .waterLine:
             if Self.isSet(tags.value(forKey: "bridge")) { subclass |= SubclassBits.bridge }
             if Self.isSet(tags.value(forKey: "tunnel")) { subclass |= SubclassBits.tunnel }
         default:
