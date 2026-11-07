@@ -75,8 +75,9 @@ struct MapStyleTests {
         let bridge = try #require(road.stroke(for: .bridge))
         #expect(bridge.casing == road.bridge?.casing && bridge.casing != ground.casing)
         #expect(bridge.color == ground.color && bridge.dash == ground.dash)
+        #expect(ground.cap == .round && bridge.cap == .butt, "a bridge has flat ends, so its casing thickens only the sides")
         let tunnel = try #require(road.stroke(for: .tunnel))
-        #expect(tunnel.casing == nil)
+        #expect(tunnel.casing == nil && tunnel.cap == .butt, "a road leaves a tunnel with a flat end")
         #expect(tunnel.color.value(atZoom: 16).alpha == ground.color.value(atZoom: 16).alpha * 0.5)
         #expect(tunnel.dash == [5, 3])
         // A railway tunnel keeps the dash of the railway when the style gives none of its own.
@@ -86,6 +87,13 @@ struct MapStyleTests {
         #expect(plain.stroke(for: .tunnel)?.dash == [4, 4])
         #expect(ClassStyle(layer: 1, bridge: nil).stroke(for: .bridge) == nil)
         #expect(TunnelStyle(opacity: 7).opacity == 1 && TunnelStyle(opacity: -1).opacity == 0)
+    }
+
+    @Test func railwaysAreSolidLinesAndRailTunnelsAreDashed() throws {
+        let rail = try #require(MapStyle.standard.style(for: .railway))
+        #expect(rail.stroke?.dash.isEmpty == true, "a railway is a solid line")
+        #expect(rail.stroke(for: .tunnel)?.dash == [2, 3], "a railway tunnel is dashed, so it still stands out")
+        #expect(MapStyle.watch.style(for: .railway)?.stroke?.dash.isEmpty == true)
     }
 
     @Test func aSubclassByteTellsTheStructure() {

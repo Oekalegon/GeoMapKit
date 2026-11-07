@@ -121,6 +121,23 @@ struct CoreGraphicsRendererTests {
         #expect(close(pixel(image, x: 69, y: 50), to: fill))
     }
 
+    @Test func aBridgeAndATunnelEndFlat() throws {
+        let view = MapViewport(center: Coordinate(latitude: 47.1, longitude: 9.5), zoom: 16, width: 100, height: 100)
+        func render(_ structure: Structure, _ part: DrawStep.Part...) throws -> (width: Int, height: Int, rgba: [UInt8]) {
+            let line = SceneLine(
+                featureClass: .roadMinor, objectID: 1, points: [ScreenPoint(x: 30, y: 50), ScreenPoint(x: 70, y: 50)], structure: structure)
+            let steps = part.map { SceneStep(step: DrawStep(featureClass: .roadMinor, part: $0, structure: structure), lines: [line]) }
+            return try pixels(of: CoreGraphicsRenderer().pngData(for: MapScene(viewport: view, band: .detail, steps: steps, cellCount: 1), style: .standard, scale: 1))
+        }
+        // Past the end of the line the background shows: no round cap on the deck or on its casing.
+        let bridge = try render(.bridge, .casing, .body)
+        #expect(close(pixel(bridge, x: 40, y: 50), to: try #require(MapStyle.standard.style(for: .roadMinor)?.stroke?.color.value(atZoom: 16))))
+        #expect(close(pixel(bridge, x: 27, y: 50), to: MapStyle.standard.background), "no cap beyond the start of the bridge")
+        #expect(close(pixel(bridge, x: 73, y: 50), to: MapStyle.standard.background), "no cap beyond the end of the bridge")
+        let tunnel = try render(.tunnel, .body)
+        #expect(close(pixel(tunnel, x: 27, y: 50), to: MapStyle.standard.background), "a road leaves a tunnel with a flat end")
+    }
+
     @Test func sceneIsNotFlippedVertically() throws {
         let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene(), style: .standard, scale: 1))
         let water = try #require(MapStyle.standard.style(for: .waterArea)?.fill?.color.value(atZoom: 16))
