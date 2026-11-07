@@ -18,13 +18,20 @@ public struct SceneLine: Sendable, Equatable {
     public var name: String?
     /// Whether the line is on the ground, a bridge or a tunnel, as the subclass byte of the feature says.
     public var structure: Structure
+    /// The line starts where a bridge or a tunnel starts or ends, so the renderer ends it flat there: a road that comes
+    /// out of a tunnel mouth should not start with a round cap.
+    public var flatStart: Bool
+    /// The line ends where a bridge or a tunnel starts or ends; see ``flatStart``.
+    public var flatEnd: Bool
 
     /// Creates a line.
     public init(
         featureClass: FeatureClass, objectID: Int64, points: [ScreenPoint], lanes: Int? = nil, name: String? = nil,
-        structure: Structure = .ground
+        structure: Structure = .ground, flatStart: Bool = false, flatEnd: Bool = false
     ) {
         self.structure = structure
+        self.flatStart = flatStart
+        self.flatEnd = flatEnd
         self.featureClass = featureClass
         self.objectID = objectID
         self.points = points

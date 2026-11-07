@@ -75,16 +75,29 @@ public struct MapSceneBuilder: Sendable {
             }
         }
 
-        var lines: [FeatureClass: [SceneLine]] = [:]
+        var joined: [(key: LineKey, info: (lanes: Int?, name: String?, structure: Structure), polyline: [PackedPoint])] = []
+        // The ends of the lines that are drawn as bridges or tunnels: the lines on the ground that end there end flat.
+        var structureEnds = Set<PackedPoint>()
         for (key, pieces) in linePieces {
             let info = lineInfo[key] ?? (nil, nil, .ground)
+            let drawn = style.style(for: key.featureClass)?.drawnStructure(for: info.structure) ?? .ground
             for polyline in LineJoiner.join(pieces) {
-                let screen = polyline.map(viewport.screenPoint(for:))
-                guard let bounds = ScreenBounds(of: screen), bounds.intersects(visible) else { continue }
-                lines[key.featureClass, default: []].append(SceneLine(
-                    featureClass: key.featureClass, objectID: key.objectID, points: screen, lanes: info.lanes, name: info.name,
-                    structure: info.structure))
+                joined.append((key, info, polyline))
+                if drawn != .ground, let first = polyline.first, let last = polyline.last {
+                    structureEnds.insert(first)
+                    structureEnds.insert(last)
+                }
             }
+        }
+        var lines: [FeatureClass: [SceneLine]] = [:]
+        for (key, info, polyline) in joined {
+            let screen = polyline.map(viewport.screenPoint(for:))
+            guard let bounds = ScreenBounds(of: screen), bounds.intersects(visible) else { continue }
+            let onGround = (style.style(for: key.featureClass)?.drawnStructure(for: info.structure) ?? .ground) == .ground
+            lines[key.featureClass, default: []].append(SceneLine(
+                featureClass: key.featureClass, objectID: key.objectID, points: screen, lanes: info.lanes, name: info.name,
+                structure: info.structure, flatStart: onGround && polyline.first.map(structureEnds.contains) == true,
+                flatEnd: onGround && polyline.last.map(structureEnds.contains) == true))
         }
         // Dictionary order is not stable; sort so the same input always gives the same scene.
         for featureClass in lines.keys { lines[featureClass]?.sort { ($0.objectID, $0.points[0].x) < ($1.objectID, $1.points[0].x) } }

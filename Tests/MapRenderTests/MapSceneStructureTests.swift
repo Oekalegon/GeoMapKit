@@ -29,6 +29,15 @@ struct MapSceneStructureTests {
         try add(2, .roadMajor, subclass: 4 | SubclassBits.bridge, dy: 300)
         try add(3, .roadMajor, subclass: 4 | SubclassBits.tunnel, dy: 600)
         try add(4, .pavement, subclass: 2 | SubclassBits.bridge, dy: 900)
+        // A road on the ground that ends where the tunnel starts, and one that starts where the bridge ends.
+        func addBefore(_ id: Int64, dy: Int32, from: Int32, to: Int32) throws {
+            let part = GeometryPart(points: [PackedPoint(longitude: west + from, latitude: latitude + dy), PackedPoint(longitude: west + to, latitude: latitude + dy)])
+            try writer.add(
+                StoredFeature(classID: FeatureClass.roadMajor.rawValue, subclass: 4, kind: .line, objectType: .way, objectID: id, parts: [part]),
+                band: .detail, cell: cell)
+        }
+        try addBefore(5, dy: 600, from: 1_000, to: 5_000)
+        try addBefore(6, dy: 300, from: 9_000, to: 12_000)
         let file = try FeatureStoreFile(data: try writer.data())
         let centre = Coordinate(latitude: Double(latitude) / 1e7, longitude: Double(west + 7_000) / 1e7)
         let viewport = MapViewport(center: centre, zoom: 16, width: 400, height: 400)
@@ -43,12 +52,23 @@ struct MapSceneStructureTests {
     @Test("Each line goes to the steps of its structure, and nowhere else")
     func linesGoToTheirOwnSteps() throws {
         let (scene, _) = try scene()
-        #expect(ids(scene, .roadMajor, .body, .ground) == [1])
-        #expect(ids(scene, .roadMajor, .casing, .ground) == [1])
+        // Lines 5 and 6 are roads on the ground that meet the tunnel and the bridge (see `portalEnds`).
+        #expect(ids(scene, .roadMajor, .body, .ground) == [1, 5, 6])
+        #expect(ids(scene, .roadMajor, .casing, .ground) == [1, 5, 6])
         #expect(ids(scene, .roadMajor, .body, .bridge) == [2])
         #expect(ids(scene, .roadMajor, .casing, .bridge) == [2])
         #expect(ids(scene, .roadMajor, .body, .tunnel) == [3])
         #expect(ids(scene, .roadMajor, .casing, .tunnel).isEmpty, "a tunnel has no casing step")
+    }
+
+    @Test("A road on the ground ends flat where a tunnel or a bridge starts, and keeps its round end elsewhere")
+    func portalEnds() throws {
+        let (scene, _) = try scene()
+        func line(_ id: Int64) throws -> SceneLine { try #require(scene.steps.flatMap(\.lines).first { $0.objectID == id }) }
+        #expect(try line(5).flatEnd && !line(5).flatStart, "ends where the tunnel starts")
+        #expect(try line(6).flatStart && !line(6).flatEnd, "starts where the bridge ends")
+        #expect(try !line(1).flatStart && !line(1).flatEnd, "a road that meets no bridge or tunnel is left alone")
+        #expect(try !line(2).flatStart && !line(2).flatEnd && !line(3).flatStart && !line(3).flatEnd, "bridges and tunnels have flat ends already")
     }
 
     @Test("A bridge of a class without a bridge style is drawn on the ground")
