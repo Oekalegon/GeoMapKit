@@ -116,14 +116,19 @@ public enum ToolRunner {
     ///
     /// - Parameters:
     ///   - name: `standard` or `watch`.
-    ///   - output: The path of the JSON file; an existing file is replaced.
+    ///   - output: The path of the JSON file.
+    ///   - overwrite: Whether an existing file may be replaced. By default an existing file is left alone, because
+    ///     it is probably a style that was edited by hand.
     /// - Returns: The number of bytes written.
-    /// - Throws: ``ToolError`` for an unknown name or an unwritable path.
-    public static func exportStyle(name: String, output: URL) throws -> Int {
+    /// - Throws: ``ToolError`` for an unknown name, an unwritable path or an existing file without `overwrite`.
+    public static func exportStyle(name: String, output: URL, overwrite: Bool = false) throws -> Int {
         guard let kind = RenderRequest.Style(rawValue: name) else {
             throw ToolError("style expects standard or watch, not '\(name)'")
         }
         try checkWritable(output)
+        if !overwrite, FileManager.default.fileExists(atPath: output.path) {
+            throw ToolError("\(output.path) already exists; use --force to replace it")
+        }
         let data: Data
         do {
             data = try (kind == .watch ? MapStyle.watch : MapStyle.standard).jsonData()

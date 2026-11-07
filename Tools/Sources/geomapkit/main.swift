@@ -30,9 +30,10 @@ GeoMapKit tools
       none leaves it off, so the app must show it elsewhere. A .json
       file as --style replaces the built-in style (see the style command).
 
-  geomapkit style (standard|watch) --output <file.json>
+  geomapkit style (standard|watch) --output <file.json> [--force]
       Write a built-in style as a JSON style file to start a custom style
-      from. Unknown keys and bad values in a style file are errors.
+      from. An existing file is only replaced with --force. Unknown keys and
+      bad values in a style file are errors.
 """
 
 do {
@@ -86,10 +87,10 @@ do {
             attribution: parsed.value(for: "attribution"))
         print(ReportFormatter.text(for: try ToolRunner.render(store: URL(fileURLWithPath: path), request: request)))
     case "style":
-        let parsed = try CommandLineArguments(rest, knownOptions: ["output"])
+        let parsed = try CommandLineArguments(rest, knownOptions: ["output"], knownFlags: ["force"])
         guard let name = parsed.positional.first else { throw ToolError("style needs standard or watch") }
         guard let output = parsed.value(for: "output"), !output.isEmpty else { throw ToolError("style needs --output <file.json>") }
-        let bytes = try ToolRunner.exportStyle(name: name, output: URL(fileURLWithPath: output))
+        let bytes = try ToolRunner.exportStyle(name: name, output: URL(fileURLWithPath: output), overwrite: parsed.hasFlag("force"))
         print("Wrote \(name) style to \(output) (\(bytes) bytes)")
     case "help", "--help", "-h":
         print(usage)

@@ -256,6 +256,11 @@ struct RenderCommandTests {
         #expect(try ToolRunner.exportStyle(name: "watch", output: json) > 100)
         #expect(try MapStyle(json: Data(contentsOf: json)) == .watch)
         #expect(throws: ToolError.self) { try ToolRunner.exportStyle(name: "dark", output: json) }
+        #expect(throws: ToolError.self) { try ToolRunner.exportStyle(name: "standard", output: json) }
+        #expect(try MapStyle(json: Data(contentsOf: json)) == .watch, "an existing file is left alone")
+        #expect(try ToolRunner.exportStyle(name: "standard", output: json, overwrite: true) > 100)
+        #expect(try MapStyle(json: Data(contentsOf: json)) == .standard)
+        _ = try ToolRunner.exportStyle(name: "watch", output: json, overwrite: true)
 
         let centre = Coordinate(latitude: 47.5, longitude: 9.5)
         var request = RenderRequest(

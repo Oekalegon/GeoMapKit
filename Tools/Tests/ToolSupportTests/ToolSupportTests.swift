@@ -24,6 +24,14 @@ struct CommandLineArgumentsTests {
         #expect(box.contains(Coordinate(latitude: -33.9, longitude: 18.4)))
     }
 
+    @Test("Flags take no value and are only known when declared")
+    func flags() throws {
+        let parsed = try CommandLineArguments(["file", "--force", "--output", "x"], knownOptions: ["output"], knownFlags: ["force"])
+        #expect(parsed.hasFlag("force") && !parsed.hasFlag("other"))
+        #expect(parsed.positional == ["file"] && parsed.value(for: "output") == "x")
+        #expect(throws: ToolError.self) { try CommandLineArguments(["--force"], knownOptions: ["output"]) }
+    }
+
     @Test("Unknown options and options without a value are errors")
     func errors() {
         #expect(throws: ToolError.self) { try CommandLineArguments(["--nope", "1"], knownOptions: ["bbox"]) }
