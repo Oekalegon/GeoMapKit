@@ -44,6 +44,17 @@ extension KeyedDecodingContainer {
         return value
     }
 
+    /// Decodes an optional `[lowest, highest]` zoom range, or returns `defaultValue` if the key is absent.
+    func decodeZoomRange(forKey key: Key, default defaultValue: ClosedRange<Double>) throws -> ClosedRange<Double> {
+        guard contains(key) else { return defaultValue }
+        let bounds = try decode([Double].self, forKey: key)
+        guard bounds.count == 2, bounds.allSatisfy(\.isFinite), bounds[0] <= bounds[1] else {
+            throw DecodingError.dataCorruptedError(
+                forKey: key, in: self, debugDescription: "expects [lowest, highest] zoom, for example [12, 24]")
+        }
+        return bounds[0]...bounds[1]
+    }
+
     private static func check(_ value: Double, atLeast minimum: Double, path: [CodingKey]) throws {
         guard value.isFinite, value >= minimum else {
             throw DecodingError.dataCorrupted(
