@@ -201,6 +201,65 @@ public enum ToolRunner {
             drawTime: drawTime)
     }
 
+    /// Counts the objects of a feature store file per class, and the most common tags in one class.
+    ///
+    /// A way that the builder cut at cell borders is stored in several pieces; it is counted once.
+    ///
+    /// - Parameters:
+    ///   - store: The `.gmk` file.
+    ///   - className: The class whose tags to count, spelled as in a style file (`other`, `path`, ...); `nil` for the class counts only.
+    ///   - top: How many tags and keys to list.
+    /// - Returns: The counts.
+    /// - Throws: ``ToolError`` for an unreadable file or an unknown class name, and the store errors.
+    public static func inspect(store: URL, className: String? = nil, top: Int = 40) throws -> InspectReport {
+        let file: FeatureStoreFile
+        do {
+            file = try FeatureStoreFile(contentsOf: store)
+        } catch {
+            throw ToolError("Cannot read \(store.path): \(error)")
+        }
+        var wanted: FeatureClass?
+        if let className {
+            guard let found = FeatureClass.allCases.first(where: { "\($0)" == className }) else {
+                let names = FeatureClass.allCases.map { "\($0)" }.joined(separator: ", ")
+                throw ToolError("Unknown class '\(className)'. The classes are: \(names)")
+            }
+            wanted = found
+        }
+        struct ObjectKey: Hashable {
+            var classID: UInt8
+            var type: StoredObjectType
+            var id: Int64
+        }
+        var seen = Set<ObjectKey>()
+        var perClass = [UInt8: Int]()
+        var tagCounts = [String: Int]()
+        var keyCounts = [String: Int]()
+        for cell in try file.cells() {
+            // The detail band holds every feature, and the only tags (the lower bands carry none).
+            guard file.bands.contains(.detail) else { continue }
+            for feature in try file.features(in: cell, band: .detail) {
+                let key = ObjectKey(classID: feature.classID, type: feature.objectType, id: feature.objectID)
+                guard seen.insert(key).inserted else { continue }
+                perClass[feature.classID, default: 0] += 1
+                guard let wanted, feature.classID == wanted.rawValue else { continue }
+                for tag in feature.tags {
+                    guard let name = file.string(at: tag.key) else { continue }
+                    keyCounts[name, default: 0] += 1
+                    tagCounts["\(name)=\(file.string(at: tag.value) ?? "?")", default: 0] += 1
+                }
+            }
+        }
+        func ranked(_ counts: [String: Int]) -> [InspectReport.TagCount] {
+            counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+                .prefix(top).map { InspectReport.TagCount(tag: $0.key, objects: $0.value) }
+        }
+        return InspectReport(
+            fileName: store.lastPathComponent,
+            objectsByClass: FeatureClass.allCases.map { ("\($0)", perClass[$0.rawValue] ?? 0) },
+            inspectedClass: className, topTags: ranked(tagCounts), topKeys: ranked(keyCounts))
+    }
+
     private static func checkWritable(_ output: URL) throws {
         var isDirectory: ObjCBool = false
         if FileManager.default.fileExists(atPath: output.path, isDirectory: &isDirectory), isDirectory.boolValue {

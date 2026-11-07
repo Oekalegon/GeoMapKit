@@ -73,6 +73,21 @@ struct FeatureClassifierTests {
         Case(tags: ["natural": "wetland"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["landuse": "meadow"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["landuse": "farmland"], featureClass: .landcover, band: .mid, watch: true),
+        Case(tags: ["landuse": "village_green"], featureClass: .landcover, band: .mid, watch: true),
+        Case(tags: ["landuse": "farmyard"], featureClass: .landuseUrban, band: .mid, watch: false),
+        Case(tags: ["natural": "shrubbery"], featureClass: .landcover, band: .mid, watch: true),
+        Case(tags: ["natural": "cliff"], featureClass: .cliff, band: .mid, watch: false),
+        Case(tags: ["place": "farm"], featureClass: .place, band: .detail, watch: false),
+        Case(tags: ["place": "neighbourhood"], featureClass: .place, band: .detail, watch: false),
+        Case(tags: ["railway": "subway"], featureClass: .railway, band: .detail, watch: false),
+        Case(tags: ["railway": "level_crossing"], featureClass: .roadPoint, band: .detail, watch: false),
+        Case(tags: ["railway": "switch"], featureClass: .roadPoint, band: .detail, watch: false),
+        Case(tags: ["traffic_calming": "hump"], featureClass: .roadPoint, band: .detail, watch: false),
+        Case(tags: ["power": "pole"], featureClass: .powerLine, band: .detail, watch: false),
+        Case(tags: ["waterway": "dam"], featureClass: .waterLine, band: .detail, watch: false),
+        Case(tags: ["addr:housenumber": "5", "addr:street": "Storgata"], featureClass: .address, band: .detail, watch: false),
+        Case(tags: ["addr:city": "Oslo"], featureClass: .address, band: .detail, watch: false),
+        Case(tags: ["highway": "footway", "footway": "sidewalk"], featureClass: .pavement, band: .detail, watch: false),
         Case(tags: ["landuse": "quarry"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["leisure": "park"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["leisure": "pitch"], featureClass: .landcover, band: .mid, watch: true),
@@ -112,14 +127,12 @@ struct FeatureClassifierTests {
         Case(tags: ["highway": "crossing"], featureClass: .roadPoint, band: .detail, watch: false),
         Case(tags: ["highway": "traffic_signals"], featureClass: .roadPoint, band: .detail, watch: false),
         Case(tags: ["highway": "street_lamp"], featureClass: .roadPoint, band: .detail, watch: false),
-        // Still not classified: poles, pylons of lifts, wind turbines.
-        Case(tags: ["power": "pole"], featureClass: .other, band: .detail, watch: false),
+        // Still not classified: pylons of lifts, wind turbines.
         Case(tags: ["aerialway": "pylon"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["power": "generator", "generator:source": "wind"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["barrier": "no"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["highway": "construction"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["highway": "proposed"], featureClass: .other, band: .detail, watch: false),
-        Case(tags: ["waterway": "dam"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["place": "island"], featureClass: .other, band: .detail, watch: false),
         Case(tags: [:], featureClass: .other, band: .detail, watch: false),
     ]
@@ -266,11 +279,35 @@ struct FeatureClassifierTests {
             "a border in the sea is not a land border")
     }
 
-    @Test("The rule table version is 3, and the class IDs of earlier versions did not change")
+    @Test("A sidewalk or a crossing is pavement; other footways stay paths")
+    func pavement() {
+        for kind in ["sidewalk", "crossing", "traffic_island", "access_aisle"] {
+            let result = classify(["highway": "footway", "footway": kind], .openWay)
+            #expect(result.featureClass == .pavement && result.kind == .line, "footway=\(kind)")
+            #expect(result.minimumBand == .detail && !result.showsOnWatch)
+        }
+        #expect(classify(["highway": "footway"], .openWay).featureClass == .path)
+        #expect(classify(["highway": "footway", "footway": "link"], .openWay).featureClass == .path)
+        #expect(classify(["highway": "path", "footway": "sidewalk"], .openWay).featureClass == .path)
+        // A bridge keeps its bit, and the footway value stays in the subclass.
+        let bridge = classify(["highway": "footway", "footway": "sidewalk", "bridge": "yes"], .openWay)
+        #expect(bridge.featureClass == .pavement && bridge.subclass == (2 | SubclassBits.bridge))
+    }
+
+    @Test("A shop with an address is a point of interest; only the address alone is an address")
+    func addresses() {
+        #expect(classify(["shop": "bakery", "addr:street": "Storgata"], .node).featureClass == .poi)
+        #expect(classify(["building": "yes", "addr:housenumber": "5"], .closedWay).featureClass == .building)
+        #expect(classify(["addr:housenumber": "5"], .node).featureClass == .address)
+        #expect(classify(["name": "Stone"], .node).featureClass == .other)
+    }
+
+    @Test("The rule table version is 4, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 3)
+        #expect(FeatureClassifier.version == 4)
+        #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
-        #expect(FeatureClass.allCases.count == 25)
+        #expect(FeatureClass.allCases.count == 28)
     }
 }

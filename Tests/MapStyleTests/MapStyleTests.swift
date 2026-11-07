@@ -19,11 +19,22 @@ struct MapStyleTests {
         #expect(steps.map(\.part) == [.casing, .body])
     }
 
-    @Test func standardStyleCoversEveryClassExceptOther() {
-        for featureClass in FeatureClass.allCases where featureClass != .other {
+    @Test func standardStyleCoversEveryClassExceptOtherAndAddresses() {
+        for featureClass in FeatureClass.allCases where featureClass != .other && featureClass != .address {
             #expect(MapStyle.standard.style(for: featureClass) != nil, "\(featureClass) has no standard style")
         }
-        #expect(MapStyle.standard.style(for: .other) == nil)
+        #expect(MapStyle.standard.style(for: .other) == nil && MapStyle.standard.style(for: .address) == nil)
+    }
+
+    @Test func sidewalksAreFainterAndThinnerThanPaths() throws {
+        let pavement = try #require(MapStyle.standard.style(for: .pavement))
+        let path = try #require(MapStyle.standard.style(for: .path))
+        let thinPavement = try #require(pavement.stroke?.width.points.value(atZoom: 16))
+        let thinPath = try #require(path.stroke?.width.points.value(atZoom: 16))
+        #expect(thinPavement < thinPath)
+        #expect(pavement.visibleZoom.lowerBound > path.visibleZoom.lowerBound, "shown later than paths")
+        #expect(pavement.layer < path.layer, "paths are drawn on top of sidewalks")
+        #expect(MapStyle.watch.style(for: .pavement) == nil)
     }
 
     @Test func watchStyleDrawsOnlyTheWatchProfile() {

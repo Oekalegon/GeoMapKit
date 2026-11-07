@@ -50,8 +50,14 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     case barrier = 21
     /// Bus stops, public transport stops and platforms, railway stations. Added in rule table version 2.
     case transportStop = 22
-    /// Road details at a point: crossings, traffic signals, street lamps and similar. Added in rule table version 2.
+    /// Road details at a point: crossings, traffic signals, street lamps and similar; from version 4 also rail crossings, switches, signals and traffic calming. Added in rule table version 2.
     case roadPoint = 23
     /// National borders (`boundary=administrative` with `admin_level=2`). Added in rule table version 3.
     case countryBorder = 24
+    /// Objects that carry only address tags (`addr:*`): house numbers on a node or a bare outline. Not drawn; kept for search. Added in rule table version 4.
+    case address = 25
+    /// Sidewalks and road crossings for pedestrians (`highway=footway` with `footway=sidewalk`, `crossing`, `traffic_island` or `access_aisle`): the pavement of a town, apart from the paths a runner chooses. Added in rule table version 4.
+    case pavement = 26
+    /// Cliffs (`natural=cliff`). Added in rule table version 4.
+    case cliff = 27
 }

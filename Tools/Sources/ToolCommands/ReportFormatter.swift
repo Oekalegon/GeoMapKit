@@ -62,6 +62,24 @@ public enum ReportFormatter {
         ].joined(separator: "\n")
     }
 
+    /// The text for an inspection.
+    public static func text(for report: InspectReport) -> String {
+        let total = report.objectsByClass.reduce(0) { $0 + $1.objects }
+        var lines = ["Objects in \(report.fileName) by class (\(Formatting.count(total)) in all)"]
+        for row in report.objectsByClass {
+            lines.append("  \(pad(row.name, 14)) \(pad(Formatting.count(row.objects), 11, left: true))")
+        }
+        if let name = report.inspectedClass {
+            lines.append("")
+            lines.append("Most common tags in class \(name)")
+            for row in report.topTags { lines.append("  \(pad(Formatting.count(row.objects), 9, left: true))  \(row.tag)") }
+            lines.append("")
+            lines.append("Most common keys in class \(name)")
+            for row in report.topKeys { lines.append("  \(pad(Formatting.count(row.objects), 9, left: true))  \(row.tag)") }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     /// The text for a build: the cut, then the file and what went into it.
     public static func text(for report: BuildCommandReport) -> String {
         let statistics = report.statistics

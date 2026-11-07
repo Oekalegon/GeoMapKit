@@ -33,6 +33,11 @@ GeoMapKit tools
       none leaves it off, so the app must show it elsewhere. A .json
       file as --style replaces the built-in style (see the style command).
 
+  geomapkit inspect <file.gmk> [--class NAME] [--top N]
+      Count the objects in a store file per feature class. With --class
+      (for example other or path) also list the most common tags and keys
+      in that class, to see what the classifier does not yet recognise.
+
   geomapkit style (standard|watch) --output <file.json> [--force]
       Write a built-in style as a JSON style file to start a custom style
       from. An existing file is only replaced with --force. Unknown keys and
@@ -89,6 +94,16 @@ do {
             scale: parsed.value(for: "scale"), style: parsed.value(for: "style"), output: parsed.value(for: "output"),
             attribution: parsed.value(for: "attribution"))
         print(ReportFormatter.text(for: try ToolRunner.render(store: URL(fileURLWithPath: path), request: request)))
+    case "inspect":
+        let parsed = try CommandLineArguments(rest, knownOptions: ["class", "top"])
+        guard let path = parsed.positional.first else { throw ToolError("inspect needs a store file") }
+        var top = 40
+        if let value = parsed.value(for: "top") {
+            guard let number = Int(value), number > 0 else { throw ToolError("--top expects a positive whole number") }
+            top = number
+        }
+        print(ReportFormatter.text(
+            for: try ToolRunner.inspect(store: URL(fileURLWithPath: path), className: parsed.value(for: "class"), top: top)))
     case "style":
         let parsed = try CommandLineArguments(rest, knownOptions: ["output"], knownFlags: ["force"])
         guard let name = parsed.positional.first else { throw ToolError("style needs standard or watch") }
