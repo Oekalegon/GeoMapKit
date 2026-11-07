@@ -25,7 +25,7 @@ extension MapStyle {
                         points: ZoomValue((12, 1.5), (16, 3)),
                         ground: GroundWidth(metresPerLane: 3, defaultLanes: 2)),
                     casing: .init(color: .color(0x333333), extraPoints: ZoomValue((15, 0), (17, 1)))),
-                visibleZoom: 12...24, layer: 30),
+                visibleZoom: 12...24, layer: 30, casingLayer: 29),
             .roadMajor: ClassStyle(
                 stroke: StrokeStyle(
                     color: .color(0xFFC857),
@@ -33,7 +33,7 @@ extension MapStyle {
                         points: ZoomValue((12, 2), (16, 4)),
                         ground: GroundWidth(metresPerLane: 3, defaultLanes: 2)),
                     casing: .init(color: .color(0x7A5A12), extraPoints: ZoomValue((13, 0), (16, 1)))),
-                visibleZoom: 12...24, layer: 31),
+                visibleZoom: 12...24, layer: 31, casingLayer: 29),
             .track: ClassStyle(stroke: .line(0xC98B4E, ZoomValue((12, 1.8), (16, 3))), visibleZoom: 12...24, layer: 40),
             .path: ClassStyle(stroke: .line(0xFF5A3C, ZoomValue((12, 2), (16, 3.5))), visibleZoom: 12...24, layer: 41),
             .poiAnchor: ClassStyle(

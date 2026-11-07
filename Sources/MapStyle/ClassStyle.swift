@@ -18,11 +18,18 @@ public struct ClassStyle: Sendable, Equatable {
     public var visibleZoom: ClosedRange<Double>
     /// The drawing order, lowest first.
     public var layer: Int
+    /// The layer on which the stroke's casing is drawn, or `nil` to draw it directly under the stroke.
+    ///
+    /// Classes that cross at the same level (a motorway and a residential street) give their casing the
+    /// same layer, below every one of their strokes. The renderer then draws all outlines first and all
+    /// road fills on top, so at a crossing the fills run through each other's outlines and the outlines
+    /// join into one shape instead of one road's outline cutting across the other.
+    public var casingLayer: Int?
 
     /// Creates a class style.
     public init(
         fill: FillStyle? = nil, stroke: StrokeStyle? = nil, point: PointStyle? = nil, label: LabelStyle? = nil,
-        visibleZoom: ClosedRange<Double> = 0...24, layer: Int
+        visibleZoom: ClosedRange<Double> = 0...24, layer: Int, casingLayer: Int? = nil
     ) {
         self.fill = fill
         self.stroke = stroke
@@ -30,5 +37,6 @@ public struct ClassStyle: Sendable, Equatable {
         self.label = label
         self.visibleZoom = visibleZoom
         self.layer = layer
+        self.casingLayer = casingLayer
     }
 }

@@ -43,4 +43,24 @@ public struct MapStyle: Sendable, Equatable {
     public func visibleClassIDs(atZoom zoom: Double) -> Set<UInt8> {
         Set(visibleClasses(atZoom: zoom).map(\.rawValue))
     }
+
+    /// The steps to draw at a zoom level, in drawing order.
+    ///
+    /// A class with a stroke casing gets a ``DrawStep/Part/casing`` step on its ``ClassStyle/casingLayer``
+    /// (or on its own layer when that is `nil`) and a ``DrawStep/Part/body`` step on its layer. Casing steps
+    /// come before body steps of the same layer. A renderer draws every feature of a step before the next
+    /// step, which is what makes outlines of crossing roads join.
+    public func drawSteps(atZoom zoom: Double) -> [DrawStep] {
+        var steps: [(layer: Int, phase: Int, raw: UInt8, step: DrawStep)] = []
+        for featureClass in visibleClasses(atZoom: zoom) {
+            guard let style = classes[featureClass] else { continue }
+            if style.stroke?.casing != nil {
+                let layer = style.casingLayer ?? style.layer
+                steps.append((layer, 0, featureClass.rawValue, DrawStep(featureClass: featureClass, part: .casing)))
+            }
+            steps.append((style.layer, 1, featureClass.rawValue, DrawStep(featureClass: featureClass, part: .body)))
+        }
+        steps.sort { ($0.layer, $0.phase, $0.raw) < ($1.layer, $1.phase, $1.raw) }
+        return steps.map(\.step)
+    }
 }

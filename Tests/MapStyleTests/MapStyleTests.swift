@@ -100,4 +100,43 @@ struct MapStyleTests {
             }
         }
     }
+
+    @Test func casingsOfRoadsComeBeforeEveryRoadFill() throws {
+        for style in [MapStyle.standard, MapStyle.watch] {
+            let steps = style.drawSteps(atZoom: 17)
+            let minorCasing = try #require(steps.firstIndex(of: DrawStep(featureClass: .roadMinor, part: .casing)))
+            let majorCasing = try #require(steps.firstIndex(of: DrawStep(featureClass: .roadMajor, part: .casing)))
+            let minorBody = try #require(steps.firstIndex(of: DrawStep(featureClass: .roadMinor, part: .body)))
+            let majorBody = try #require(steps.firstIndex(of: DrawStep(featureClass: .roadMajor, part: .body)))
+            #expect(max(minorCasing, majorCasing) < min(minorBody, majorBody), "\(style.name)")
+        }
+    }
+
+    @Test func classesWithoutCasingHaveOnlyABodyStep() {
+        let steps = MapStyle.standard.drawSteps(atZoom: 17)
+        #expect(steps.contains(DrawStep(featureClass: .path, part: .body)))
+        #expect(!steps.contains(DrawStep(featureClass: .path, part: .casing)))
+    }
+
+    @Test func drawStepsAreDeterministicAndMatchVisibleClasses() {
+        let steps = MapStyle.standard.drawSteps(atZoom: 15)
+        #expect(steps == MapStyle.standard.drawSteps(atZoom: 15))
+        let bodies = steps.filter { $0.part == .body }.map(\.featureClass)
+        #expect(Set(bodies) == Set(MapStyle.standard.visibleClasses(atZoom: 15)))
+    }
+
+    @Test func casingWithoutCasingLayerSitsDirectlyUnderItsStroke() {
+        let style = MapStyle(
+            name: "T", background: .white,
+            classes: [
+                .path: ClassStyle(
+                    stroke: StrokeStyle(
+                        color: .color(0xFFFFFF), width: LineWidth(points: .constant(2)),
+                        casing: .init(color: .color(0), extraPoints: .constant(1))),
+                    layer: 5)
+            ])
+        #expect(style.drawSteps(atZoom: 10) == [
+            DrawStep(featureClass: .path, part: .casing), DrawStep(featureClass: .path, part: .body),
+        ])
+    }
 }
