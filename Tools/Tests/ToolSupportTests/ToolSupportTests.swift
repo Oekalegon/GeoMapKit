@@ -94,3 +94,19 @@ struct ThroughputTests {
         #expect(Throughput.megabytesPerSecond(bytes: 100, duration: .zero) == nil)
     }
 }
+
+@Suite("ProfileArgument")
+struct ProfileArgumentTests {
+    @Test("No value means full; full and watch parse")
+    func parse() throws {
+        #expect(try ProfileArgument.parse(nil) == .full)
+        #expect(try ProfileArgument.parse("full") == .full)
+        #expect(try ProfileArgument.parse("watch") == .watch)
+    }
+
+    @Test("Any other value is rejected")
+    func invalid() {
+        #expect(throws: ToolError.self) { try ProfileArgument.parse("phone") }
+        #expect(throws: ToolError.self) { try ProfileArgument.parse("") }
+    }
+}

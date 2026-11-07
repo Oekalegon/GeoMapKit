@@ -1,3 +1,4 @@
+import FeatureStoreBuilder
 import Foundation
 import OSMPBF
 import ToolCommands
@@ -13,6 +14,12 @@ GeoMapKit tools
                 [--limit N]
       Cut an area out of the file and print the time per pass, memory and
       what the extract contains. --limit sets the relation member limit.
+
+  geomapkit build <file.osm.pbf> (--bbox south,west,north,east | --center lat,lon --radius-km R)
+                  --output <file.gmk> [--profile full|watch] [--limit N]
+      Cut an area, build a feature store file from it, write it atomically,
+      verify it, and print times, sizes and what was stored. The default
+      profile is full; watch builds the reduced Watch copy.
 """
 
 do {
@@ -40,6 +47,23 @@ do {
             options.relationMemberLimit = value
         }
         print(ReportFormatter.text(for: try ToolRunner.cut(url: URL(fileURLWithPath: path), area: area, options: options)))
+    case "build":
+        let parsed = try CommandLineArguments(rest, knownOptions: ["bbox", "center", "radius-km", "limit", "output", "profile"])
+        guard let path = parsed.positional.first else { throw ToolError("build needs a file") }
+        guard let output = parsed.value(for: "output"), !output.isEmpty else { throw ToolError("build needs --output <file.gmk>") }
+        let area = try AreaArgument.parse(
+            bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"),
+            radiusKilometres: parsed.value(for: "radius-km")
+        )
+        let profile: BuildProfile = try ProfileArgument.parse(parsed.value(for: "profile")) == .watch ? .watch : .full
+        var options = AreaCutter.Options()
+        if let limit = parsed.value(for: "limit") {
+            guard let value = Int(limit) else { throw ToolError("--limit expects a whole number") }
+            options.relationMemberLimit = value
+        }
+        let report = try ToolRunner.build(
+            url: URL(fileURLWithPath: path), area: area, output: URL(fileURLWithPath: output), profile: profile, options: options)
+        print(ReportFormatter.text(for: report))
     case "help", "--help", "-h":
         print(usage)
     default:

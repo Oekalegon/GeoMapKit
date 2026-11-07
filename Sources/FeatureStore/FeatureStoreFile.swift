@@ -115,6 +115,22 @@ public struct FeatureStoreFile: Sendable {
         public var featureCounts: [ZoomBand: Int]
         /// The number of features of each class in the detail band, which holds every feature.
         public var detailFeaturesByClass: [UInt8: Int]
+
+        /// Creates statistics from their values; `FeatureStoreFile.statistics()` produces them from a file, this is for tests and tools.
+        public init(
+            fileBytes: Int, cellCount: Int, stringCount: Int, stringTableBytes: Int, relationTableBytes: Int,
+            cellBytes: Int, bandBytes: [ZoomBand: Int], featureCounts: [ZoomBand: Int], detailFeaturesByClass: [UInt8: Int]
+        ) {
+            self.fileBytes = fileBytes
+            self.cellCount = cellCount
+            self.stringCount = stringCount
+            self.stringTableBytes = stringTableBytes
+            self.relationTableBytes = relationTableBytes
+            self.cellBytes = cellBytes
+            self.bandBytes = bandBytes
+            self.featureCounts = featureCounts
+            self.detailFeaturesByClass = detailFeaturesByClass
+        }
     }
 
     /// Walks the whole index and the class headers of every cell, without decoding features.

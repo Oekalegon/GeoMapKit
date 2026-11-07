@@ -1,4 +1,6 @@
 import Foundation
+import FeatureStore
+import FeatureStoreBuilder
 import GeoCore
 import OSMPBF
 import ToolSupport
@@ -39,6 +41,51 @@ public enum ToolRunner {
     /// - Returns: Timings, memory and what the extract contains.
     /// - Throws: ``ToolError`` if the file is missing, or whatever the cutter throws.
     public static func cut(url: URL, area: BoundingBox, options: AreaCutter.Options = .init()) throws -> CutReport {
+        try cutExtract(url: url, area: area, options: options).report
+    }
+
+    /// Cuts an area, builds a feature store file from it, writes the file and verifies it.
+    ///
+    /// The output path is checked before the cut starts, so a bad path fails at once.
+    ///
+    /// - Parameters:
+    ///   - url: The PBF file.
+    ///   - area: The area to cut.
+    ///   - output: Where to write the store file. The write is atomic.
+    ///   - profile: The copy to build.
+    ///   - options: The cutter settings.
+    /// - Returns: Timings, sizes and what was stored.
+    /// - Throws: ``ToolError`` for a missing input file or an unwritable output path, or whatever the cutter, builder or `FeatureStoreFile.verify()` throws.
+    public static func build(
+        url: URL, area: BoundingBox, output: URL, profile: BuildProfile, options: AreaCutter.Options = .init()
+    ) throws -> BuildCommandReport {
+        try checkWritable(output)
+        let (extract, cutReport) = try cutExtract(url: url, area: area, options: options)
+
+        let clock = ContinuousClock()
+        let started = clock.now
+        let result = try FeatureStoreBuilder(profile: profile).build(from: extract)
+        let buildTime = clock.now - started
+
+        // Verify before touching the output, so a bad build never replaces a good file.
+        try FeatureStoreFile(data: result.data).verify()
+        do {
+            try result.data.write(to: output, options: .atomic)
+        } catch {
+            throw ToolError("Cannot write \(output.path): \(error.localizedDescription)")
+        }
+        // Verify again what is on disk, to catch a bad write.
+        let file = try FeatureStoreFile(contentsOf: output)
+        try file.verify()
+        return BuildCommandReport(
+            profile: profile, outputName: output.lastPathComponent, cut: cutReport, buildTime: buildTime,
+            statistics: try file.statistics(), report: result.report
+        )
+    }
+
+    private static func cutExtract(
+        url: URL, area: BoundingBox, options: AreaCutter.Options
+    ) throws -> (extract: OSMExtract, report: CutReport) {
         let size = try fileSize(url)
         let reader = try PBFReader(url: url)
 
@@ -55,11 +102,26 @@ public enum ToolRunner {
             let finish = index + 1 < starts.count ? starts[index + 1].instant : end
             return PassTiming(pass: start.pass, duration: finish - start.instant, peakMemoryAtStart: start.memory)
         }
-        return CutReport(
+        let report = CutReport(
             fileName: url.lastPathComponent, fileSize: size, area: area, passes: passes, totalTime: end - begin,
             summary: ExtractSummary(extract),
             peakFootprint: ProcessMemory.peakFootprintBytes(), peakResident: ProcessMemory.peakResidentBytes()
         )
+        return (extract, report)
+    }
+
+    private static func checkWritable(_ output: URL) throws {
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: output.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            throw ToolError("Output path is a directory: \(output.path)")
+        }
+        let directory = output.deletingLastPathComponent()
+        guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            throw ToolError("Output directory does not exist: \(directory.path)")
+        }
+        guard FileManager.default.isWritableFile(atPath: directory.path) else {
+            throw ToolError("Output directory is not writable: \(directory.path)")
+        }
     }
 
     private static func fileSize(_ url: URL) throws -> Int64 {

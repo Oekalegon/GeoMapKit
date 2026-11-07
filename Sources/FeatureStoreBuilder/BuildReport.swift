@@ -37,4 +37,7 @@ public struct BuildReport: Sendable, Equatable {
     public var piecesOutsideCells = 0
     /// The number of stored features per class (each feature counted once, not per band or piece).
     public var featuresByClass: [FeatureClass: Int] = [:]
+
+    /// Creates an empty report; every counter starts at zero.
+    public init() {}
 }
