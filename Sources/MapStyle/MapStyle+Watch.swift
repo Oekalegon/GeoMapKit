@@ -36,7 +36,7 @@ extension MapStyle {
             .path: ClassStyle(stroke: .line(0xFF5A3C, ZoomValue((12, 2), (16, 3.5))), visibleZoom: 12...24, layer: 41),
             .poiAnchor: ClassStyle(
                 point: PointStyle(radius: .constant(4), color: .color(0x4FC3F7), outlineColor: .black),
-                visibleZoom: 14...24, layer: 50),
+                visibleZoom: 15...24, layer: 50),
             .peak: ClassStyle(
                 point: PointStyle(radius: .constant(4), color: .color(0xBCAAA4), outlineColor: .black),
                 visibleZoom: 12...24, layer: 51),

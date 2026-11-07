@@ -65,13 +65,13 @@ extension MapStyle {
                 label: LabelStyle(size: .constant(9), color: MapColor(hex: 0x555555), priority: 5),
                 visibleZoom: 16...24, layer: 53),
             .poiAnchor: ClassStyle(
-                point: PointStyle(radius: ZoomValue((14, 3), (17, 5)), color: .color(0x1E88E5)),
+                point: PointStyle(radius: ZoomValue((15, 3), (17, 5)), color: .color(0x1E88E5)),
                 label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x1565C0), priority: 30),
-                visibleZoom: 14...24, layer: 54),
+                visibleZoom: 15...24, layer: 54),
             .peak: ClassStyle(
-                point: PointStyle(radius: ZoomValue((11, 2.5), (15, 4)), color: .color(0x8D6E63)),
-                label: LabelStyle(size: ZoomValue((11, 10), (15, 12)), color: MapColor(hex: 0x5D4037), priority: 40),
-                visibleZoom: 11...24, layer: 60),
+                point: PointStyle(radius: ZoomValue((12, 2.5), (15, 4)), color: .color(0x8D6E63)),
+                label: LabelStyle(size: ZoomValue((12, 10), (15, 12)), color: MapColor(hex: 0x5D4037), priority: 40),
+                visibleZoom: 12...24, layer: 60),
             .place: ClassStyle(
                 label: LabelStyle(
                     size: ZoomValue((8, 11), (14, 15)), color: MapColor(hex: 0x222222), haloWidth: 2.5, priority: 50),

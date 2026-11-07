@@ -71,4 +71,22 @@ struct MapStyleTests {
         let width = try #require(MapStyle.standard.style(for: .path)?.stroke?.width)
         #expect(width.ground == nil)
     }
+
+    @Test func noClassShowsBelowTheBandThatHoldsItsGeometry() {
+        // Lowest bands from the rule table: detail starts at zoom 15, mid at zoom 12.
+        let detailOnly: [FeatureClass] = [.building, .poi, .poiAnchor, .tree, .barrier, .transportStop, .roadPoint]
+        let midOrHigher: [FeatureClass] = [.peak, .path, .track, .landcover, .landuseUrban, .piste, .powerLine, .aerialway]
+        for style in [MapStyle.standard, MapStyle.watch] {
+            for featureClass in detailOnly {
+                if let lower = style.style(for: featureClass)?.visibleZoom.lowerBound {
+                    #expect(lower >= 15, "\(style.name) \(featureClass)")
+                }
+            }
+            for featureClass in midOrHigher {
+                if let lower = style.style(for: featureClass)?.visibleZoom.lowerBound {
+                    #expect(lower >= 12, "\(style.name) \(featureClass)")
+                }
+            }
+        }
+    }
 }

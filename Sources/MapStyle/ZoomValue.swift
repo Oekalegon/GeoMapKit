@@ -33,7 +33,7 @@ public struct ZoomValue<Value: ZoomInterpolatable>: Sendable {
 
     /// Creates a value from stops. The stops may be given in any order.
     ///
-    /// When two stops share a zoom level, the later one in the argument list wins.
+    /// Stop zooms must be finite numbers. When two stops share a zoom level, the later one in the argument list wins.
     public init(_ first: (zoom: Double, value: Value), _ rest: (zoom: Double, value: Value)...) {
         let all = ([first] + rest).map { Stop(zoom: $0.zoom, value: $0.value) }
         // Walk the stops in zoom order; for equal zooms keep the one given last.
@@ -49,7 +49,8 @@ public struct ZoomValue<Value: ZoomInterpolatable>: Sendable {
     ///
     /// A non-finite zoom (NaN) gives the first stop's value.
     public func value(atZoom zoom: Double) -> Value {
-        guard let first = stops.first, let last = stops.last else { return stops[0].value }
+        let first = stops[0]
+        let last = stops[stops.count - 1]
         if !(zoom > first.zoom) { return first.value }
         if zoom >= last.zoom { return last.value }
         // Binary search for the first stop above `zoom`.
