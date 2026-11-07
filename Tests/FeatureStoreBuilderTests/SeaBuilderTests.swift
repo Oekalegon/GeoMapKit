@@ -116,3 +116,58 @@ struct SeaBuilderTests {
         #expect(sea([line((10, 10), (11, 10))]).rings.isEmpty)
     }
 }
+
+@Suite("Sea per cell")
+struct SeaPerCellTests {
+    private let block = Block()
+
+    @Test("A cell inside an island holds no sea, and a coastal cell holds one polygon with no edge twice")
+    func cells() {
+        let box = CellRect(columns: block.centre.x - 1...block.centre.x + 1, rows: block.centre.y - 1...block.centre.y + 1, zoom: 13)!
+        // An island that covers the middle cell and part of its neighbours (counter-clockwise: land inside).
+        let island = [block.point(0.7, 2.3), block.point(2.3, 2.3), block.point(2.3, 0.7), block.point(0.7, 0.7), block.point(0.7, 2.3)]
+        let lines = SeaBuilder.Lines(rings: [island], chains: [])
+        let sea = SeaBuilder.build(lines: lines, box: box).rings
+        func parts(_ column: Int, _ row: Int) -> [GeometryPart] {
+            SeaBuilder.parts(in: CellRect(tile: block.tile(column: column, row: row)), lines: lines, sea: sea)
+        }
+        #expect(parts(1, 1).isEmpty, "inside the island: nothing, not a square and a hole that cancel")
+        // The corner cell has the island in its corner: water in an L shape, not the whole square.
+        #expect(parts(0, 0).count == 1 && parts(0, 0)[0].points.count == 7)
+        // The west cell has the island along its east side: water in a strip.
+        let coastal = parts(0, 1)
+        #expect(coastal.count == 1 && coastal[0].points.count == 5)
+        let cell = CellRect(tile: block.tile(column: 0, row: 1))
+        #expect(coastal[0].points.allSatisfy { $0.longitude <= block.point(0.7, 1).longitude })
+        #expect(coastal[0].points.contains { $0.longitude == cell.west })
+        #expect(!coastal[0].artificialEdges.isEmpty, "the edges along the cell border are artificial")
+        // Every edge of every part is either on the cell border (artificial) or a coast edge: no part has two coincident edges.
+        for column in 0..<3 { for row in 0..<3 {
+            for part in parts(column, row) {
+                let edges = zip(part.points, part.points.dropFirst()).map { Set([$0.0, $0.1]) }
+                #expect(Set(edges).count == edges.count, "cell \(column),\(row) has an edge twice")
+            }
+        } }
+    }
+}
+
+@Suite("Cancelling squares")
+struct CancellingSquareTests {
+    private let block = Block()
+
+    @Test("A cell inside an island holds nothing of the sea: the outer ring and the hole cancel")
+    func cancels() {
+        let rect = block.rect
+        let square = GeometryPart(points: [
+            PackedPoint(longitude: rect.west, latitude: rect.north), PackedPoint(longitude: rect.east, latitude: rect.north),
+            PackedPoint(longitude: rect.east, latitude: rect.south), PackedPoint(longitude: rect.west, latitude: rect.south),
+            PackedPoint(longitude: rect.west, latitude: rect.north),
+        ])
+        let other = GeometryPart(points: [block.point(1.2, 1.2), block.point(1.8, 1.2), block.point(1.5, 1.8), block.point(1.2, 1.2)])
+        #expect(FeatureEmitter.withoutCancellingSquares([square, square], in: block.centre) == [])
+        #expect(FeatureEmitter.withoutCancellingSquares([square, other, square], in: block.centre) == [other])
+        #expect(FeatureEmitter.withoutCancellingSquares([square], in: block.centre) == [square])
+        #expect(FeatureEmitter.withoutCancellingSquares([square, square, square], in: block.centre) == [square])
+        #expect(FeatureEmitter.withoutCancellingSquares([other], in: block.centre) == [other])
+    }
+}
