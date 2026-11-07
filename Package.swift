@@ -36,7 +36,7 @@ let package = Package(
         .target(name: "FeatureStoreBuilder", dependencies: ["GeoCore", "OSMPBF", "FeatureStore"]),
 
         // Style model with zoom-dependent values.
-        .target(name: "MapStyle"),
+        .target(name: "MapStyle", dependencies: ["FeatureStore"]),
 
         // Renderer protocol and the Canvas / Core Graphics backend.
         .target(name: "MapRender", dependencies: ["GeoCore", "FeatureStore", "MapStyle"]),
@@ -50,6 +50,7 @@ let package = Package(
         .testTarget(name: "GeoCoreTests", dependencies: ["GeoCore"]),
         .testTarget(name: "OSMPBFTests", dependencies: ["OSMPBF", "GeoCore", "PBFTestSupport"]),
         .testTarget(name: "FeatureStoreBuilderTests", dependencies: ["FeatureStoreBuilder", "FeatureStore", "GeoCore", "OSMPBF", "PBFTestSupport"]),
+        .testTarget(name: "MapStyleTests", dependencies: ["MapStyle", "FeatureStore"]),
         .testTarget(name: "FeatureStoreTests", dependencies: ["FeatureStore", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
