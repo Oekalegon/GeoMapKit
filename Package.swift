@@ -51,6 +51,7 @@ let package = Package(
         .testTarget(name: "OSMPBFTests", dependencies: ["OSMPBF", "GeoCore", "PBFTestSupport"]),
         .testTarget(name: "FeatureStoreBuilderTests", dependencies: ["FeatureStoreBuilder", "FeatureStore", "GeoCore", "OSMPBF", "PBFTestSupport"]),
         .testTarget(name: "MapStyleTests", dependencies: ["MapStyle", "FeatureStore"]),
+        .testTarget(name: "MapRenderTests", dependencies: ["MapRender", "MapStyle", "FeatureStore", "GeoCore"]),
         .testTarget(name: "FeatureStoreTests", dependencies: ["FeatureStore", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
