@@ -22,12 +22,17 @@ GeoMapKit tools
       profile is full; watch builds the reduced Watch copy.
 
   geomapkit render <file.gmk> --center lat,lon --zoom Z --output <file.png>
-                   [--size WxH] [--scale S] [--style standard|watch]
+                   [--size WxH] [--scale S] [--style standard|watch|file.json]
                    [--attribution full|compact|none]
       Draw a map from a feature store file into a PNG. Size is in points
       (default 800x600), scale is pixels per point (default 2). The data
       credit follows the style (full for standard, compact for watch);
-      none leaves it off, so the app must show it elsewhere.
+      none leaves it off, so the app must show it elsewhere. A .json
+      file as --style replaces the built-in style (see the style command).
+
+  geomapkit style (standard|watch) --output <file.json>
+      Write a built-in style as a JSON style file to start a custom style
+      from. Unknown keys and bad values in a style file are errors.
 """
 
 do {
@@ -80,6 +85,12 @@ do {
             scale: parsed.value(for: "scale"), style: parsed.value(for: "style"), output: parsed.value(for: "output"),
             attribution: parsed.value(for: "attribution"))
         print(ReportFormatter.text(for: try ToolRunner.render(store: URL(fileURLWithPath: path), request: request)))
+    case "style":
+        let parsed = try CommandLineArguments(rest, knownOptions: ["output"])
+        guard let name = parsed.positional.first else { throw ToolError("style needs standard or watch") }
+        guard let output = parsed.value(for: "output"), !output.isEmpty else { throw ToolError("style needs --output <file.json>") }
+        let bytes = try ToolRunner.exportStyle(name: name, output: URL(fileURLWithPath: output))
+        print("Wrote \(name) style to \(output) (\(bytes) bytes)")
     case "help", "--help", "-h":
         print(usage)
     default:

@@ -36,6 +36,19 @@ public struct ZoomValue<Value: ZoomInterpolatable>: Sendable {
     /// Stop zooms must be finite numbers. When two stops share a zoom level, the later one in the argument list wins.
     public init(_ first: (zoom: Double, value: Value), _ rest: (zoom: Double, value: Value)...) {
         let all = ([first] + rest).map { Stop(zoom: $0.zoom, value: $0.value) }
+        self.init(sorting: all)
+    }
+
+    /// Creates a value from a list of stops, in any order, or `nil` if the list is empty.
+    ///
+    /// Stop zooms must be finite numbers. When two stops share a zoom level, the later one in the list wins.
+    public init?(stops all: [Stop]) {
+        guard !all.isEmpty else { return nil }
+        self.init(sorting: all)
+    }
+
+    /// Sorts and de-duplicates a non-empty list of stops.
+    private init(sorting all: [Stop]) {
         // Walk the stops in zoom order; for equal zooms keep the one given last.
         var sorted: [Stop] = []
         for stop in all.enumerated().sorted(by: { ($0.element.zoom, $0.offset) < ($1.element.zoom, $1.offset) }).map(\.element) {

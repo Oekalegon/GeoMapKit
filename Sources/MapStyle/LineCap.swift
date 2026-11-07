@@ -1,5 +1,5 @@
 /// How a stroked line ends.
-public enum LineCap: Sendable, Equatable {
+public enum LineCap: String, Sendable, Equatable {
     /// The line stops at the end point.
     case butt
     /// A half circle past the end point.

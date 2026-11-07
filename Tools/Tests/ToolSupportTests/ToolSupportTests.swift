@@ -121,6 +121,13 @@ struct RenderArgumentTests {
             center: center, zoom: zoom, size: size, scale: scale, style: style, output: output, attribution: attribution)
     }
 
+    @Test("A .json value for --style is a style file")
+    func styleFile() throws {
+        let request = try parse(style: "my/Style.JSON")
+        #expect(request.styleFile == "my/Style.JSON" && request.style == .standard)
+        #expect(try parse(style: "watch").styleFile == nil)
+    }
+
     @Test("Attribution defaults to the style and accepts full, compact and none")
     func attribution() throws {
         #expect(try parse().attribution == nil)
