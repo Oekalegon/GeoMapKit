@@ -9,6 +9,9 @@ extension MapStyle {
             // The sea, under everything else; the coastline is a fine line on its edge.
             .sea: ClassStyle(fill: FillStyle(color: .color(0xAAD3EA)), layer: 9),
             .coastline: ClassStyle(stroke: .line(0x6FA8C8, ZoomValue((8, 0.5), (16, 1.2))), layer: 14),
+            // A road that is an area (a yard, a square): filled like a road, with a thin outline, over the land cover and under the buildings and roads.
+            .roadArea: ClassStyle(
+                fill: FillStyle(color: .color(0xFFFFFF)), stroke: .line(0xB0B0B0, .constant(0.5)), visibleZoom: 14...24, layer: 13),
             .landuseUrban: ClassStyle(fill: FillStyle(color: .color(0xE6E0D8)), visibleZoom: 12...24, layer: 10),
             .landcover: ClassStyle(fill: FillStyle(color: .color(0xDDE8C8)), visibleZoom: 12...24, layer: 11),
             .forest: ClassStyle(fill: FillStyle(color: .color(0xC5DDB0)), layer: 12),

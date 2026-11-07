@@ -155,7 +155,7 @@ struct FeatureClassifierTests {
     @Test("Every class is reachable, and class IDs are unique")
     func allClassesCovered() {
         // `sea` is made by the builder from the coastlines; no tags give it.
-        let produced = Set(Self.table.map(\.featureClass)).union([.sea])
+        let produced = Set(Self.table.map(\.featureClass)).union([.sea, .roadArea])
         #expect(produced == Set(FeatureClass.allCases))
         #expect(Set(FeatureClass.allCases.map(\.rawValue)).count == FeatureClass.allCases.count)
     }
@@ -218,7 +218,7 @@ struct FeatureClassifierTests {
         #expect(classify(["leisure": "park"], .closedWay).kind == .area)
         #expect(classify(["highway": "residential"], .closedWay).kind == .line)
         #expect(classify(["highway": "pedestrian", "area": "yes"], .closedWay).kind == .area)
-        #expect(classify(["highway": "pedestrian", "area": "yes"], .closedWay).featureClass == .roadMinor)
+        #expect(classify(["highway": "pedestrian", "area": "yes"], .closedWay).featureClass == .roadArea)
         #expect(classify(["barrier": "fence"], .closedWay).kind == .line)
         #expect(classify(["railway": "rail"], .closedWay).kind == .line)
         #expect(classify(["boundary": "administrative"], .closedWay).kind == .line)
@@ -281,6 +281,20 @@ struct FeatureClassifierTests {
             "a border in the sea is not a land border")
     }
 
+    @Test("A road or path that is an area is a road area to fill, not a line to stroke")
+    func roadAreas() {
+        let yard = classify(["highway": "service", "area": "yes", "landuse": "industrial"], .closedWay)
+        #expect(yard.featureClass == .roadArea && yard.kind == .area)
+        #expect(yard.minimumBand == .detail && !yard.showsOnWatch)
+        #expect(classify(["highway": "pedestrian", "area": "yes"], .closedWay).featureClass == .roadArea)
+        #expect(classify(["highway": "footway", "area": "yes"], .closedWay).featureClass == .roadArea)
+        #expect(classify(["highway": "pedestrian"], .multipolygon).featureClass == .roadArea, "a road mapped as a multipolygon")
+        // The same tags on a line, and a closed road, stay roads.
+        #expect(classify(["highway": "service"], .openWay).featureClass == .roadMinor)
+        #expect(classify(["highway": "service"], .closedWay).featureClass == .roadMinor && classify(["highway": "service"], .closedWay).kind == .line)
+        #expect(classify(["highway": "residential", "area": "no"], .closedWay).featureClass == .roadMinor)
+    }
+
     @Test("A coastline is a coastline line even when the way is also a place or another area")
     func coastlineWins() {
         for extra in [["place": "islet"], ["place": "island", "name": "Holmen"], ["natural": "coastline", "landuse": "grass"]] {
@@ -317,12 +331,12 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
-    @Test("The rule table version is 6, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 7, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 6)
+        #expect(FeatureClassifier.version == 7)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
-        #expect(FeatureClass.allCases.count == 30)
+        #expect(FeatureClass.allCases.count == 31)
     }
 }

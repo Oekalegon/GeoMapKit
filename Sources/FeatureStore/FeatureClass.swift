@@ -64,4 +64,6 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     case sea = 28
     /// A coastline (`natural=coastline`), land on the left. Added in rule table version 5.
     case coastline = 29
+    /// A road, track or path that is an area: a yard, a pedestrian square, a parking aisle drawn as a polygon (`area=yes` with a `highway` tag). Added in rule table version 7.
+    case roadArea = 30
 }
