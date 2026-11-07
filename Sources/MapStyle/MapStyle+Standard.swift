@@ -29,7 +29,7 @@ extension MapStyle {
                 label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x2F6F9F), priority: 20), layer: 21,
                 tunnel: TunnelStyle(opacity: 0.6, dash: [3, 2])),
             .railway: ClassStyle(
-                stroke: .line(0x777777, ZoomValue((8, 0.6), (14, 1.4)), dash: [4, 3]), layer: 22,
+                stroke: .line(0x777777, ZoomValue((8, 0.6), (14, 1.4))), layer: 22,
                 bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((10, 0.4), (16, 1.2)))),
                 tunnel: TunnelStyle(opacity: 0.4, dash: [2, 3])),
             .powerLine: ClassStyle(

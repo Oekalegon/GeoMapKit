@@ -88,6 +88,13 @@ struct MapStyleTests {
         #expect(TunnelStyle(opacity: 7).opacity == 1 && TunnelStyle(opacity: -1).opacity == 0)
     }
 
+    @Test func railwaysAreSolidLinesAndRailTunnelsAreDashed() throws {
+        let rail = try #require(MapStyle.standard.style(for: .railway))
+        #expect(rail.stroke?.dash.isEmpty == true, "a railway is a solid line")
+        #expect(rail.stroke(for: .tunnel)?.dash == [2, 3], "a railway tunnel is dashed, so it still stands out")
+        #expect(MapStyle.watch.style(for: .railway)?.stroke?.dash.isEmpty == true)
+    }
+
     @Test func aSubclassByteTellsTheStructure() {
         #expect(Structure(subclass: 4) == .ground)
         #expect(Structure(subclass: 4 | SubclassBits.bridge) == .bridge)
