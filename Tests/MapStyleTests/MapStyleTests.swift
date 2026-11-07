@@ -5,6 +5,19 @@ import Testing
 
 @Suite("MapStyle")
 struct MapStyleTests {
+    @Test func theCountryBorderIsTheBoundaryLineOnAWideSolidTransparentBand() throws {
+        let border = try #require(MapStyle.standard.style(for: .countryBorder)?.stroke)
+        let boundary = try #require(MapStyle.standard.style(for: .boundary)?.stroke)
+        #expect(border.color == boundary.color && border.dash == boundary.dash, "the same dashed purple line")
+        let casing = try #require(border.casing)
+        #expect(casing.color.value(atZoom: 12).alpha < 1 && casing.color.value(atZoom: 12).alpha > 0)
+        #expect(casing.extraPoints.value(atZoom: 12) >= 4, "much wider than the 1 point line")
+        #expect(MapStyle.watch.style(for: .countryBorder) == nil)
+        // The band is drawn before the line, so the line stays crisp on top of it.
+        let steps = MapStyle.standard.drawSteps(atZoom: 12).filter { $0.featureClass == .countryBorder }
+        #expect(steps.map(\.part) == [.casing, .body])
+    }
+
     @Test func standardStyleCoversEveryClassExceptOther() {
         for featureClass in FeatureClass.allCases where featureClass != .other {
             #expect(MapStyle.standard.style(for: featureClass) != nil, "\(featureClass) has no standard style")

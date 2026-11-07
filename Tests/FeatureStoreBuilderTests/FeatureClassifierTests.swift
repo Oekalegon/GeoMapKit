@@ -64,6 +64,7 @@ struct FeatureClassifierTests {
         Case(tags: ["natural": "wood"], featureClass: .forest, band: .overview, watch: true),
         Case(tags: ["landuse": "forest"], featureClass: .forest, band: .overview, watch: true),
         Case(tags: ["boundary": "administrative"], featureClass: .boundary, band: .overview, watch: false),
+        Case(tags: ["boundary": "administrative", "admin_level": "2"], featureClass: .countryBorder, band: .overview, watch: false),
         Case(tags: ["boundary": "protected_area"], featureClass: .boundary, band: .overview, watch: false),
         Case(tags: ["boundary": "national_park"], featureClass: .boundary, band: .overview, watch: false),
         Case(tags: ["natural": "scrub"], featureClass: .landcover, band: .mid, watch: true),
@@ -250,10 +251,23 @@ struct FeatureClassifierTests {
         #expect(classify(["power": "tower"], .node).kind == .point && classify(["power": "line"], .openWay).kind == .line)
     }
 
-    @Test("The rule table version is 2, and the class IDs of version 1 did not change")
+    @Test("A national border is an administrative boundary of level 2")
+    func countryBorder() {
+        let border = classify(["boundary": "administrative", "admin_level": "2"], .openWay)
+        #expect(border.featureClass == .countryBorder && border.kind == .line)
+        #expect(border.minimumBand == .overview && !border.showsOnWatch)
+        for level in ["3", "4", "6", "8", ""] {
+            #expect(classify(["boundary": "administrative", "admin_level": level], .openWay).featureClass == .boundary, "level \(level)")
+        }
+        #expect(classify(["boundary": "administrative"], .openWay).featureClass == .boundary)
+        #expect(classify(["boundary": "protected_area", "admin_level": "2"], .openWay).featureClass == .boundary)
+    }
+
+    @Test("The rule table version is 3, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 2)
+        #expect(FeatureClassifier.version == 3)
+        #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
-        #expect(FeatureClass.allCases.count == 24)
+        #expect(FeatureClass.allCases.count == 25)
     }
 }
