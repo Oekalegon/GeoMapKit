@@ -17,6 +17,7 @@ let package = Package(
         .library(name: "GeoCore", targets: ["GeoCore"]),
         .library(name: "OSMPBF", targets: ["OSMPBF"]),
         .library(name: "FeatureStore", targets: ["FeatureStore"]),
+        .library(name: "FeatureStoreBuilder", targets: ["FeatureStoreBuilder"]),
         .library(name: "MapStyle", targets: ["MapStyle"]),
         .library(name: "MapRender", targets: ["MapRender"]),
         .library(name: "Regions", targets: ["Regions"]),
@@ -31,6 +32,9 @@ let package = Package(
         // Own spatially gridded feature store: writer, memory-mapped reader.
         .target(name: "FeatureStore", dependencies: ["GeoCore"]),
 
+        // Builds feature store files from an OSM extract (iOS and macOS; the Watch only reads).
+        .target(name: "FeatureStoreBuilder", dependencies: ["GeoCore", "OSMPBF", "FeatureStore"]),
+
         // Style model with zoom-dependent values.
         .target(name: "MapStyle"),
 
@@ -42,6 +46,7 @@ let package = Package(
 
         .testTarget(name: "GeoCoreTests", dependencies: ["GeoCore"]),
         .testTarget(name: "OSMPBFTests", dependencies: ["OSMPBF", "GeoCore"]),
+        .testTarget(name: "FeatureStoreBuilderTests", dependencies: ["FeatureStoreBuilder", "FeatureStore", "GeoCore", "OSMPBF"]),
         .testTarget(name: "FeatureStoreTests", dependencies: ["FeatureStore", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
