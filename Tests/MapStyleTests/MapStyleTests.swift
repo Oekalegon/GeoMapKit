@@ -75,8 +75,9 @@ struct MapStyleTests {
         let bridge = try #require(road.stroke(for: .bridge))
         #expect(bridge.casing == road.bridge?.casing && bridge.casing != ground.casing)
         #expect(bridge.color == ground.color && bridge.dash == ground.dash)
+        #expect(ground.cap == .round && bridge.cap == .butt, "a bridge has flat ends, so its casing thickens only the sides")
         let tunnel = try #require(road.stroke(for: .tunnel))
-        #expect(tunnel.casing == nil)
+        #expect(tunnel.casing == nil && tunnel.cap == .butt, "a road leaves a tunnel with a flat end")
         #expect(tunnel.color.value(atZoom: 16).alpha == ground.color.value(atZoom: 16).alpha * 0.5)
         #expect(tunnel.dash == [5, 3])
         // A railway tunnel keeps the dash of the railway when the style gives none of its own.

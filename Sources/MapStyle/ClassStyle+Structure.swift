@@ -13,7 +13,9 @@ extension ClassStyle {
     /// The stroke to draw lines of a structure with.
     ///
     /// A bridge has the bridge casing instead of the class's casing. A tunnel has no casing, a lower opacity, and its own
-    /// dash pattern if the style gives one.
+    /// dash pattern if the style gives one. Both have flat ends (``LineCap/butt``), whatever the class uses: a bridge's casing
+    /// then thickens only the two sides of the deck, not its ends, and a road leaves a tunnel with a clean cut instead of a
+    /// round cap.
     ///
     /// - Parameter structure: A drawn structure, see ``drawnStructure(for:)``.
     /// - Returns: The stroke, or `nil` if the class has none.
@@ -23,7 +25,10 @@ extension ClassStyle {
         case .ground:
             break
         case .bridge:
-            if let bridge { stroke.casing = bridge.casing }
+            if let bridge {
+                stroke.casing = bridge.casing
+                stroke.cap = .butt
+            }
         case .tunnel:
             if let tunnel {
                 stroke.casing = nil
@@ -31,6 +36,7 @@ extension ClassStyle {
                     stops: stroke.color.stops.map { .init(zoom: $0.zoom, value: $0.value.withAlpha($0.value.alpha * tunnel.opacity)) })
                     ?? stroke.color
                 if !tunnel.dash.isEmpty { stroke.dash = tunnel.dash }
+                stroke.cap = .butt
             }
         }
         return stroke
