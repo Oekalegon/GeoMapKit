@@ -211,4 +211,44 @@ struct FeatureStoreFormatTests {
         let file = try FeatureStoreFile(data: padded.dropFirst(3))
         try file.verify()
     }
+
+    @Test("Binary search finds every cell in a larger index")
+    func manyCells() throws {
+        var writer = FeatureStoreWriter(boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: "x")
+        var cells: [TileID] = []
+        for x in stride(from: 4_000, to: 4_030, by: 3) {
+            for y in stride(from: 4_000, to: 4_020, by: 2) {
+                let cell = TileID(zoom: 13, x: x, y: y)!
+                cells.append(cell)
+                try writer.add(
+                    StoredFeature(classID: 0, kind: .point, objectType: .node, objectID: Int64(x * 10_000 + y),
+                        parts: [GeometryPart(points: [PackedPoint(longitude: Int32(x), latitude: Int32(y))])]),
+                    band: .detail, cell: cell)
+            }
+        }
+        let file = try FeatureStoreFile(data: try writer.data())
+        try file.verify()
+        #expect(file.cellCount == cells.count)
+        for cell in cells {
+            #expect(try file.features(in: cell, band: .detail).first?.objectID == Int64(cell.x * 10_000 + cell.y))
+        }
+        // Cells between and around the stored ones are absent.
+        for cell in [TileID(zoom: 13, x: 4_001, y: 4_000)!, TileID(zoom: 13, x: 3_999, y: 4_000)!, TileID(zoom: 13, x: 4_030, y: 4_020)!] {
+            #expect(try file.containsCell(cell) == false)
+        }
+    }
+
+    @Test("String bytes can be indexed from zero")
+    func stringBytesIndices() throws {
+        let sample = try Sample()
+        let file = try FeatureStoreFile(data: try sample.writer.data())
+        let bytes = try #require(file.stringBytes(at: 1))
+        #expect(bytes.startIndex == 0)
+    }
+
+    @Test("An out-of-range storage zoom is rejected when encoding")
+    func badStorageZoom() throws {
+        let writer = FeatureStoreWriter(storageZoom: 300, boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: "x")
+        #expect(throws: FeatureStoreError.self) { try writer.data() }
+    }
 }

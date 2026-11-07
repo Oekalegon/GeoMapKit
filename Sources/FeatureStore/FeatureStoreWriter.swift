@@ -89,7 +89,12 @@ public struct FeatureStoreWriter: Sendable {
     }
 
     /// Encodes the file.
+    ///
+    /// - Throws: ``FeatureStoreError/invalidInput(_:)`` if a value does not fit the format.
     public func data() throws -> Data {
+        guard (0...TileID.maximumZoom).contains(storageZoom) else {
+            throw FeatureStoreError.invalidInput("storage zoom \(storageZoom)")
+        }
         // Renumber strings by use count, most used first, ties by first use.
         var uses = [Int](repeating: 0, count: strings.count)
         func count(_ id: UInt32) { uses[Int(id)] += 1 }
@@ -209,7 +214,7 @@ public struct FeatureStoreWriter: Sendable {
             bandMask: Self.bandMask(of: cells), cellCount: cellCount,
             west: Self.packed(boundingBox.west), south: Self.packed(boundingBox.south),
             east: Self.packed(boundingBox.east), north: Self.packed(boundingBox.north),
-            sourceDate: Int64(sourceDate?.timeIntervalSince1970 ?? 0), fileLength: UInt64(totalLength),
+            sourceDate: Self.seconds(sourceDate), fileLength: UInt64(totalLength),
             sections: sections)
         file.bytes.replaceSubrange(0..<FileHeader.size, with: header.encoded())
         file.writeUInt32(CRC32.checksum(file.bytes))
@@ -254,6 +259,11 @@ public struct FeatureStoreWriter: Sendable {
     private static func origin(of tile: TileID) -> PackedPoint {
         let corner = tile.northWest
         return PackedPoint(longitude: packed(corner.longitude), latitude: packed(corner.latitude))
+    }
+
+    private static func seconds(_ date: Date?) -> Int64 {
+        guard let value = date?.timeIntervalSince1970, value.isFinite, abs(value) < 1e15 else { return 0 }
+        return Int64(value)
     }
 
     private static func packed(_ degrees: Double) -> Int32 {

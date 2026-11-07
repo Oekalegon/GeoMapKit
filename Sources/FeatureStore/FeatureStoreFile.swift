@@ -50,7 +50,8 @@ public struct FeatureStoreFile: Sendable {
         self.header = try FileHeader.parse(normalized)
         self.data = normalized
         let index = header.range(of: .cellIndex)
-        guard index.count == Int(header.cellCount) * 24 else {
+        // Compare by division: `cellCount * 24` could overflow a 32-bit `Int`.
+        guard index.count % 24 == 0, index.count / 24 == Int(header.cellCount) else {
             throw FeatureStoreError.corrupt("cell index size")
         }
         let offsets = header.range(of: .stringOffsets)
@@ -103,7 +104,7 @@ public struct FeatureStoreFile: Sendable {
         guard let start = try? cursor.readUInt32(), let end = try? cursor.readUInt32(),
             start <= end, Int(end) <= bytes.count
         else { return nil }
-        return data[(bytes.lowerBound + Int(start))..<(bytes.lowerBound + Int(end))]
+        return Data(data[(bytes.lowerBound + Int(start))..<(bytes.lowerBound + Int(end))])
     }
 
     /// A string decoded as UTF-8 (invalid bytes become U+FFFD; use ``stringBytes(at:)`` for the exact bytes).
@@ -189,7 +190,7 @@ public struct FeatureStoreFile: Sendable {
 
     private func indexEntry(at position: Int) throws -> IndexEntry {
         let index = header.range(of: .cellIndex)
-        guard position >= 0, position < cellCount, (position + 1) * 24 <= index.count else {
+        guard position >= 0, position < cellCount, position < index.count / 24 else {
             throw FeatureStoreError.corrupt("cell index entry")
         }
         var cursor = ByteCursor(data, range: (index.lowerBound + position * 24)..<index.upperBound)
