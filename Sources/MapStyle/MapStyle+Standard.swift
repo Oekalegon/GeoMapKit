@@ -19,7 +19,7 @@ extension MapStyle {
             .countryBorder: ClassStyle(
                 stroke: StrokeStyle(
                     color: .color(0x9E7CB1), width: LineWidth(points: ZoomValue((8, 0.8), (16, 1.5))), dash: [6, 3],
-                    casing: .init(color: ZoomValue(constant: MapColor(hex: 0x9E7CB1, alpha: 0.45)), extraPoints: ZoomValue((8, 6), (16, 14)))),
+                    casing: .init(color: ZoomValue(constant: MapColor(hex: 0x9E7CB1, alpha: 115.0 / 255)), extraPoints: ZoomValue((8, 6), (16, 14)))),
                 layer: 20),
             .waterLine: ClassStyle(
                 stroke: .line(0x6FB3DB, ZoomValue((8, 0.6), (12, 1.2), (17, 3))),
