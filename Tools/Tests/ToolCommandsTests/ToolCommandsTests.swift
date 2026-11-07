@@ -197,7 +197,7 @@ struct BuildCommandTests {
         counters.piecesOutsideCells = 77
         counters.featuresSkippedByProfile = 9_001
         let text = ReportFormatter.text(for: BuildCommandReport(
-            profile: .full, outputName: "out.gmk", cut: cut, buildTime: .milliseconds(450),
+            profile: .full, outputName: "out.gmk", cut: cut, buildTime: .milliseconds(450), storedExtent: cut.area,
             statistics: statistics, report: counters))
         #expect(text.contains("File: test.osm.pbf, 3.5 MB"))
         #expect(text.contains("Build (full profile)"))
@@ -214,6 +214,38 @@ struct BuildCommandTests {
         #expect(text.contains("800 assembled, 12 incomplete"))
         #expect(text.contains("pieces outside the cells: 77"))
         #expect(text.contains("features skipped by the profile: 9,001"))
+        #expect(text.contains("extent: south"))
+        #expect(!text.contains("warning"), "the file covers the whole box")
+    }
+
+    @Test("warns when the stored extent is smaller than the box, naming the sides")
+    func extentWarning() throws {
+        let area = BoundingBox(south: 47.0, west: 9.4, north: 47.3, east: 9.7)
+        let stored = BoundingBox(south: 47.0, west: 9.4922, north: 47.2, east: 9.6240)
+        let shortfall = ExtentShortfall(requested: area, stored: stored)
+        #expect(shortfall.south == 0 && shortfall.north > 0.09 && shortfall.north < 0.11)
+        #expect(abs(shortfall.west - 0.0922) < 1e-9 && abs(shortfall.east - 0.076) < 1e-9)
+        #expect(!shortfall.isEmpty)
+        #expect(ExtentShortfall(requested: area, stored: area).isEmpty)
+        // A stored extent that reaches past the box is not a shortfall.
+        #expect(ExtentShortfall(requested: area, stored: BoundingBox(south: 46.9, west: 9.3, north: 47.4, east: 9.8)).isEmpty)
+        // Rounding in the last decimal is not a shortfall.
+        #expect(ExtentShortfall(requested: area, stored: BoundingBox(south: 47.00000001, west: 9.4, north: 47.3, east: 9.7)).isEmpty)
+    }
+
+    @Test("a real build with a box that cuts cells reports the shortfall and the warning")
+    func realBuildWarns() throws {
+        let input = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-\(UUID().uuidString)-in.osm.pbf")
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-\(UUID().uuidString)-o.gmk")
+        defer { for url in [input, output] { try? FileManager.default.removeItem(at: url) } }
+        try TinyPBF.make().write(to: input)
+        let report = try ToolRunner.build(
+            url: input, area: BoundingBox(south: 47, west: 9, north: 48, east: 10), output: output, profile: .full)
+        let text = ReportFormatter.text(for: report)
+        #expect(!report.shortfall.isEmpty, "a 1 degree box is not made of whole cells")
+        #expect(text.contains("warning: the file covers less than the box you asked for"))
+        #expect(text.contains("Widen the box"))
+        #expect(report.storedExtent.west >= 9 && report.storedExtent.east <= 10)
     }
 }
 

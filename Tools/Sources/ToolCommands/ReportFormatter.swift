@@ -1,5 +1,6 @@
 import FeatureStore
 import FeatureStoreBuilder
+import GeoCore
 import Foundation
 import OSMPBF
 import ToolSupport
@@ -72,6 +73,7 @@ public enum ReportFormatter {
             "  cut:   \(Formatting.seconds(report.cut.totalTime))",
             "  build: \(Formatting.seconds(report.buildTime))",
             "  file:  \(report.outputName), \(Formatting.bytes(Int64(statistics.fileBytes))), \(Formatting.count(statistics.cellCount)) cells written (verified)",
+            "  extent: \(extentText(report.storedExtent))",
             "  parts: cells \(Formatting.bytes(Int64(statistics.cellBytes))), strings \(Formatting.bytes(Int64(statistics.stringTableBytes))) (\(Formatting.count(statistics.stringCount)) strings), relations \(Formatting.bytes(Int64(statistics.relationTableBytes)))",
             "",
             "\(pad("Band", 8)) \(pad("bytes", 12, left: true)) \(pad("features", 10, left: true))",
@@ -97,7 +99,36 @@ public enum ReportFormatter {
             "  pieces outside the cells: \(Formatting.count(counters.piecesOutsideCells))",
             "  features skipped by the profile: \(Formatting.count(counters.featuresSkippedByProfile))",
         ]
+        lines += extentWarning(for: report)
         return lines.joined(separator: "\n")
+    }
+
+    private static func extentText(_ box: BoundingBox) -> String {
+        String(format: "south %.4f, west %.4f, north %.4f, east %.4f", box.south, box.west, box.north, box.east)
+    }
+
+    /// The warning lines for a file that does not cover the box it was asked for, or none.
+    ///
+    /// Only cells that lie completely inside the box are written, so a box edge that cuts through a cell drops the
+    /// whole cell. The fix is a wider box.
+    private static func extentWarning(for report: BuildCommandReport) -> [String] {
+        let width = ExtentShortfall.oneCellInDegrees
+        if report.statistics.cellCount == 0 {
+            return ["", "warning: no cell lies completely inside the box, so nothing was stored. Use a box at least \(String(format: "%.3f", 2 * width)) degrees wide and high."]
+        }
+        let shortfall = report.shortfall
+        guard !shortfall.isEmpty else { return [] }
+        var sides: [String] = []
+        for (name, degrees) in [("south", shortfall.south), ("west", shortfall.west), ("north", shortfall.north), ("east", shortfall.east)]
+        where degrees > 0 {
+            sides.append("\(name) by \(String(format: "%.3f", degrees))")
+        }
+        return [
+            "",
+            "warning: the file covers less than the box you asked for (\(sides.joined(separator: ", ")) degrees).",
+            "         Only cells that lie completely inside the box are written, so a box edge that cuts a cell drops that cell.",
+            String(format: "         Widen the box by about one cell (%.3f degrees) on those sides to cover it.", width),
+        ]
     }
 
     private static func rate(_ bytes: Int64, _ duration: Duration) -> String {

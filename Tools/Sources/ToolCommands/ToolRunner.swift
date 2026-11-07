@@ -81,7 +81,7 @@ public enum ToolRunner {
         try file.verify()
         return BuildCommandReport(
             profile: profile, outputName: output.lastPathComponent, cut: cutReport, buildTime: buildTime,
-            statistics: try file.statistics(), report: result.report
+            storedExtent: file.boundingBox, statistics: try file.statistics(), report: result.report
         )
     }
 
