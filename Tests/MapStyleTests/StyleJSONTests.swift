@@ -1,3 +1,4 @@
+import FeatureStore
 import Foundation
 import Testing
 
@@ -88,6 +89,49 @@ struct StyleJSONTests {
             reason(document(classBody: "\"layer\": 1, \"stroke\": {\"color\": \"#000000\", \"width\": {\"points\": 1}, \"cap\": \"flat\"}"))
                 .contains("classes.roadMajor.stroke.cap"))
         #expect(reason(document().replacingOccurrences(of: "roadMajor", with: "motorway")).contains("unknown feature class 'motorway'"))
+    }
+
+    @Test func classNamesInTheFileFormatArePinned() throws {
+        // These names are the file format. Renaming a FeatureClass case must not silently break users' style files.
+        let names = [
+            "other", "path", "track", "roadMajor", "roadMinor", "railway", "waterLine", "waterArea", "forest", "landcover",
+            "landuseUrban", "building", "peak", "place", "poiAnchor", "poi", "boundary", "powerLine", "piste", "aerialway",
+            "tree", "barrier", "transportStop", "roadPoint",
+        ]
+        #expect(FeatureClass.allCases.map { String(describing: $0) } == names)
+        for name in names {
+            let json = document().replacingOccurrences(of: "roadMajor", with: name)
+            #expect(try parse(json).classes.count == 1)
+        }
+    }
+
+    @Test func malformedZoomValuesAreRejected() {
+        func fill(_ color: String) -> String { document(classBody: "\"layer\": 1, \"fill\": {\"color\": \(color)}") }
+        #expect(reason(fill("[[12, \"#000000\", 3]]")).contains("exactly two items"))
+        #expect(reason(fill("[[12]]")).contains("classes.roadMajor.fill.color"))
+        #expect(reason(fill("[\"#000000\"]")).contains("classes.roadMajor.fill.color"))
+        #expect(reason(fill("null")).contains("classes.roadMajor.fill.color"))
+        #expect(reason("[1, 2]").contains("Invalid style"))
+        #expect(reason("").contains("not valid JSON"))
+        #expect(reason("{\"formatVersion\": 1, \"name\":").contains("not valid JSON"))
+    }
+
+    @Test func stopsAreSortedAndALaterDuplicateWins() throws {
+        let body = "\"layer\": 1, \"point\": {\"radius\": [[16, 8], [12, 2], [12, 3]], \"color\": \"#000000\"}"
+        let radius = try #require(parse(document(classBody: body)).style(for: .roadMajor)?.point?.radius)
+        #expect(radius.stops.map(\.zoom) == [12, 16] && radius.value(atZoom: 12) == 3)
+    }
+
+    @Test func aSingleStopAwayFromZoomZeroSurvivesARoundTrip() throws {
+        let body = "\"layer\": 1, \"point\": {\"radius\": [[12, 4]], \"color\": \"#000000\"}"
+        let style = try parse(document(classBody: body))
+        #expect(try MapStyle(json: style.jsonData()) == style)
+        #expect(ZoomValue<Double>(stops: []) == nil)
+    }
+
+    @Test func anOversizedDocumentIsRejected() {
+        let big = Data(repeating: 0x20, count: MapStyle.maximumJSONSize + 1)
+        #expect(throws: MapStyleError.self) { try MapStyle(json: big) }
     }
 
     @Test func unsupportedVersionIsATypedError() {

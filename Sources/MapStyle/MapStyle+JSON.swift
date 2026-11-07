@@ -6,6 +6,9 @@ extension MapStyle {
     /// Files without a matching `formatVersion` are rejected with ``MapStyleError/unsupportedVersion(_:)``.
     public static let jsonFormatVersion = 1
 
+    /// The largest style document that is read, in bytes. The built-in styles are about 10 KB.
+    static let maximumJSONSize = 4_000_000
+
     /// Reads a style from JSON.
     ///
     /// The format is described under "Style file" in `docs/design/architecture.md`. It is strict: unknown keys and
@@ -13,8 +16,11 @@ extension MapStyle {
     /// A class that is missing from `classes` is hidden, as in the built-in styles.
     ///
     /// - Parameter data: The UTF-8 JSON document.
-    /// - Throws: ``MapStyleError`` with the location of the problem.
+    /// - Throws: ``MapStyleError`` with the location of the problem, or if the document is larger than 4 MB.
     public init(json data: Data) throws {
+        guard data.count <= Self.maximumJSONSize else {
+            throw MapStyleError.invalid(path: "", reason: "file is larger than \(Self.maximumJSONSize) bytes, which no style needs")
+        }
         do {
             self = try JSONDecoder().decode(MapStyle.self, from: data)
         } catch let error as MapStyleError {

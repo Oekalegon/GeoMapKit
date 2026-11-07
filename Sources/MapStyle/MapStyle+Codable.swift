@@ -1,5 +1,8 @@
 import FeatureStore
 
+/// In a style file the classes are keyed by the Swift case name of ``FeatureClass`` (`roadMajor`, `waterArea`, …).
+/// Those names are part of the file format: renaming a case needs a format version bump or an alias, and
+/// `StyleJSONTests` pins the list.
 extension MapStyle: Codable {
     private enum Keys: String, CodingKey, CaseIterable { case formatVersion, name, background, attribution, classes }
 
@@ -34,8 +37,7 @@ extension MapStyle: Codable {
         try c.encode(attribution, forKey: .attribution)
         var raw = c.nestedContainer(keyedBy: StyleKey.self, forKey: .classes)
         for (featureClass, style) in classes {
-            guard let key = StyleKey(stringValue: String(describing: featureClass)) else { continue }
-            try raw.encode(style, forKey: key)
+            try raw.encode(style, forKey: StyleKey(stringValue: String(describing: featureClass)))
         }
     }
 }
