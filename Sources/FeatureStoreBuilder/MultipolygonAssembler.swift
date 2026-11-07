@@ -10,6 +10,9 @@ import Foundation
 /// chains come back as ``MultipolygonAssembly/outlines`` instead, to draw as lines and
 /// never to fill, because an open ring would force a guess about the inside.
 ///
+/// Ways are joined by node ID, not by position: two ways that meet at different nodes with identical coordinates
+/// do not join, and the relation is reported incomplete.
+///
 /// Problems that leave the polygons valid (inner rings without an outer ring, rings with
 /// no area) are counted in the ``AssemblyReport``. Self-intersecting rings are not
 /// detected or repaired; the even-odd fill degrades mildly there.
@@ -97,6 +100,8 @@ enum MultipolygonAssembler {
         var points: [PackedPoint]
         private var xs: [Double]
         private var ys: [Double]
+        private let vertexSet: Set<PackedPoint>
+        private let minX: Double, maxX: Double, minY: Double, maxY: Double
         private(set) var signedArea: Double
 
         /// - Returns: `nil` for a ring with fewer than four points or no area.
@@ -105,6 +110,11 @@ enum MultipolygonAssembler {
             self.points = points
             xs = points.map { Double($0.longitude) }
             ys = points.map { Mercator.y(latitude: Double($0.latitude)) }
+            vertexSet = Set(points)
+            minX = xs.min() ?? 0
+            maxX = xs.max() ?? 0
+            minY = ys.min() ?? 0
+            maxY = ys.max() ?? 0
             signedArea = 0
             signedArea = Self.area(xs, ys)
             if abs(signedArea) < 1e-12 { return nil }
@@ -117,11 +127,17 @@ enum MultipolygonAssembler {
             signedArea = -signedArea
         }
 
-        /// Whether most of the other ring's vertices lie inside this ring. Vertices shared with this ring are ignored.
+        /// Whether most of a sample of the other ring's vertices lie inside this ring.
+        ///
+        /// Rings whose bounding boxes do not nest are rejected at once, and at most five vertices that are not
+        /// shared with this ring are tested, so a forest with hundreds of holes in a large outer ring stays cheap.
         func contains(_ other: Ring) -> Bool {
-            let shared = Set(points)
+            guard other.minX >= minX, other.maxX <= maxX, other.minY >= minY, other.maxY <= maxY else { return false }
+            let candidates = (0..<(other.points.count - 1)).filter { !vertexSet.contains(other.points[$0]) }
+            guard !candidates.isEmpty else { return false }
+            let step = max(1, candidates.count / 5)
             var inside = 0, outside = 0
-            for index in 0..<(other.points.count - 1) where !shared.contains(other.points[index]) {
+            for index in stride(from: 0, to: candidates.count, by: step).map({ candidates[$0] }) {
                 if contains(x: other.xs[index], y: other.ys[index]) { inside += 1 } else { outside += 1 }
             }
             return inside > outside

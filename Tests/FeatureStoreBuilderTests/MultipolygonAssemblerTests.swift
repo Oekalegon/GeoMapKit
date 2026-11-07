@@ -223,4 +223,37 @@ struct MultipolygonAssemblerTests {
         let expected = area(polygon.outer) - area(polygon.inners[0])
         #expect(abs((outerPieces - holePieces) - expected) < expected * 1e-4)
     }
+
+    @Test("A hole that touches the outer ring at a vertex still belongs to it")
+    func touchingHole() {
+        var spec = squareNodes(first: 1, 1, 1, 2, 2)
+        spec[11] = (1, 1)  // same position as node 1, but a different node
+        spec[12] = (1.4, 1.2); spec[13] = (1.2, 1.4)
+        var table = nodes(spec)
+        table[11] = table[1]
+        let result = MultipolygonAssembler.assemble(
+            members: [member(10, .outer, [1, 2, 3, 4, 1], table), member(20, .inner, [11, 12, 13, 11], table)],
+            relationIsComplete: true)
+        #expect(result.isComplete && result.polygons[0].inners.count == 1 && result.report.orphanInnerRings == 0)
+    }
+
+    @Test("Hundreds of holes in one large outer ring are all assigned")
+    func manyHoles() {
+        var table: [Int64: PackedPoint] = [:]
+        let outerNodes: [Int64] = [1, 2, 3, 4]
+        for (id, spec) in squareNodes(first: 1, 0.1, 0.1, 2.9, 2.9) { table[id] = block.point(spec.0, spec.1) }
+        var members = [member(1, .outer, outerNodes + [1], table)]
+        var next: Int64 = 100
+        for row in 0..<15 {
+            for column in 0..<15 {
+                let x = 0.2 + Double(column) * 0.18, y = 0.2 + Double(row) * 0.18
+                for (id, spec) in squareNodes(first: next, x, y, x + 0.1, y + 0.1) { table[id] = block.point(spec.0, spec.1) }
+                members.append(member(next, .inner, [next, next + 1, next + 2, next + 3, next], table))
+                next += 4
+            }
+        }
+        let result = MultipolygonAssembler.assemble(members: members, relationIsComplete: true)
+        #expect(result.isComplete && result.polygons.count == 1)
+        #expect(result.polygons[0].inners.count == 225 && result.report.orphanInnerRings == 0)
+    }
 }
