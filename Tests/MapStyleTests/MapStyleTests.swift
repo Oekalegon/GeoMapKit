@@ -26,9 +26,8 @@ struct MapStyleTests {
         }
     }
 
-    @Test func watchStyleHasNoCasingDashesOrPointLabels() {
+    @Test func watchStyleHasNoDashesOrPointLabels() {
         for (featureClass, style) in MapStyle.watch.classes {
-            #expect(style.stroke?.casing == nil, "\(featureClass)")
             #expect(style.stroke?.dash.isEmpty ?? true, "\(featureClass)")
             if featureClass != .place { #expect(style.label == nil, "\(featureClass)") }
         }
@@ -86,6 +85,18 @@ struct MapStyleTests {
                 if let lower = style.style(for: featureClass)?.visibleZoom.lowerBound {
                     #expect(lower >= 12, "\(style.name) \(featureClass)")
                 }
+            }
+        }
+    }
+
+    @Test func roadsHaveAnOutlineOnceZoomedIn() throws {
+        for style in [MapStyle.standard, MapStyle.watch] {
+            for roadClass in [FeatureClass.roadMajor, .roadMinor] {
+                let casing = try #require(style.style(for: roadClass)?.stroke?.casing, "\(style.name) \(roadClass)")
+                #expect(casing.extraPoints.value(atZoom: 18) > 0, "\(style.name) \(roadClass)")
+                #expect(casing.extraPoints.value(atZoom: 8) <= 0.3, "\(style.name) \(roadClass)")
+                let fill = try #require(style.style(for: roadClass)?.stroke?.color.value(atZoom: 18))
+                #expect(casing.color.value(atZoom: 18) != fill, "casing must differ from the fill")
             }
         }
     }

@@ -1,14 +1,18 @@
 /// How a line, or the outline of an area, is drawn.
 public struct StrokeStyle: Sendable, Equatable {
     /// A darker band under the line that makes it stand out from the fills (a road casing).
+    ///
+    /// The renderer strokes the casing first, at `width + 2 × extraPoints`, and the line on top,
+    /// so the road shows as a fill with an outline. Both widths follow the road's real width.
     public struct Casing: Sendable, Equatable {
         /// The casing colour.
         public var color: ZoomValue<MapColor>
-        /// The extra width on each side of the line, in points.
-        public var extraPoints: Double
+        /// The extra width on each side of the line, in points, by zoom. At 0 the casing is not drawn,
+        /// so a road can get its outline only once it is zoomed in far enough.
+        public var extraPoints: ZoomValue<Double>
 
         /// Creates a casing.
-        public init(color: ZoomValue<MapColor>, extraPoints: Double) {
+        public init(color: ZoomValue<MapColor>, extraPoints: ZoomValue<Double>) {
             self.color = color
             self.extraPoints = extraPoints
         }

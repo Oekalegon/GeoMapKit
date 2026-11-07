@@ -2,7 +2,7 @@ extension MapStyle {
     /// The default style for iOS, iPadOS and macOS: every class, light colours, trails drawn on top.
     ///
     /// Roads take their real width from the `lanes` tag when zoomed in (3 m per lane,
-    /// two lanes when untagged); paths and tracks keep a screen width so they stay visible.
+    /// two lanes when untagged) and an outline (casing) that thickens as you zoom in; paths and tracks keep a screen width so they stay visible.
     public static let standard = MapStyle(
         name: "Standard", background: MapColor(hex: 0xF2EFE9),
         classes: [
@@ -33,7 +33,7 @@ extension MapStyle {
                     width: LineWidth(
                         points: ZoomValue((12, 0.8), (16, 2.5)),
                         ground: GroundWidth(metresPerLane: 3, defaultLanes: 2)),
-                    casing: .init(color: .color(0xBBBBBB), extraPoints: 0.6)),
+                    casing: .init(color: .color(0xAAAAAA), extraPoints: ZoomValue((13, 0), (15, 0.6), (18, 1.2)))),
                 visibleZoom: 12...24, layer: 30),
             .roadMajor: ClassStyle(
                 stroke: StrokeStyle(
@@ -41,7 +41,7 @@ extension MapStyle {
                     width: LineWidth(
                         points: ZoomValue((8, 0.8), (12, 1.8), (16, 3.5)),
                         ground: GroundWidth(metresPerLane: 3, defaultLanes: 2)),
-                    casing: .init(color: .color(0xC9A24B), extraPoints: 0.7)),
+                    casing: .init(color: .color(0xB8862E), extraPoints: ZoomValue((10, 0.3), (14, 0.7), (18, 1.5)))),
                 label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x555555), priority: 15), layer: 31),
             .track: ClassStyle(
                 stroke: .line(0x8B5A2B, ZoomValue((12, 1.0), (16, 2.0)), dash: [6, 2]), visibleZoom: 12...24,
