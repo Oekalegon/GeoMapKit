@@ -1,6 +1,7 @@
 import FeatureStoreBuilder
 import Foundation
 import OSMPBF
+import Regions
 import ToolCommands
 import ToolSupport
 
@@ -20,12 +21,28 @@ GeoMapKit tools
 
   geomapkit build <file.osm.pbf>... (--bbox south,west,north,east | --center lat,lon --radius-km R)
                   --output <file.gmk> [--profile full|watch] [--limit N]
+  geomapkit build --from-cache (area as above) --output <file.gmk> [--cache DIR] [--allow-stale] [--profile full|watch]
+      With --from-cache the files come from the cache (see fetch) and nothing
+      is downloaded; --allow-stale uses cached files that the server has
+      replaced, with a warning. The sources are recorded in <file.gmk>.sources.json.
       Cut an area, build a feature store file from it, write it atomically,
       verify it, and print times, sizes and what was stored. The default
       profile is full; watch builds the reduced Watch copy. Only whole cells
       are written, so the box is widened outward to cell borders (by less
       than one cell, about 0.044 degrees, per side) and the file covers all
       of it; the report shows the stored extent.
+
+  geomapkit sources (--bbox south,west,north,east | --center lat,lon --radius-km R) [--cache DIR]
+      Find the source files an area needs (for example Ostlandet and Sweden
+      for the Halden area) and what is in the cache. Downloads nothing; it
+      asks the server only small questions: the region list when the copy is
+      older than 30 days, and the size of each file that is not cached. The
+      default cache is GeoMapKit/Sources in the application support folder.
+
+  geomapkit fetch (area as above) [--cache DIR] [--yes]
+      Show the same plan and, only with --yes, download the files that are
+      missing or out of date. Files that were checked within 30 days are not
+      asked about again. An interrupted download continues where it stopped.
 
   geomapkit render <file.gmk> --center lat,lon --zoom Z --output <file.png> [--bearing DEGREES]
                    [--size WxH] [--scale S] [--style standard|watch|file.json]
@@ -72,9 +89,29 @@ do {
             options.relationMemberLimit = value
         }
         print(ReportFormatter.text(for: try ToolRunner.cut(urls: parsed.positional.map { URL(fileURLWithPath: $0) }, area: area, options: options)))
+    case "sources", "fetch":
+        let parsed = try CommandLineArguments(rest, knownOptions: ["bbox", "center", "radius-km", "cache"], knownFlags: ["yes"])
+        guard parsed.positional.isEmpty else { throw ToolError("\(command) takes an area, not files") }
+        let area = try AreaArgument.parse(
+            bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"), radiusKilometres: parsed.value(for: "radius-km"))
+        let cache = parsed.value(for: "cache").map { URL(fileURLWithPath: $0) }
+        let report: SourcesReport
+        if command == "sources" {
+            report = try await ToolRunner.sources(area: area, cacheDirectory: cache)
+        } else {
+            let printer = ProgressPrinter()
+            report = try await ToolRunner.fetch(area: area, cacheDirectory: cache, confirmed: parsed.hasFlag("yes")) { id, bytes, total in
+                printer.report(id, bytes, total)
+            }
+        }
+        print(ReportFormatter.text(for: report))
     case "build":
-        let parsed = try CommandLineArguments(rest, knownOptions: ["bbox", "center", "radius-km", "limit", "output", "profile"])
-        guard !parsed.positional.isEmpty else { throw ToolError("build needs a file") }
+        let parsed = try CommandLineArguments(
+            rest, knownOptions: ["bbox", "center", "radius-km", "limit", "output", "profile", "cache"], knownFlags: ["from-cache", "allow-stale"])
+        guard parsed.hasFlag("from-cache") || !parsed.positional.isEmpty else { throw ToolError("build needs a file, or --from-cache") }
+        guard !(parsed.hasFlag("from-cache") && !parsed.positional.isEmpty) else {
+            throw ToolError("build takes files or --from-cache, not both")
+        }
         guard let output = parsed.value(for: "output"), !output.isEmpty else { throw ToolError("build needs --output <file.gmk>") }
         let area = try AreaArgument.parse(
             bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"),
@@ -86,10 +123,23 @@ do {
             guard let value = Int(limit) else { throw ToolError("--limit expects a whole number") }
             options.relationMemberLimit = value
         }
+        var urls = parsed.positional.map { URL(fileURLWithPath: $0) }
+        var cached: CachedSources?
+        if parsed.hasFlag("from-cache") {
+            let sources = try await ToolRunner.cachedSources(
+                area: area, cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) },
+                allowStale: parsed.hasFlag("allow-stale"))
+            for warning in sources.warnings { FileHandle.standardError.write(Data("warning: \(warning)\n".utf8)) }
+            urls = sources.files
+            cached = sources
+        }
         let report = try ToolRunner.build(
-            urls: parsed.positional.map { URL(fileURLWithPath: $0) }, area: area, output: URL(fileURLWithPath: output),
-            profile: profile, options: options)
+            urls: urls, area: area, output: URL(fileURLWithPath: output), profile: profile, options: options)
         print(ReportFormatter.text(for: report))
+        if let cached {
+            try BuildSources(builtAt: Date(), area: report.cut.area, sources: cached.records).write(besides: URL(fileURLWithPath: output))
+            print("Sources recorded in \(BuildSources.url(forStore: URL(fileURLWithPath: output)).lastPathComponent) (\(cached.records.map(\.regionID).joined(separator: ", "))).")
+        }
     case "render":
         let parsed = try CommandLineArguments(rest, knownOptions: ["center", "zoom", "output", "size", "scale", "style", "attribution", "bearing"])
         guard let path = parsed.positional.first else { throw ToolError("render needs a store file") }
@@ -122,4 +172,20 @@ do {
 } catch {
     FileHandle.standardError.write(Data("error: \(error)\n".utf8))
     exit(1)
+}
+
+/// Prints the progress of a download to standard error, a line for every 5 % of a file.
+final class ProgressPrinter: @unchecked Sendable {
+    // The download reports from one task at a time, but the lock keeps the printer safe if that ever changes.
+    private let lock = NSLock()
+    private var lastStep: [String: Int] = [:]
+
+    func report(_ id: String, _ bytes: Int64, _ total: Int64?) {
+        lock.lock(); defer { lock.unlock() }
+        guard let total, total > 0 else { return }
+        let step = Int(bytes * 20 / total)
+        guard step > lastStep[id, default: -1] else { return }
+        lastStep[id] = step
+        FileHandle.standardError.write(Data("\(id): \(step * 5) % (\(Formatting.bytes(bytes)) of \(Formatting.bytes(total)))\n".utf8))
+    }
 }

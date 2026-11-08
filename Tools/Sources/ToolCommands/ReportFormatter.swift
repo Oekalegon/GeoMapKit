@@ -67,6 +67,40 @@ public enum ReportFormatter {
         return lines.joined(separator: "\n")
     }
 
+    /// The text for the source files of an area.
+    public static func text(for report: SourcesReport) -> String {
+        let area = report.area
+        var lines = [
+            "Area: south \(area.south), west \(area.west), north \(area.north), east \(area.east) (whole cells)",
+            "Cache: \(report.cacheDirectory.path)",
+            "",
+            "Source files (the one that covers most of the area first)",
+        ]
+        for item in report.plan.items {
+            let size = item.size.map(Formatting.bytes) ?? "size unknown"
+            let state: String
+            switch item.action {
+            case .useCached: state = item.checkFailure == nil ? "in the cache" : "in the cache (could not be checked: \(item.checkFailure ?? ""))"
+            case .download: state = report.downloaded ? "downloaded" : "to download"
+            case .update: state = report.downloaded ? "updated" : "newer on the server, to download"
+            }
+            var line = "  \(pad(item.region.name, 28)) \(pad(item.region.id, 20)) \(pad(state, 34)) \(size)"
+            if item.alreadyDownloaded > 0, !report.downloaded { line += " (\(Formatting.bytes(item.alreadyDownloaded)) already there)" }
+            lines.append(line)
+        }
+        lines.append("  The outlines of these regions cover \(Int((report.plan.coveredShare * 100).rounded())) % of the area.")
+        lines.append("")
+        if report.downloaded {
+            lines.append("Downloaded in \(report.downloadTime.map(Formatting.seconds) ?? "-").")
+        } else if report.plan.needsDownload {
+            let bytes = Formatting.bytes(report.plan.bytesToDownload)
+            lines.append("To download: \(report.plan.hasUnknownSizes ? "at least " : "")\(bytes). Nothing was downloaded; run 'geomapkit fetch' with the same area and --yes to get it.")
+        } else {
+            lines.append("Everything is in the cache.")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     /// The text for an inspection.
     public static func text(for report: InspectReport) -> String {
         let total = report.objectsByClass.reduce(0) { $0 + $1.objects }

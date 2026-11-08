@@ -128,6 +128,16 @@ struct SourceCacheTests {
         #expect(cache.partialDownload(regionID: "denmark")?.bytes == 300 && cache.partialDownload(regionID: "denmark")?.etag == nil)
     }
 
+    @Test("The errors read as sentences")
+    func messages() {
+        #expect("\(SourceError.alreadyDownloading(region: "norway"))" == "norway is already being downloaded.")
+        #expect("\(SourceError.notEnoughSpace(needed: 1_500_000_000, available: 300_000_000))".contains("needed (with a margin)"))
+        let url = URL(string: "https://example.org/a.pbf")!
+        #expect("\(DownloadError.httpStatus(404, url))" == "The server answered 404 for https://example.org/a.pbf.")
+        #expect("\(DownloadError.insecureRedirect(URL(string: "http://example.org/a")!))".contains("not https"))
+        #expect("\(RegionError.duplicateRegion("x"))" == "The region index lists x twice.")
+    }
+
     @Test("The default folder is in the application support folder and the free space can be asked")
     func defaults() throws {
         #expect(try SourceCache.defaultDirectory().path.hasSuffix("GeoMapKit/Sources"))

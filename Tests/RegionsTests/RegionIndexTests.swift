@@ -66,6 +66,12 @@ struct RegionIndexTests {
         #expect(try !world().region("europe", isBelow: "ostlandet"))
     }
 
+    @Test("An HTML line break in a name of the index becomes a space")
+    func plainNames() throws {
+        let line = "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"id\":\"o\",\"name\":\"Østlandet<br />(Eastern Norway)\",\"urls\":{\"pbf\":\"https://x.example/o.pbf\"}},\"geometry\":{\"type\":\"MultiPolygon\",\"coordinates\":[[[[0,0],[1,0],[1,1],[0,0]]]]}}]}"
+        #expect(try RegionIndex(geoJSON: Data(line.utf8)).regions.first?.name == "Østlandet (Eastern Norway)")
+    }
+
     @Test("A polygon with a hole does not contain the hole, and a Polygon geometry is read like a MultiPolygon")
     func holes() throws {
         let polygon = """

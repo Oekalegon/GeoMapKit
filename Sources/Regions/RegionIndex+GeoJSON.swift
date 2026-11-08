@@ -30,9 +30,16 @@ extension RegionIndex {
             }
             let outline = try Self.outline(of: feature, id: properties.id)
             regions.append(
-                SourceRegion(id: properties.id, name: properties.name, parentID: properties.parent, pbfURL: url, outline: outline))
+                SourceRegion(
+                    id: properties.id, name: Self.plain(properties.name), parentID: properties.parent, pbfURL: url, outline: outline))
         }
         try self.init(regions: regions)
+    }
+
+    /// A name for display: the index writes some names with an HTML line break (`Østlandet<br />(Eastern Norway)`).
+    private static func plain(_ name: String) -> String {
+        name.replacingOccurrences(of: "<br />", with: " ").replacingOccurrences(of: "<br>", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func outline(of feature: FeatureCollection.Feature, id: String) throws -> [RegionPolygon] {
