@@ -37,6 +37,8 @@ public struct BuildReport: Sendable, Equatable {
     public var piecesOutsideCells = 0
     /// Footways that were classed as pavement because they run beside a road, without a sidewalk tag of their own counted.
     public var footwaysBesideRoads = 0
+    /// Footways that were classed as pavement because they lie in a built-up area (a plaza, a yard, a car park, a station).
+    public var footwaysInTown = 0
     /// Coastline ways found in the extract.
     public var coastlineWays = 0
     /// Sea polygons built from the coastlines.

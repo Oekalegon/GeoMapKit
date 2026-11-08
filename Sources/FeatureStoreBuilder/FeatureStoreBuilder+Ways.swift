@@ -6,6 +6,7 @@ extension FeatureStoreBuilder {
     func storeWays(of extract: OSMExtract, suppressed: Set<Int64>, into emitter: inout FeatureEmitter) throws {
         // Built when the first footway needs it: an extract without footways never pays for it.
         var roads: RoadIndex?
+        var town: TownIndex?
         for position in extract.ways.indices {
             if position % 4096 == 0 { try Task.checkCancellation() }
             let id = extract.ways.ids[position]
@@ -26,11 +27,18 @@ extension FeatureStoreBuilder {
             // A footway beside a road is a sidewalk, tagged or not.
             if Self.mayBeASidewalk(tags, classification) {
                 if roads == nil { roads = RoadIndex(extract: extract, classifier: classifier) }
+                let pavement = Classification(
+                    featureClass: .pavement, subclass: classification.subclass, kind: classification.kind, minimumBand: .detail,
+                    showsOnWatch: false)
                 if roads?.isBesideARoad(runs) == true {
-                    classification = Classification(
-                        featureClass: .pavement, subclass: classification.subclass, kind: classification.kind, minimumBand: .detail,
-                        showsOnWatch: false)
+                    classification = pavement
                     emitter.report.footwaysBesideRoads += 1
+                } else {
+                    if town == nil { town = TownIndex(extract: extract, classifier: classifier) }
+                    if town?.isInTown(runs) == true {
+                        classification = pavement
+                        emitter.report.footwaysInTown += 1
+                    }
                 }
             }
             let geometry: FeatureSpec.Geometry = classification.kind == .area ? .rings([runs[0]]) : .lines(runs)

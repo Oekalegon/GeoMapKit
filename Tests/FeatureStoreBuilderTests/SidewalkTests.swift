@@ -93,6 +93,41 @@ struct SidewalkTests {
         #expect(try classID(of: 402, in: file) == FeatureClass.path.rawValue)
     }
 
-    @Test("The rule table version is 8")
-    func version() { #expect(FeatureClassifier.version == 8) }
+    @Test("A footway in a built-up area is pavement; one in a park, or half outside, is a path")
+    func inTown() throws {
+        var world = SyntheticWorld()
+        // Built-up land (residential) with a park in it, a commercial area, a pedestrian area and a station platform.
+        let residential = world.rectangle(first: 500, 0.3, 0.9, 2.7, 2.7)
+        world.way(500, residential, [("landuse", "residential")])
+        let park = world.rectangle(first: 510, 0.4, 1.0, 2.6, 1.6)
+        world.way(510, park, [("leisure", "park")])
+        let commercial = world.rectangle(first: 520, 0.3, 0.1, 2.7, 0.7)
+        world.way(520, commercial, [("landuse", "commercial")])
+        let plaza = world.rectangle(first: 530, 0.4, 2.75, 1.8, 2.95)
+        world.way(530, plaza, [("highway", "pedestrian"), ("area", "yes")])
+        let platform = world.rectangle(first: 540, 2.2, 2.75, 2.6, 2.95)
+        world.way(540, platform, [("railway", "platform")])
+        func walk(_ id: Int64, _ from: (Double, Double), _ to: (Double, Double), _ extra: [(String, String)] = []) {
+            world.node(id * 10, from.0, from.1); world.node(id * 10 + 1, to.0, to.1)
+            world.way(id, [id * 10, id * 10 + 1], [("highway", "footway")] + extra)
+        }
+        walk(601, (0.5, 0.4), (2.5, 0.4))                  // in the commercial area
+        walk(602, (0.5, 2.0), (2.5, 2.0))                  // in the residential area, outside the park
+        walk(603, (0.5, 1.3), (2.5, 1.3))                  // in the park, which is inside the residential area
+        walk(604, (0.5, 2.85), (1.7, 2.85))                // in the pedestrian area
+        walk(605, (2.3, 2.85), (2.5, 2.85))                // on the platform
+        walk(606, (2.0, 0.55), (2.0, 0.95))                // half of it in built-up areas, half in between
+        walk(607, (0.5, 2.72), (2.5, 2.72))                // between the residential area and the plaza, in the open
+        walk(608, (0.5, 0.4), (2.5, 0.4), [("sac_scale", "hiking")])      // a trail in the commercial area
+        world.node(6090, 0.5, 0.45); world.node(6091, 2.5, 0.45)
+        world.way(609, [6090, 6091], [("highway", "path")])                 // not a footway
+        let result = try FeatureStoreBuilder().build(from: try world.extract())
+        let file = try FeatureStoreFile(data: result.data)
+        for id: Int64 in [601, 602, 604, 605] { #expect(try classID(of: id, in: file) == FeatureClass.pavement.rawValue, "way \(id)") }
+        for id: Int64 in [603, 606, 607, 608, 609] { #expect(try classID(of: id, in: file) == FeatureClass.path.rawValue, "way \(id)") }
+        #expect(result.report.footwaysInTown == 4 && result.report.footwaysBesideRoads == 0)
+    }
+
+    @Test("The rule table version is 9")
+    func version() { #expect(FeatureClassifier.version == 9) }
 }
