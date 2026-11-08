@@ -8,8 +8,9 @@ actor FakeServer {
         var data: Data
         var etag: String?
         var lastModified: String?
+        /// Whether the server says how large the file is (`Content-Length`).
+        var sizeKnown = true
     }
-
     enum Failure: Error { case offline, connectionLost }
 
     private(set) var files: [URL: File] = [:]
@@ -20,8 +21,11 @@ actor FakeServer {
     /// If set, the next download stops after this many bytes and fails.
     private var cutAfter: Int?
 
-    func put(_ url: URL, _ data: Data, etag: String? = "\"v1\"", lastModified: String? = "Mon, 01 Jan 2026 00:00:00 GMT") {
-        files[url] = File(data: data, etag: etag, lastModified: lastModified)
+    func put(
+        _ url: URL, _ data: Data, etag: String? = "\"v1\"", lastModified: String? = "Mon, 01 Jan 2026 00:00:00 GMT",
+        sizeKnown: Bool = true
+    ) {
+        files[url] = File(data: data, etag: etag, lastModified: lastModified, sizeKnown: sizeKnown)
     }
 
     func data(_ url: URL) -> Data? { files[url]?.data }
@@ -35,7 +39,7 @@ actor FakeServer {
         guard !offline else { throw Failure.offline }
         guard let file = files[url] else { throw URLError(.fileDoesNotExist) }
         if let ifNoneMatch, ifNoneMatch == file.etag { return .notModified }
-        return .info(RemoteFileInfo(size: Int64(file.data.count), etag: file.etag, lastModified: file.lastModified))
+        return .info(RemoteFileInfo(size: file.sizeKnown ? Int64(file.data.count) : nil, etag: file.etag, lastModified: file.lastModified))
     }
 
     /// What the server sends for a request: the bytes, where they start in the file, and the file's description.
@@ -43,7 +47,7 @@ actor FakeServer {
         log.append("GET \(url) from \(offset)" + (ifRange.map { " if-range \($0)" } ?? ""))
         guard !offline else { throw Failure.offline }
         guard let file = files[url] else { throw URLError(.fileDoesNotExist) }
-        let info = RemoteFileInfo(size: Int64(file.data.count), etag: file.etag, lastModified: file.lastModified)
+        let info = RemoteFileInfo(size: file.sizeKnown ? Int64(file.data.count) : nil, etag: file.etag, lastModified: file.lastModified)
         // A range is honoured only if the server supports it and the file is the one the bytes came from.
         let start = (supportsRange && offset > 0 && (ifRange == nil || ifRange == file.etag)) ? offset : 0
         let cut = cutAfter

@@ -2,8 +2,8 @@ import Foundation
 
 /// The network, as far as the source data manager needs it, so that tests use a fake and the app a `URLSession`.
 ///
-/// An implementation identifies the app to the server, follows redirects, treats any status other than success as an
-/// error, and never reads the whole file into memory.
+/// An implementation identifies the app to the server, follows redirects but never to a weaker scheme (`https` to `http`),
+/// treats any status other than success as an error, and never reads the whole file into memory.
 public protocol Downloader: Sendable {
     /// Asks what a file is, without downloading it (an HTTP `HEAD`).
     ///

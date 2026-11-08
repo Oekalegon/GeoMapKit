@@ -221,6 +221,52 @@ struct SourceManagerTests {
         await #expect(throws: (any Error).self) { try await s.manager.plan(for: other) }
     }
 
+    @Test("A file whose size the server does not give is planned with unknown size and installed as it arrives")
+    func unknownSize() async throws {
+        let s = await setup()
+        defer { try? FileManager.default.removeItem(at: s.directory) }
+        await s.server.put(norwayURL, Data(repeating: 8, count: 2500), sizeKnown: false)
+        let plan = try await s.manager.plan(for: selection())
+        #expect(plan.items[0].size == nil && plan.items[1].size == 3000)
+        #expect(plan.hasUnknownSizes && plan.bytesToDownload == 3000, "a lower bound")
+        _ = try await s.manager.fetch(plan)
+        #expect(s.manager.cache.status(ofRegionID: "norway").record?.size == 2500)
+    }
+
+    @Test("Without an ETag an interrupted download starts again")
+    func noETagNoResume() async throws {
+        let s = await setup()
+        defer { try? FileManager.default.removeItem(at: s.directory) }
+        await s.server.put(norwayURL, Data(repeating: 6, count: 4000), etag: nil)
+        let one = RegionSelection(regions: [region("norway", norwayURL)], coveredShare: 1)
+        let plan = try await s.manager.plan(for: one)
+        await s.server.cutNextDownload(after: 1500)
+        await #expect(throws: (any Error).self) { try await s.manager.fetch(plan) }
+        let next = try await s.manager.plan(for: one)
+        #expect(next.items[0].alreadyDownloaded == 0)
+        _ = try await s.manager.fetch(next)
+        #expect(await s.server.requests(containing: "GET").last == "GET \(norwayURL) from 0")
+        #expect(s.manager.cache.status(ofRegionID: "norway").record?.size == 4000)
+    }
+
+    @Test("A region that is being downloaded cannot be downloaded again at the same time")
+    func concurrent() async throws {
+        let gate = Gate()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-manager-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manager = SourceManager(cache: SourceCache(directory: directory, availableCapacity: { _ in nil }), downloader: GatedDownloader(gate: gate))
+        let one = RegionSelection(regions: [region("norway", norwayURL)], coveredShare: 1)
+        let plan = try await manager.plan(for: one)
+        let first = Task { try await manager.fetch(plan) }
+        await gate.waitUntilEntered()
+        await #expect(throws: SourceError.alreadyDownloading(region: "norway")) { try await manager.fetch(plan) }
+        await gate.release()
+        _ = try await first.value
+        // Once the first has finished the region can be fetched again (it is current, so nothing is downloaded).
+        _ = try await manager.fetch(try await manager.plan(for: one))
+        #expect(manager.cache.status(ofRegionID: "norway").record?.size == 1000)
+    }
+
     @Test("A server without an ETag: the same size and modification date mean the same file")
     func noETag() async throws {
         let s = await setup()
@@ -233,6 +279,42 @@ struct SourceManagerTests {
         s.clock.advance(days: 31)
         await s.server.put(norwayURL, Data(repeating: 4, count: 1000), etag: nil, lastModified: "Wed, 03 Jan 2026 00:00:00 GMT")
         #expect(try await s.manager.plan(for: one).items.map(\.action) == [.update])
+    }
+}
+
+/// Lets a test hold a download until it says go.
+private actor Gate {
+    private var entered = false
+    private var waiting: CheckedContinuation<Void, Never>?
+    private var released = false
+
+    func hold() async {
+        entered = true
+        if released { return }
+        await withCheckedContinuation { waiting = $0 }
+    }
+
+    func waitUntilEntered() async { while !entered { await Task.yield() } }
+
+    func release() {
+        released = true
+        waiting?.resume()
+        waiting = nil
+    }
+}
+
+/// A downloader whose download waits at a gate.
+private struct GatedDownloader: Downloader {
+    let gate: Gate
+    func metadata(of url: URL, ifNoneMatch etag: String?) async throws -> RemoteMetadata {
+        .info(RemoteFileInfo(size: 1000, etag: "\"g\""))
+    }
+    func download(
+        from url: URL, to file: URL, resumeFrom offset: Int64, ifRange etag: String?, progress: @Sendable (Int64) -> Void
+    ) async throws -> RemoteFileInfo {
+        await gate.hold()
+        try Data(repeating: 2, count: 1000).write(to: file)
+        return RemoteFileInfo(size: 1000, etag: "\"g\"")
     }
 }
 

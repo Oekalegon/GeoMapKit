@@ -68,11 +68,14 @@ public struct SourceCache: Sendable {
     func partURL(_ id: String) -> URL { directory.appendingPathComponent("\(Self.safe(id)).osm.pbf.part") }
     private func partRecordURL(_ id: String) -> URL { directory.appendingPathComponent("\(Self.safe(id)).osm.pbf.part.json") }
 
-    /// An identifier as a file name: letters, digits, `-` and `_` stay, anything else becomes `_`, so an id from an index
-    /// cannot name a file outside the folder.
+    /// An identifier as a file name: ASCII letters, digits and `-` stay, every other byte is written as `%XX`, so an id from an
+    /// index cannot name a file outside the folder, and different ids never give the same name.
     private static func safe(_ id: String) -> String {
-        String(id.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) || $0 == "-" ? Character($0) : "_" })
+        id.addingPercentEncoding(withAllowedCharacters: allowedInNames) ?? "%"
     }
+
+    private static let allowedInNames = CharacterSet(
+        charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
 
     // MARK: Reading
 
@@ -121,7 +124,9 @@ public struct SourceCache: Sendable {
     }
 
     /// Puts a finished download in place: the part file becomes the file of the region and a record is written. An older file of
-    /// the region is replaced in one step, and the unfinished-download note is removed.
+    /// the region is replaced in one step, and the unfinished-download note is removed. The file and its record are two files, so
+    /// a crash between the two steps leaves a file whose size is not the record's: ``status(ofRegionID:)`` then says damaged and
+    /// the file is downloaded again, which is wasteful but never wrong.
     ///
     /// - Parameters:
     ///   - regionID: The region.

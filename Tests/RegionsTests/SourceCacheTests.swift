@@ -109,7 +109,23 @@ struct SourceCacheTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let path = cache.fileURL(forRegionID: "../../etc/passwd")
         #expect(path.deletingLastPathComponent().standardizedFileURL.path == directory.standardizedFileURL.path)
-        #expect(path.lastPathComponent == "______etc_passwd.osm.pbf")
+        #expect(path.lastPathComponent == "%2E%2E%2F%2E%2E%2Fetc%2Fpasswd.osm.pbf")
+        #expect(cache.fileURL(forRegionID: "a/b") != cache.fileURL(forRegionID: "a_b"), "different ids, different files")
+        #expect(cache.fileURL(forRegionID: "baden-wuerttemberg").lastPathComponent == "baden-wuerttemberg.osm.pbf")
+    }
+
+    @Test("The list is ordered by region, and a part file with an unreadable note has no ETag")
+    func listAndPart() throws {
+        let (cache, directory, _) = try makeCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try store(cache, id: "sweden")
+        try store(cache, id: "norway")
+        try store(cache, id: "finland")
+        #expect(cache.list().map(\.regionID) == ["finland", "norway", "sweden"])
+        let part = try cache.preparePart(regionID: "denmark", etag: "\"v1\"", keepBytes: false)
+        try Data(repeating: 1, count: 300).write(to: part)
+        try Data("garbage".utf8).write(to: directory.appendingPathComponent("denmark.osm.pbf.part.json"))
+        #expect(cache.partialDownload(regionID: "denmark")?.bytes == 300 && cache.partialDownload(regionID: "denmark")?.etag == nil)
     }
 
     @Test("The default folder is in the application support folder and the free space can be asked")

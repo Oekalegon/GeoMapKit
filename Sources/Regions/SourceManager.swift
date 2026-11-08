@@ -12,10 +12,17 @@ import Foundation
 /// with its `ETag`, so an unchanged file costs one small request. A file that cannot be checked (no network) is still used,
 /// and the plan says why. Downloads go to a part file, continue where an interrupted one stopped, and are put in place only
 /// when they have the size the server gave.
-public struct SourceManager: Sendable {
+///
+/// The manager is an actor, but its calls suspend while the network works, so two calls can overlap. A region that is being
+/// downloaded is claimed: a second ``fetch(_:progress:)`` that needs it fails with ``SourceError/alreadyDownloading(region:)``
+/// instead of writing to the same part file. The claim holds within one process; two processes sharing a cache folder are not
+/// guarded.
+public actor SourceManager {
     /// The cache.
-    public let cache: SourceCache
+    public nonisolated let cache: SourceCache
     private let downloader: any Downloader
+    /// The regions whose files are being downloaded now.
+    private var active: Set<String> = []
 
     /// Creates a manager.
     ///
@@ -29,6 +36,11 @@ public struct SourceManager: Sendable {
 
     /// The free space to keep beyond the files themselves, in bytes, so that a download does not fill the volume.
     public static let spareBytes: Int64 = 256 * 1024 * 1024
+
+    private func claim(_ ids: [String]) throws {
+        if let busy = ids.first(where: active.contains) { throw SourceError.alreadyDownloading(region: busy) }
+        active.formUnion(ids)
+    }
 
     /// Makes the plan for a selection of regions. Only the network questions described above are asked.
     ///
@@ -80,7 +92,8 @@ public struct SourceManager: Sendable {
         }
     }
 
-    /// The bytes of an unfinished download that belong to the file the server has now.
+    /// The bytes of an unfinished download that belong to the file the server has now. They are only continued when the server
+    /// gives an `ETag` that is the same: without one, a download starts again from the beginning.
     private func resumable(_ region: SourceRegion, _ info: RemoteFileInfo) -> Int64 {
         guard let partial = cache.partialDownload(regionID: region.id), let etag = info.etag, partial.etag == etag else { return 0 }
         return partial.bytes
@@ -95,7 +108,8 @@ public struct SourceManager: Sendable {
     ///   - plan: The plan, as it was shown to the user.
     ///   - progress: Called with the region's identifier, the bytes of its file held so far and its size (`nil` if unknown).
     /// - Returns: The files of all items of the plan, in the order of the plan.
-    /// - Throws: ``SourceError/notEnoughSpace(needed:available:)`` before anything is downloaded,
+    /// - Throws: ``SourceError/alreadyDownloading(region:)`` if a region is being downloaded by another call,
+    ///   ``SourceError/notEnoughSpace(needed:available:)`` before anything is downloaded,
     ///   ``SourceError/incompleteDownload(region:expected:received:)`` if a file is short (the part file stays for a later
     ///   resume), the downloader's error, or a file error.
     public func fetch(_ plan: DownloadPlan, progress: @Sendable (String, Int64, Int64?) -> Void = { _, _, _ in }) async throws -> [URL] {
@@ -103,6 +117,9 @@ public struct SourceManager: Sendable {
         if needed > 0, let available = cache.availableBytes(), available < needed + Self.spareBytes {
             throw SourceError.notEnoughSpace(needed: needed + Self.spareBytes, available: available)
         }
+        let ids = plan.items.filter { $0.action != .useCached }.map(\.region.id)
+        try claim(ids)
+        defer { active.subtract(ids) }
         var files: [URL] = []
         for item in plan.items {
             let region = item.region
