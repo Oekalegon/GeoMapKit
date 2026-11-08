@@ -106,6 +106,30 @@ public struct CoreGraphicsRenderer: MapRenderer {
         if let stroke = classStyle.stroke(for: step.step.structure) {
             context.setStrokeColor(stroke.color.value(atZoom: zoom).cgColor)
             let color = stroke.color.value(atZoom: zoom)
+            // The strip between the carriageways of a divided road, in the colour of the road, with a divider line along its
+            // middle in the colour of the road's outline. A hairline closes the seams of the fill.
+            if !step.medians.isEmpty, color.alpha >= 1 {
+                context.setFillColor(color.cgColor)
+                context.setStrokeColor(color.cgColor)
+                context.setLineWidth(0.5)
+                context.setLineJoin(.round)
+                for median in step.medians {
+                    context.beginPath()
+                    addClosed(median.ring, to: context)
+                    context.drawPath(using: .fillStroke)
+                }
+                if let casing = stroke.casing {
+                    let divider = casing.color.value(atZoom: zoom)
+                    var flat = stroke
+                    flat.cap = .butt
+                    flat.join = .round
+                    context.setStrokeColor(divider.cgColor)
+                    for median in step.medians {
+                        strokePath(median.divider, width: max(0.6, casing.extraPoints.value(atZoom: zoom)), stroke: flat, dashed: false, in: context)
+                    }
+                    context.setStrokeColor(color.cgColor)
+                }
+            }
             for line in step.lines {
                 let width = stroke.width.resolved(atZoom: zoom, metresPerPoint: viewport.metresPerPoint, lanes: line.lanes)
                 strokeLine(

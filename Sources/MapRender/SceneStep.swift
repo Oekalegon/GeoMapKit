@@ -13,12 +13,17 @@ public struct SceneStep: Sendable, Equatable {
     public var areas: [SceneArea]
     /// The points of the class.
     public var points: [ScenePoint]
+    /// The strips between the two carriageways of a divided road, to fill in the colour of the road.
+    public var medians: [SceneMedian]
 
     /// Creates a step.
-    public init(step: DrawStep, lines: [SceneLine] = [], areas: [SceneArea] = [], points: [ScenePoint] = []) {
+    public init(
+        step: DrawStep, lines: [SceneLine] = [], areas: [SceneArea] = [], points: [ScenePoint] = [], medians: [SceneMedian] = []
+    ) {
         self.step = step
         self.lines = lines
         self.areas = areas
         self.points = points
+        self.medians = medians
     }
 }
