@@ -58,6 +58,7 @@ let package = Package(
         .testTarget(name: "MapRenderTests", dependencies: ["MapRender", "MapStyle", "FeatureStore", "GeoCore"]),
         .testTarget(name: "MapUITests", dependencies: ["MapUI", "MapRender", "MapStyle", "FeatureStore", "GeoCore"]),
         .testTarget(name: "FeatureStoreTests", dependencies: ["FeatureStore", "GeoCore"]),
+        .testTarget(name: "RegionsTests", dependencies: ["Regions", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
 )

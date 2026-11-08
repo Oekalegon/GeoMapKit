@@ -41,7 +41,7 @@ struct MultiFileCutTests {
                         id: $0.id, members: $0.members.map { (id: $0.id, role: 8, type: $0.type) }, tags: [(key: 6, value: 7)])
                 }))
         }
-        return try! PBFReader(data: builder.file)
+        return PBFReader(data: builder.file)
     }
 
     @Test("A way and a relation that one file holds in part are completed from the other")
