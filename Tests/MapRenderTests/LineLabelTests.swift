@@ -35,8 +35,8 @@ struct LineLabelTests {
             style: LabelStyle(size: ZoomValue(constant: 10), color: .black, haloWidth: 0, placement: .besideLine))
     }
 
-    /// The distance from the line to the middle of the text beside it: half the font size and 3.5 points of clear space.
-    private let lift = 8.5
+    /// The distance from the line to the middle of the text beside it: half the font size and 1 point.
+    private let lift = 6.0
 
     private func place(
         _ lines: [LineLabelCandidate], points: [LabelCandidate] = [], maximumCount: Int? = nil, width: Double = 400
