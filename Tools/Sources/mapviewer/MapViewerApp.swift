@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The command line of the viewer: `[file.gmk] [--zoom Z] [--style standard|watch] [--watch-size] [--pan EAST,SOUTH] [--snapshot out.png]`.
+/// The command line of the viewer: `[file.gmk | manifest.json | folder] [--zoom Z] [--style standard|watch] [--watch-size] [--pan EAST,SOUTH] [--snapshot out.png]`.
 ///
 /// `--snapshot` writes the window content to a PNG after the map has been drawn and quits, so the view can be
 /// checked without a screen recording permission.

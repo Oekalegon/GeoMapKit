@@ -23,16 +23,26 @@ final class MapModel {
     private var drawing = false
     private var latest: (viewport: MapViewport, scale: Double, interacting: Bool)?
 
-    /// Creates a model.
-    init(file: FeatureStoreFile, style: MapStyle) {
-        renderer = MapFrameRenderer(file: file, style: style, styleID: 0)
+    /// Creates a model that draws a store: one file, or a set of block files.
+    init(source: any CellSource, style: MapStyle) {
+        renderer = MapFrameRenderer(source: source, style: style, styleID: 0)
+    }
+
+    /// Creates a model that draws one store file.
+    convenience init(file: FeatureStoreFile, style: MapStyle) {
+        self.init(source: file, style: style)
     }
 
     /// Replaces the store or the style, dropping the cached frame if it no longer matches.
-    func update(file: FeatureStoreFile, style: MapStyle) {
+    func update(source: any CellSource, style: MapStyle) {
         generation += 1
-        renderer = MapFrameRenderer(file: file, style: style, styleID: generation)
+        renderer = MapFrameRenderer(source: source, style: style, styleID: generation)
         frame = nil
+    }
+
+    /// Replaces the store file or the style, dropping the cached frame if it no longer matches.
+    func update(file: FeatureStoreFile, style: MapStyle) {
+        update(source: file, style: style)
     }
 
     /// Tells the model what should be on screen.
