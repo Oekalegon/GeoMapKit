@@ -32,7 +32,7 @@ struct FeatureEmitter {
         }
         report.featuresByClass[classification.featureClass, default: 0] += 1
 
-        let nameID = ClassifierTagArray(spec.tags).value(forKey: "name").map { writer.intern($0) }
+        let nameID = (ClassifierTagArray(spec.tags).value(forKey: "name") ?? spec.fallbackName).map { writer.intern($0) }
         var tags: [StoredTag] = []
         if profile == .full {
             tags = spec.tags.map { StoredTag(key: writer.intern($0.key), value: writer.intern($0.value)) }

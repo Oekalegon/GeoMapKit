@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 13
+    public static let version: UInt16 = 16
 
     /// Creates a classifier.
     public init() {}
@@ -26,7 +26,8 @@ public struct FeatureClassifier: Sendable {
         var outcome = firstOutcome(in: tags) ?? Self.fallback
         // Of the administrative boundaries only two kinds are kept as such, because a map of towns, villages and municipalities
         // every few kilometres is of no use to a runner and hides the ones that matter: national borders (level 2, on land or in
-        // the sea, but not the limit of the territorial waters or an economic zone, which no one crosses on foot) and the
+        // the sea, but not the limit of the territorial waters or an economic zone, which no one crosses on foot; the builder takes back the agreed line
+        // between two countries, which two national relations share, see `storeWays`) and the
         // level of states or counties (level 4). The rule table matches one key only, so this is checked afterwards. The other
         // levels become `other`: their tags stay in the store, and nothing draws them.
         if outcome.featureClass == .boundary, tags.value(forKey: "boundary") == "administrative" {
@@ -110,6 +111,12 @@ public struct FeatureClassifier: Sendable {
 
     /// The classes that are lines of the movement network; as areas they become `roadArea`.
     private static let roadClasses: Set<FeatureClass> = [.roadMajor, .roadMinor, .roadService, .path, .track, .pavement]
+
+    /// Whether a boundary is tagged as the limit of an area of sea (`border_type` territorial, economic zone, contiguous zone).
+    /// Such a way is no national border, unless it is the agreed line between two countries; the builder decides that.
+    func isSeaLimit(_ tags: some ClassifierTags) -> Bool {
+        Self.seaLimits.contains(tags.value(forKey: "border_type") ?? "")
+    }
 
     /// The `border_type` values of a boundary that is the limit of an area of sea, not the border between two countries.
     private static let seaLimits: Set<String> = ["territorial", "eez", "exclusive_economic_zone", "contiguous", "contiguous_zone"]

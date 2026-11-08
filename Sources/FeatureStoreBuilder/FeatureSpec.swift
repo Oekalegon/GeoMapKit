@@ -15,6 +15,9 @@ struct FeatureSpec {
     var objectType: StoredObjectType
     var objectID: Int64
     var tags: [OSMTag]
+    /// The name to store when the tags have none, for a feature named after something else (a border after the regions it
+    /// separates).
+    var fallbackName: String?
     var geometry: Geometry
     /// Flags added to every piece, for example `incomplete`.
     var extraFlags: FeatureFlags = []

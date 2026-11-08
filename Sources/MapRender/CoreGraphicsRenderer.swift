@@ -289,32 +289,80 @@ public struct CoreGraphicsRenderer: MapRenderer {
     private func drawLabels(_ scene: MapScene, style: MapStyle, in context: CGContext) {
         let candidates = LabelCandidates.collect(from: scene, style: style)
         let labels = LabelPlacer.place(
-            candidates, viewWidth: scene.viewport.width, viewHeight: scene.viewport.height,
-            padding: style.labels.padding, maximumCount: style.labels.maximumCount, measure: Self.measure)
+            candidates, lines: LabelCandidates.collectLines(from: scene, style: style),
+            viewWidth: scene.viewport.width, viewHeight: scene.viewport.height,
+            padding: style.labels.padding, maximumCount: style.labels.maximumCount,
+            characterOffsets: Self.characterOffsets, measure: Self.measure)
         for label in labels { drawLabel(label, in: context) }
     }
 
     private func drawLabel(_ label: PlacedLabel, in context: CGContext) {
+        if !label.glyphs.isEmpty {
+            drawAlongLine(label, in: context)
+            return
+        }
         let line = Self.line(for: label.text, fontSize: label.fontSize)
         context.saveGState()
         defer { context.restoreGState() }
         // Core Text draws upright in a y-up space; the view is y-down, so flip around the baseline.
         context.translateBy(x: label.origin.x, y: label.origin.y + Self.ascent(of: line))
+        drawFlipped(line, style: label.style, in: context)
+    }
+
+    /// Draws the letters of a label one by one, each turned to the direction of the line. All halos come first, so that the
+    /// halo of a letter does not cut into its neighbour.
+    private func drawAlongLine(_ label: PlacedLabel, in context: CGContext) {
+        for pass in [LabelPass.halo, .fill] {
+            for glyph in label.glyphs {
+                let line = Self.line(for: glyph.text, fontSize: label.fontSize)
+                var ascent: CGFloat = 0
+                var descent: CGFloat = 0
+                _ = CTLineGetTypographicBounds(line, &ascent, &descent, nil)
+                context.saveGState()
+                context.translateBy(x: glyph.position.x, y: glyph.position.y)
+                context.rotate(by: glyph.angle)
+                // The middle of the text height sits on the line, the middle of the advance on the letter's position.
+                context.translateBy(x: -glyph.width / 2, y: Double(ascent - descent) / 2)
+                drawFlipped(line, style: label.style, pass: pass, in: context)
+                context.restoreGState()
+            }
+        }
+    }
+
+    private enum LabelPass { case halo, fill, both }
+
+    /// Draws a line of text with its baseline at the origin, upright in the y-down view: halo first, then fill.
+    private func drawFlipped(_ line: CTLine, style: LabelStyle, pass: LabelPass = .both, in context: CGContext) {
         context.scaleBy(x: 1, y: -1)
         context.textMatrix = .identity
         context.textPosition = .zero
-        if label.style.haloWidth > 0 {
+        if style.haloWidth > 0, pass != .fill {
             context.setTextDrawingMode(.stroke)
-            context.setStrokeColor(label.style.haloColor.cgColor)
-            context.setLineWidth(label.style.haloWidth * 2)
+            context.setStrokeColor(style.haloColor.cgColor)
+            context.setLineWidth(style.haloWidth * 2)
             context.setLineJoin(.round)
             CTLineDraw(line, context)
         }
+        guard pass != .halo else { return }
         // CTLineDraw moves the text position to the end of the line: start the fill pass at the same place.
         context.textPosition = .zero
         context.setTextDrawingMode(.fill)
-        context.setFillColor(label.style.color.cgColor)
+        context.setFillColor(style.color.cgColor)
         CTLineDraw(line, context)
+    }
+
+    /// Where each character of a text starts, in points, with the total width last, so the letters keep the spacing of
+    /// the whole line when they are drawn one by one along a curve.
+    static func characterOffsets(_ text: String, _ fontSize: Double) -> [Double] {
+        let line = line(for: text, fontSize: fontSize)
+        var offsets: [Double] = []
+        var index = 0
+        for character in text {
+            offsets.append(Double(CTLineGetOffsetForStringIndex(line, index, nil)))
+            index += character.utf16.count
+        }
+        offsets.append(Double(CTLineGetTypographicBounds(line, nil, nil, nil)))
+        return offsets
     }
 
     static func line(for text: String, fontSize: Double) -> CTLine {

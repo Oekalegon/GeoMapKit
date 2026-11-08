@@ -4,8 +4,25 @@ import MapStyle
 /// Collects the named features of a scene that have a label style.
 ///
 /// Points are labelled next to their symbol and areas at the centre of their bounding box when that lies in the view.
-/// Lines are not labelled yet: curved text along paths comes later (see "Renderer scope" in the architecture document).
+/// Lines are labelled along their course, see ``collectLines(from:style:)``.
 enum LabelCandidates {
+    /// The named lines of a scene whose class has a label style: roads, rivers, paths, borders.
+    static func collectLines(from scene: MapScene, style: MapStyle) -> [LineLabelCandidate] {
+        let zoom = scene.viewport.zoom
+        var candidates: [LineLabelCandidate] = []
+        for step in scene.steps where step.step.part == .body {
+            guard let label = style.style(for: step.step.featureClass)?.label else { continue }
+            let size = label.size.value(atZoom: zoom)
+            guard size > 0, label.visibleZoom.contains(zoom) else { continue }
+            for line in step.lines {
+                guard let name = line.name, !name.isEmpty, line.points.count >= 2 else { continue }
+                candidates.append(LineLabelCandidate(
+                    objectID: line.objectID, text: name, points: line.points, fontSize: size, style: label))
+            }
+        }
+        return candidates
+    }
+
     static func collect(from scene: MapScene, style: MapStyle) -> [LabelCandidate] {
         let zoom = scene.viewport.zoom
         let view = ScreenBounds(width: scene.viewport.width, height: scene.viewport.height, margin: 0)

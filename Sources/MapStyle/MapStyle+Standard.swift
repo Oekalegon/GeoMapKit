@@ -23,8 +23,13 @@ extension MapStyle {
                     color: ZoomValue((14.5, MapColor(hex: 0xBFB5AB, alpha: 0)), (15, MapColor(hex: 0xBFB5AB))),
                     width: LineWidth(points: .constant(0.5))),
                 visibleZoom: 14...24, layer: 14),
+            // The names of the two regions a border separates are written small along it, each on the side of its region.
             .boundary: ClassStyle(
-                stroke: .line(0x9E7CB1, ZoomValue((8, 0.8), (16, 1.5)), dash: [6, 3]), layer: 20),
+                stroke: .line(0x9E7CB1, ZoomValue((8, 0.8), (16, 1.5)), dash: [6, 3]),
+                label: LabelStyle(
+                    size: ZoomValue((9, 5.5), (14, 6.5)), color: MapColor(hex: 0x7B5A91), haloWidth: 0, priority: 22,
+                    visibleZoom: 9...24, placement: .besideLine),
+                layer: 20),
             // The border of a national park or a nature reserve: dark green on land, dark blue in the sea.
             .parkBorder: ClassStyle(
                 stroke: .line(0x2E6B34, ZoomValue((8, 0.8), (16, 1.5)), dash: [6, 3]), layer: 20),
@@ -45,10 +50,13 @@ extension MapStyle {
                 stroke: StrokeStyle(
                     color: .color(0x9E7CB1), width: LineWidth(points: ZoomValue((8, 0.8), (16, 1.5))), dash: [6, 3],
                     casing: .init(color: ZoomValue(constant: MapColor(hex: 0x9E7CB1, alpha: 115.0 / 255)), extraPoints: ZoomValue((8, 2), (12, 3), (16, 6)))),
+                label: LabelStyle(
+                    size: ZoomValue((6, 5.5), (10, 6.5), (14, 7.5)), color: MapColor(hex: 0x7B5A91), haloWidth: 0, priority: 24,
+                    visibleZoom: 6...24, placement: .besideLine),
                 layer: 20),
             .waterLine: ClassStyle(
                 stroke: .line(0x6FB3DB, ZoomValue((8, 0.6), (12, 1.2), (17, 3))),
-                label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x2F6F9F), priority: 20), layer: 21,
+                label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x2F6F9F), priority: 20, visibleZoom: 11...24), layer: 21,
                 tunnel: TunnelStyle(opacity: 0.6, dash: [3, 2])),
             .railway: ClassStyle(
                 stroke: .line(0x777777, ZoomValue((8, 0.6), (14, 1.4))), layer: 22,
@@ -68,6 +76,8 @@ extension MapStyle {
                         points: ZoomValue((12, 0.8), (16, 2.5)),
                         ground: GroundWidth(metresPerLane: 3, defaultLanes: 2)),
                     casing: .init(color: .color(0xAAAAAA), extraPoints: ZoomValue((13, 0), (15, 0.6), (18, 1.2)))),
+                label: LabelStyle(
+                    size: ZoomValue((15, 8.5), (18, 10)), color: MapColor(hex: 0x555555), priority: 10, visibleZoom: 15...24),
                 visibleZoom: 12...24, layer: 30, casingLayer: 29,
                 bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.6), (16, 1.8)))),
                 tunnel: TunnelStyle(opacity: 0.5, dash: [5, 3])),
@@ -80,6 +90,7 @@ extension MapStyle {
                         points: ZoomValue((12, 0.5), (16, 1.6)),
                         ground: GroundWidth(metresPerLane: 3, defaultLanes: 1)),
                     casing: .init(color: .color(0xBBBBBB), extraPoints: ZoomValue((14, 0), (15, 0.4), (18, 1)))),
+                label: LabelStyle(size: .constant(8), color: MapColor(hex: 0x666666), priority: 6, visibleZoom: 17...24),
                 visibleZoom: 12...24, layer: 30, casingLayer: 29,
                 bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.5), (16, 1.4)))),
                 tunnel: TunnelStyle(opacity: 0.5, dash: [4, 3])),
@@ -90,7 +101,8 @@ extension MapStyle {
                         points: ZoomValue((8, 0.8), (12, 1.8), (16, 3.5)),
                         ground: GroundWidth(metresPerLane: 3, defaultLanes: 2)),
                     casing: .init(color: .color(0xB8862E), extraPoints: ZoomValue((10, 0.3), (14, 0.7), (18, 1.5)))),
-                label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x555555), priority: 15), layer: 31, casingLayer: 29,
+                label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x555555), priority: 15, visibleZoom: 12...24),
+                layer: 31, casingLayer: 29,
                 bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.6), (16, 1.8)))),
                 tunnel: TunnelStyle(opacity: 0.5, dash: [5, 3])),
             // Sidewalks and crossings: part of the street, so fainter and thinner than the paths a runner chooses.
@@ -99,13 +111,15 @@ extension MapStyle {
             .cliff: ClassStyle(
                 stroke: .line(0x8C8279, ZoomValue((13, 0.8), (17, 1.6))), visibleZoom: 13...24, layer: 26),
             .track: ClassStyle(
-                stroke: .line(0x8B5A2B, ZoomValue((12, 1.0), (16, 2.0)), dash: [6, 2]), visibleZoom: 12...24,
-                layer: 40,
+                stroke: .line(0x8B5A2B, ZoomValue((12, 1.0), (16, 2.0)), dash: [6, 2]),
+                label: LabelStyle(size: .constant(8.5), color: MapColor(hex: 0x6B4420), priority: 8, visibleZoom: 15...24),
+                visibleZoom: 12...24, layer: 40,
                 bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.5), (16, 1.2)))),
                 tunnel: TunnelStyle(opacity: 0.45)),
             .path: ClassStyle(
-                stroke: .line(0xD2381C, ZoomValue((12, 1.0), (16, 2.0)), dash: [3, 2]), visibleZoom: 12...24,
-                layer: 41,
+                stroke: .line(0xD2381C, ZoomValue((12, 1.0), (16, 2.0)), dash: [3, 2]),
+                label: LabelStyle(size: .constant(8.5), color: MapColor(hex: 0xA02A14), priority: 8, visibleZoom: 16...24),
+                visibleZoom: 12...24, layer: 41,
                 bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.5), (16, 1.2)))),
                 tunnel: TunnelStyle(opacity: 0.45)),
             .barrier: ClassStyle(stroke: .line(0x8A8A8A, .constant(0.6)), visibleZoom: 16...24, layer: 45),

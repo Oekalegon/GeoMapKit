@@ -1,22 +1,30 @@
+import FeatureStore
+
 /// Chooses where labels go so that none overlaps another label or a point symbol.
 ///
 /// Greedy and deterministic: candidates are tried in order of priority (highest first, then OSM ID), and each takes
 /// the first of its positions that is free and inside the view. A candidate with no free position is dropped.
-/// Point labels try right, left, above and below the symbol; area labels sit centred on their anchor.
+/// Point labels try right, left, above and below the symbol; area labels sit centred on their anchor; labels along lines
+/// run along the line where it is straight enough, see ``LineLabelCandidate``.
 public enum LabelPlacer {
     /// Places labels.
     ///
     /// - Parameters:
-    ///   - candidates: The names to place. Only the first candidate per `objectID` is used, so give the best one first.
+    ///   - candidates: The names of points and areas to place. Only the first candidate per `objectID` is used, so give the
+    ///     best one first.
+    ///   - lines: The names of lines. They compete with the others by priority. A line can carry its name more than once.
     ///   - viewWidth: The width of the view in points.
     ///   - viewHeight: The height of the view in points.
     ///   - padding: The clear space kept around each label, in points. Larger values give fewer labels.
     ///   - maximumCount: The most labels to place, or `nil` for no limit. The highest priority labels stay.
+    ///   - characterOffsets: For a text and a font size, where each character starts along the text, in points, with the
+    ///     total width as the last value (one more value than there are characters). `nil` spaces the characters evenly.
     ///   - measure: Returns the size of a text box for a text and a font size, in points.
     /// - Returns: The labels that found a place, in priority order.
     public static func place(
-        _ candidates: [LabelCandidate], viewWidth: Double, viewHeight: Double,
+        _ candidates: [LabelCandidate], lines: [LineLabelCandidate] = [], viewWidth: Double, viewHeight: Double,
         padding: Double = 2, maximumCount: Int? = nil,
+        characterOffsets: ((String, Double) -> [Double])? = nil,
         measure: (String, Double) -> (width: Double, height: Double)
     ) -> [PlacedLabel] {
         var occupied: [ScreenBounds] = candidates.compactMap { candidate in
@@ -27,29 +35,47 @@ public enum LabelPlacer {
                 ScreenPoint(x: candidate.anchor.x + r, y: candidate.anchor.y + r),
             ])
         }
-        let ordered = candidates.sorted {
-            ($1.style.priority, $0.objectID, $0.text) < ($0.style.priority, $1.objectID, $1.text)
+        enum Item {
+            case point(LabelCandidate)
+            case line(LineLabelCandidate)
         }
+        var ordered: [(priority: Int, objectID: Int64, text: String, item: Item)] = candidates.map {
+            ($0.style.priority, $0.objectID, $0.text, .point($0))
+        }
+        ordered += lines.map { ($0.style.priority, $0.objectID, $0.text, .line($0)) }
+        ordered.sort { ($1.priority, $0.objectID, $0.text) < ($0.priority, $1.objectID, $1.text) }
+
         var seen = Set<Int64>()
         var placed: [PlacedLabel] = []
-        for candidate in ordered where !seen.contains(candidate.objectID) {
+        var lineState = LineLabelState()
+        for entry in ordered {
             if let maximumCount, placed.count >= maximumCount { break }
-            let size = measure(candidate.text, candidate.fontSize)
-            guard size.width > 0, size.height > 0 else { continue }
-            for origin in positions(for: candidate, width: size.width, height: size.height) {
-                let box = ScreenBounds(of: [
-                    ScreenPoint(x: origin.x - padding, y: origin.y - padding),
-                    ScreenPoint(x: origin.x + size.width + padding, y: origin.y + size.height + padding),
-                ])
-                guard let box, box.minX >= 0, box.minY >= 0, box.maxX <= viewWidth, box.maxY <= viewHeight,
-                      !occupied.contains(where: { $0.intersects(box) })
-                else { continue }
-                occupied.append(box)
-                seen.insert(candidate.objectID)
-                placed.append(PlacedLabel(
-                    text: candidate.text, origin: origin, width: size.width, height: size.height,
-                    fontSize: candidate.fontSize, style: candidate.style))
-                break
+            switch entry.item {
+            case .line(let candidate):
+                let parts = lineParts(of: candidate, characterOffsets: characterOffsets, measure: measure)
+                let remaining = maximumCount.map { $0 - placed.count }
+                placed += placeAlongLine(
+                    candidate, parts: parts, viewWidth: viewWidth, viewHeight: viewHeight, padding: padding,
+                    remaining: remaining, occupied: &occupied, state: &lineState)
+            case .point(let candidate):
+                guard !seen.contains(candidate.objectID) else { continue }
+                let size = measure(candidate.text, candidate.fontSize)
+                guard size.width > 0, size.height > 0 else { continue }
+                for origin in positions(for: candidate, width: size.width, height: size.height) {
+                    let box = ScreenBounds(of: [
+                        ScreenPoint(x: origin.x - padding, y: origin.y - padding),
+                        ScreenPoint(x: origin.x + size.width + padding, y: origin.y + size.height + padding),
+                    ])
+                    guard let box, box.minX >= 0, box.minY >= 0, box.maxX <= viewWidth, box.maxY <= viewHeight,
+                          !occupied.contains(where: { $0.intersects(box) })
+                    else { continue }
+                    occupied.append(box)
+                    seen.insert(candidate.objectID)
+                    placed.append(PlacedLabel(
+                        text: candidate.text, origin: origin, width: size.width, height: size.height,
+                        fontSize: candidate.fontSize, style: candidate.style))
+                    break
+                }
             }
         }
         return placed
