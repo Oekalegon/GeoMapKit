@@ -2,79 +2,155 @@ import FeatureStore
 import Foundation
 import OSMPBF
 
-/// The built-up areas of an extract, for asking whether a footway lies in a town rather than in a park.
+/// The built-up and green areas of an extract, for asking whether a footway lies in a town rather than in a park.
 ///
 /// Many footways in a city are not beside a road: they cross a plaza, a station, a yard or a car park. They are the pavement of
 /// the town, not paths to run. A footway is taken to be one when most of its length lies in a built-up area (urban land use, a
-/// pedestrian area, a platform, a car park, a square) and not in a green one (a park, a garden, a wood, open land). Only
-/// areas that are closed ways count; areas that are multipolygon relations are not seen.
+/// pedestrian area, a platform, a car park, a square) and not in a green one (a park, a garden, a wood, open land).
+///
+/// The areas are the closed ways and the multipolygon relations of the extract, with their holes. Both matter: a park that
+/// is mapped as a relation must count as green, or its paths would be taken for sidewalks because the closed way of the
+/// housing around it is seen. A relation that is incomplete in the extract is not used.
 struct TownIndex {
     /// The share of the footway's length that must lie in a town.
     static let minimumShare = 0.7
     /// A footway shorter than this, in metres, is not judged.
     static let minimumLength = 10.0
+    /// Polygons whose bounding box covers more grid cells than this are kept in a short list that every query tests, instead
+    /// of in the grid: a wood of 20 km would otherwise take tens of thousands of cells.
+    static let largestGridded = 400
     private static let sampleSpacing = 5.0
     private static let cellSize = 100.0
 
-    private struct Polygon {
-        var xs: [Double], ys: [Double]
+    /// An area with its holes: rings in metres, filled by the even-odd rule.
+    struct Polygon {
+        var rings: [(xs: [Double], ys: [Double])]
         var minX: Double, maxX: Double, minY: Double, maxY: Double
 
+        init?(rings projected: [[(x: Double, y: Double)]]) {
+            let usable = projected.filter { $0.count >= 4 }
+            guard !usable.isEmpty else { return nil }
+            rings = usable.map { ring in (ring.map(\.x), ring.map(\.y)) }
+            minX = usable.flatMap { $0.map(\.x) }.min() ?? 0
+            maxX = usable.flatMap { $0.map(\.x) }.max() ?? 0
+            minY = usable.flatMap { $0.map(\.y) }.min() ?? 0
+            maxY = usable.flatMap { $0.map(\.y) }.max() ?? 0
+        }
+
+        /// Whether a point lies in the area: inside an odd number of its rings.
         func contains(x: Double, y: Double) -> Bool {
             guard x >= minX, x <= maxX, y >= minY, y <= maxY else { return false }
             var inside = false
-            var j = xs.count - 1
-            for i in 0..<xs.count {
-                if (ys[i] > y) != (ys[j] > y), x < (xs[j] - xs[i]) * (y - ys[i]) / (ys[j] - ys[i]) + xs[i] { inside.toggle() }
-                j = i
+            for ring in rings {
+                var j = ring.xs.count - 1
+                for i in 0..<ring.xs.count {
+                    if (ring.ys[i] > y) != (ring.ys[j] > y),
+                        x < (ring.xs[j] - ring.xs[i]) * (y - ring.ys[i]) / (ring.ys[j] - ring.ys[i]) + ring.xs[i]
+                    {
+                        inside.toggle()
+                    }
+                    j = i
+                }
             }
             return inside
         }
     }
 
-    private struct Layer {
-        var polygons: [Polygon] = []
-        var grid: [Int64: [Int]] = [:]
+    /// A set of polygons with a grid for the small ones.
+    struct Layer {
+        private(set) var polygons: [Polygon] = []
+        private var grid: [Int64: [Int]] = [:]
+        private var large: [Int] = []
 
         mutating func add(_ polygon: Polygon) {
             let index = polygons.count
             polygons.append(polygon)
-            for column in TownIndex.cell(polygon.minX)...TownIndex.cell(polygon.maxX) {
-                for row in TownIndex.cell(polygon.minY)...TownIndex.cell(polygon.maxY) { grid[TownIndex.key(column, row), default: []].append(index) }
+            let columns = TownIndex.cell(polygon.minX)...TownIndex.cell(polygon.maxX)
+            let rows = TownIndex.cell(polygon.minY)...TownIndex.cell(polygon.maxY)
+            if columns.count * rows.count > TownIndex.largestGridded {
+                large.append(index)
+                return
+            }
+            for column in columns {
+                for row in rows { grid[TownIndex.key(column, row), default: []].append(index) }
             }
         }
 
         func contains(x: Double, y: Double) -> Bool {
-            (grid[TownIndex.key(TownIndex.cell(x), TownIndex.cell(y))] ?? []).contains { polygons[$0].contains(x: x, y: y) }
+            if (grid[TownIndex.key(TownIndex.cell(x), TownIndex.cell(y))] ?? []).contains(where: { polygons[$0].contains(x: x, y: y) }) {
+                return true
+            }
+            return large.contains { polygons[$0].contains(x: x, y: y) }
         }
     }
 
-    private let projection: LocalMetres
-    private var town = Layer()
-    private var green = Layer()
+    private let projection = LocalMetres()
+    private(set) var town = Layer()
+    private(set) var green = Layer()
 
-    /// Builds the index from the closed ways of an extract.
+    /// Builds the index from the closed ways and the multipolygon relations of an extract.
     init(extract: OSMExtract, classifier: FeatureClassifier) {
-        projection = LocalMetres(around: extract.boundingBox)
         for position in extract.ways.indices {
             let nodeIDs = extract.ways.nodeIDs(at: position)
             guard nodeIDs.count >= 4, nodeIDs.first == nodeIDs.last else { continue }
             let tags = extract.ways.tags(at: position)
             let classification = classifier.classify(tags, shape: .closedWay)
             let isPlatform = tags.value(forKey: "railway") == "platform" || tags.value(forKey: "public_transport") == "platform"
-            let isTown = classification.kind == .area
-                && (classification.featureClass == .landuseUrban || classification.featureClass == .roadArea
-                    || tags.value(forKey: "amenity") == "parking" || tags.value(forKey: "place") == "square")
-            let isGreen = classification.kind == .area
-                && (classification.featureClass == .landcover || classification.featureClass == .forest)
-            guard isTown || isPlatform || isGreen else { continue }
+            let role = Self.role(of: classification, tags, isPlatform: isPlatform)
+            guard role != .none else { continue }
             let (runs, gaps) = FeatureStoreBuilder.runs(ofWayAt: position, in: extract)
-            guard gaps == 0, runs.count == 1, runs[0].count >= 4 else { continue }
-            let points = runs[0].map { projection.project($0) }
-            let polygon = Polygon(
-                xs: points.map(\.x), ys: points.map(\.y), minX: points.map(\.x).min() ?? 0, maxX: points.map(\.x).max() ?? 0,
-                minY: points.map(\.y).min() ?? 0, maxY: points.map(\.y).max() ?? 0)
-            if isGreen && !isTown { green.add(polygon) } else { town.add(polygon) }
+            guard gaps == 0, runs.count == 1, let polygon = polygon(from: [runs[0]]) else { continue }
+            add(polygon, as: role)
+        }
+        for position in extract.relations.indices {
+            let item = extract.relations[position]
+            let relation = item.relation
+            guard item.isComplete, relation.tagValue(forKey: "type") == "multipolygon" else { continue }
+            let tags = ClassifierTagArray(relation.orderedTags)
+            let classification = classifier.classify(tags, shape: .multipolygon)
+            let role = Self.role(of: classification, tags, isPlatform: false)
+            guard role != .none else { continue }
+            var members: [MultipolygonMember] = []
+            for member in relation.members where member.type == .way {
+                let memberRole = MultipolygonRole(osmRole: member.role)
+                guard memberRole != .ignored, let way = extract.ways.index(ofID: member.id) else { continue }
+                let nodeIDs = Array(extract.ways.nodeIDs(at: way))
+                let points = nodeIDs.compactMap {
+                    extract.nodes.index(ofID: $0).map { FeatureStoreBuilder.packed(extract.nodes.coordinate(at: $0)) }
+                }
+                members.append(MultipolygonMember(
+                    wayID: member.id, role: memberRole, nodeIDs: nodeIDs, points: points.count == nodeIDs.count ? points : nil))
+            }
+            let assembly = MultipolygonAssembler.assemble(members: members, relationIsComplete: item.isComplete)
+            guard assembly.isComplete else { continue }
+            for assembled in assembly.polygons {
+                if let polygon = polygon(from: assembled.rings) { add(polygon, as: role) }
+            }
+        }
+    }
+
+    private enum Role { case none, town, green }
+
+    private static func role(of classification: Classification, _ tags: some ClassifierTags, isPlatform: Bool) -> Role {
+        if isPlatform { return .town }
+        guard classification.kind == .area else { return .none }
+        switch classification.featureClass {
+        case .landuseUrban, .roadArea: return .town
+        case .landcover, .forest: return .green
+        default:
+            return tags.value(forKey: "amenity") == "parking" || tags.value(forKey: "place") == "square" ? .town : .none
+        }
+    }
+
+    private func polygon(from rings: [[PackedPoint]]) -> Polygon? {
+        Polygon(rings: rings.map { $0.map { projection.project($0) } })
+    }
+
+    private mutating func add(_ polygon: Polygon, as role: Role) {
+        switch role {
+        case .town: town.add(polygon)
+        case .green: green.add(polygon)
+        case .none: break
         }
     }
 

@@ -119,7 +119,7 @@ public enum ReportFormatter {
             "  ways:             \(Formatting.count(counters.waysStored)) stored, \(Formatting.count(counters.waysSuppressed)) suppressed (multipolygon members)",
             "  relations stored: \(Formatting.count(counters.relationsStored))",
             "  multipolygons:    \(Formatting.count(counters.multipolygonsAssembled)) assembled, \(Formatting.count(counters.multipolygonsIncomplete)) incomplete",
-            "  footways beside roads: \(Formatting.count(counters.footwaysBesideRoads)) taken for sidewalks, \(Formatting.count(counters.footwaysInTown)) more in built-up areas",
+            "  footways beside roads: \(Formatting.count(counters.footwaysBesideRoads)) taken for sidewalks, \(Formatting.count(counters.footwaysInTown)) more in built-up areas (from \(Formatting.count(counters.townAreas)) built-up and \(Formatting.count(counters.greenAreas)) green areas)",
             "  sea:              \(Formatting.count(counters.coastlineWays)) coastline ways, \(Formatting.count(counters.seaPolygons)) sea polygons, \(Formatting.count(counters.seaIslands)) islands",
             "  pieces outside the cells: \(Formatting.count(counters.piecesOutsideCells))",
             "  features skipped by the profile: \(Formatting.count(counters.featuresSkippedByProfile))",

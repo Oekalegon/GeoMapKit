@@ -9,8 +9,7 @@ import OSMPBF
 /// when most of its length lies within ``maximumDistance`` of a road and runs the same way (within about 25 degrees), so a
 /// footway that crosses a road or ends at it does not count for the stretch where it meets it.
 ///
-/// Positions are turned into metres with a flat projection at the latitude of the middle of the extract, which is accurate
-/// to about a percent over the half degree an extract covers. Only roads count (`roadMajor` and `roadMinor` that are not
+/// Positions are turned into metres with ``LocalMetres``. Only roads count (`roadMajor` and `roadMinor` that are not
 /// pedestrian streets and not tunnels).
 struct RoadIndex {
     /// The farthest a footway may be from a road, in metres, to be beside it.
@@ -37,7 +36,7 @@ struct RoadIndex {
     ///   - extract: The extract.
     ///   - classifier: The classifier that says which ways are roads.
     init(extract: OSMExtract, classifier: FeatureClassifier) {
-        projection = LocalMetres(around: extract.boundingBox)
+        projection = LocalMetres()
         for position in extract.ways.indices {
             let tags = extract.ways.tags(at: position)
             guard tags.value(forKey: "highway") != nil, tags.value(forKey: "highway") != "pedestrian" else { continue }

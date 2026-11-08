@@ -27,6 +27,7 @@ extension FeatureStoreBuilder {
             // A footway beside a road is a sidewalk, tagged or not.
             if Self.mayBeASidewalk(tags, classification) {
                 if roads == nil { roads = RoadIndex(extract: extract, classifier: classifier) }
+                // A footway beside a road wins over one in a town; the two are counted apart in the report.
                 let pavement = Classification(
                     featureClass: .pavement, subclass: classification.subclass, kind: classification.kind, minimumBand: .detail,
                     showsOnWatch: false)
@@ -34,7 +35,11 @@ extension FeatureStoreBuilder {
                     classification = pavement
                     emitter.report.footwaysBesideRoads += 1
                 } else {
-                    if town == nil { town = TownIndex(extract: extract, classifier: classifier) }
+                    if town == nil {
+                        town = TownIndex(extract: extract, classifier: classifier)
+                        emitter.report.townAreas = town?.town.polygons.count ?? 0
+                        emitter.report.greenAreas = town?.green.polygons.count ?? 0
+                    }
                     if town?.isInTown(runs) == true {
                         classification = pavement
                         emitter.report.footwaysInTown += 1

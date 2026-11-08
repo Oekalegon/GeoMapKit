@@ -39,6 +39,10 @@ public struct BuildReport: Sendable, Equatable {
     public var footwaysBesideRoads = 0
     /// Footways that were classed as pavement because they lie in a built-up area (a plaza, a yard, a car park, a station).
     public var footwaysInTown = 0
+    /// Built-up areas that the footway test used (closed ways and multipolygon relations); 0 if no footway needed the test.
+    public var townAreas = 0
+    /// Green areas that the footway test used.
+    public var greenAreas = 0
     /// Coastline ways found in the extract.
     public var coastlineWays = 0
     /// Sea polygons built from the coastlines.
