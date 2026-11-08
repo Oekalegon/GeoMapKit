@@ -2,7 +2,7 @@ import FeatureStore
 import GeoCore
 import MapStyle
 
-/// Builds a ``MapScene`` from a feature store file, a style and a viewport.
+/// Builds a ``MapScene`` from a feature store (one file, or a set of block files), a style and a viewport.
 ///
 /// The builder reads only what is needed: the cells that touch the view, one band, and the classes the style shows
 /// at this zoom (the rest is skipped by length in the file). It then
@@ -17,12 +17,21 @@ public struct MapSceneBuilder: Sendable {
     /// The extra margin, in points, around the view for culling and for the cells read. It covers the widest stroke.
     public static let cullingMargin = 64.0
 
-    private let file: FeatureStoreFile
+    private let source: any CellSource
     private let style: MapStyle
 
-    /// Creates a builder.
+    /// Creates a builder that reads one store file.
     public init(file: FeatureStoreFile, style: MapStyle) {
-        self.file = file
+        source = file
+        self.style = style
+    }
+
+    /// Creates a builder that reads cells from a source: one file or a set of block files.
+    ///
+    /// Each cell is read from the file that holds it, and its names and tags are looked up in that file's own string table. Lines
+    /// that run from one file into another are joined like lines that run from one cell into the next.
+    public init(source: any CellSource, style: MapStyle) {
+        self.source = source
         self.style = style
     }
 
@@ -30,7 +39,7 @@ public struct MapSceneBuilder: Sendable {
     ///
     /// - Throws: ``MapRenderError/noBands`` if the file holds no band, or a `FeatureStoreError` if a cell is damaged.
     public func scene(for viewport: MapViewport) throws -> MapScene {
-        guard let band = ZoomBand.band(forZoom: viewport.zoom, available: file.bands) else { throw MapRenderError.noBands }
+        guard let band = ZoomBand.band(forZoom: viewport.zoom, available: source.bands) else { throw MapRenderError.noBands }
         let classIDs = style.visibleClassIDs(atZoom: viewport.zoom)
         let visible = ScreenBounds(width: viewport.width, height: viewport.height, margin: Self.cullingMargin)
 
@@ -39,10 +48,10 @@ public struct MapSceneBuilder: Sendable {
         var areas: [FeatureClass: [SceneArea]] = [:]
         var points: [FeatureClass: [ScenePoint]] = [:]
 
-        let cells = viewport.cells(storageZoom: file.storageZoom, margin: Self.cullingMargin)
+        let cells = viewport.cells(storageZoom: source.storageZoom, margin: Self.cullingMargin)
         var cellCount = 0
         for cell in cells {
-            guard try file.containsCell(cell) else { continue }
+            guard let file = try source.file(containing: cell) else { continue }
             cellCount += 1
             for feature in try file.features(in: cell, band: band, classes: classIDs) {
                 guard let featureClass = FeatureClass(rawValue: feature.classID) else { continue }
@@ -57,11 +66,11 @@ public struct MapSceneBuilder: Sendable {
                     if lineInfo[key] == nil {
                         // Tags are looked up only where the style uses them: `lanes` for classes with a ground width.
                         let usesLanes = style.style(for: featureClass)?.stroke?.width.ground != nil
-                        let road = usesLanes ? roadTags(of: feature) : (lanes: nil, flow: 0)
-                        lineInfo[key] = (road.lanes, name(of: feature), Structure(subclass: feature.subclass), road.flow)
+                        let road = usesLanes ? roadTags(of: feature, in: file) : (lanes: nil, flow: 0)
+                        lineInfo[key] = (road.lanes, name(of: feature, in: file), Structure(subclass: feature.subclass), road.flow)
                     }
                 case .area:
-                    if let area = makeArea(feature, featureClass: featureClass, viewport: viewport, visible: visible) {
+                    if let area = makeArea(feature, in: file, featureClass: featureClass, viewport: viewport, visible: visible) {
                         areas[featureClass, default: []].append(area)
                     }
                 case .point:
@@ -70,7 +79,7 @@ public struct MapSceneBuilder: Sendable {
                         let position = viewport.screenPoint(for: first)
                         guard ScreenBounds(of: [position])?.intersects(visible) == true else { continue }
                         points[featureClass, default: []].append(ScenePoint(
-                            featureClass: featureClass, objectID: feature.objectID, position: position, name: name(of: feature)))
+                            featureClass: featureClass, objectID: feature.objectID, position: position, name: name(of: feature, in: file)))
                     }
                 }
             }
@@ -152,13 +161,13 @@ public struct MapSceneBuilder: Sendable {
             }
             if !sceneStep.lines.isEmpty || !sceneStep.areas.isEmpty || !sceneStep.points.isEmpty || !sceneStep.medians.isEmpty { steps.append(sceneStep) }
         }
-        return MapScene(viewport: viewport, band: band, steps: steps, cellCount: cellCount, attribution: file.attribution)
+        return MapScene(viewport: viewport, band: band, steps: steps, cellCount: cellCount, attribution: source.attribution)
     }
 
     // MARK: Areas
 
     private func makeArea(
-        _ feature: StoredFeature, featureClass: FeatureClass, viewport: MapViewport, visible: ScreenBounds
+        _ feature: StoredFeature, in file: FeatureStoreFile, featureClass: FeatureClass, viewport: MapViewport, visible: ScreenBounds
     ) -> SceneArea? {
         var rings: [[ScreenPoint]] = []
         var outline: [[ScreenPoint]] = []
@@ -170,7 +179,7 @@ public struct MapSceneBuilder: Sendable {
         guard let bounds = ScreenBounds(of: rings.joined()), bounds.intersects(visible) else { return nil }
         return SceneArea(
             featureClass: featureClass, objectID: feature.objectID, rings: rings, outline: outline,
-            name: name(of: feature), isIncomplete: feature.flags.contains(.incomplete))
+            name: name(of: feature, in: file), isIncomplete: feature.flags.contains(.incomplete))
     }
 
     /// Splits a ring into runs of consecutive edges that are not artificial.
@@ -206,14 +215,15 @@ public struct MapSceneBuilder: Sendable {
 
     // MARK: Tags
 
-    private func name(of feature: StoredFeature) -> String? {
+    /// The name of a feature, from the string table of the file the feature was read from.
+    private func name(of feature: StoredFeature, in file: FeatureStoreFile) -> String? {
         feature.nameID.flatMap { file.string(at: $0) }
     }
 
     /// The tags of a road that the scene uses, read in one pass: the `lanes` tag as a positive integer (or `nil`), and the direction of
     /// a one-way road (1 along the vertices of the way, -1 against them, 0 for a two-way road, a roundabout, or no tags; a motorway is one-way without a tag). Tags exist in
     /// the detail band only.
-    private func roadTags(of feature: StoredFeature) -> (lanes: Int?, flow: Int) {
+    private func roadTags(of feature: StoredFeature, in file: FeatureStoreFile) -> (lanes: Int?, flow: Int) {
         var lanes: Int?
         var oneway: String?
         var junction: String?
