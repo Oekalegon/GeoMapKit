@@ -11,11 +11,12 @@ import Testing
 @Suite("Divided roads")
 struct DividedRoadsTests {
     private func line(
-        _ id: Int64, _ xs: ClosedRange<Double>, y: Double, featureClass: FeatureClass = .roadMajor, structure: Structure = .ground
+        _ id: Int64, _ xs: ClosedRange<Double>, y: Double, featureClass: FeatureClass = .roadMajor, structure: Structure = .ground,
+        name: String? = nil
     ) -> SceneLine {
         SceneLine(
             featureClass: featureClass, objectID: id, points: [ScreenPoint(x: xs.lowerBound, y: y), ScreenPoint(x: xs.upperBound, y: y)],
-            structure: structure)
+            name: name, structure: structure)
     }
 
     private func strips(_ lines: [SceneLine], flows: [Int], width: Double = 6, metresPerPoint: Double = 1) -> [SceneMedian] {
@@ -39,8 +40,8 @@ struct DividedRoadsTests {
         #expect(result.count == 1 && strip.featureClass == .roadMajor && strip.structure == .ground)
         #expect(abs(area(strip.ring) - 120 * 10) < 120 * 10 * 0.03, "the strip fills the space from centre line to centre line")
         #expect(strip.ring.allSatisfy { $0.y == 0 || $0.y == 10 })
-        let divider = try #require(strip.dividers.first)
-        #expect(strip.dividers.count == 1 && divider.count >= 2 && divider.allSatisfy { abs($0.y - 5) < 1e-9 }, "the divider runs halfway between the carriageways")
+        #expect(strip.divider.count >= 2 && strip.divider.allSatisfy { abs($0.y - 5) < 1e-9 }, "the divider runs halfway between the carriageways")
+        #expect(abs((strip.divider.map(\.x).max() ?? 0) - 120) < 1 && (strip.divider.map(\.x).min() ?? 99) < 1, "along the whole strip")
     }
 
     @Test("The result does not depend on the order of the lines")
@@ -61,14 +62,37 @@ struct DividedRoadsTests {
         #expect(strips([line(1, 0...120, y: 0, featureClass: .path), line(2, 0...120, y: 10, featureClass: .path)], flows: [1, -1]).isEmpty)
     }
 
-    @Test("A divider wider than about 6 m leaves the two roads apart")
+    @Test("A divider wider than 4 m leaves the two roads apart, and the decision is for the whole stretch")
     func wideDivider() {
-        let near = strips([line(1, 0...120, y: 0), line(2, 0...120, y: 11.5)], flows: [1, -1])
-        let far = strips([line(1, 0...120, y: 0), line(2, 0...120, y: 20)], flows: [1, -1])
-        #expect(near.count == 1, "5.5 m between the edges")
-        #expect(far.isEmpty, "14 m between the edges")
+        #expect(strips([line(1, 0...120, y: 0), line(2, 0...120, y: 9.5)], flows: [1, -1]).count == 1, "3.5 m between the edges")
+        #expect(strips([line(1, 0...120, y: 0), line(2, 0...120, y: 10.5)], flows: [1, -1]).isEmpty, "4.5 m between the edges")
+        #expect(strips([line(1, 0...120, y: 0), line(2, 0...120, y: 12)], flows: [1, -1]).isEmpty, "6 m, which used to be in")
+        #expect(strips([line(1, 0...120, y: 0), line(2, 0...120, y: 20)], flows: [1, -1]).isEmpty, "14 m between the edges")
         // The gap counts in metres: at a coarser scale the same distance in points is a wider divider.
-        #expect(strips([line(1, 0...120, y: 0), line(2, 0...120, y: 10)], flows: [1, -1], width: 6, metresPerPoint: 2).isEmpty)
+        #expect(strips([line(1, 0...120, y: 0), line(2, 0...120, y: 9)], flows: [1, -1], width: 6, metresPerPoint: 2).isEmpty)
+    }
+
+    @Test("A stretch whose gap wanders around the limit is one thing, not strips and gaps in turn")
+    func steadyOrNot() {
+        // The second carriageway wiggles between 3.5 m and 4.5 m from the first: the middle value is 4 m, the stretch is kept
+        // whole, with no gap in it.
+        let wiggle = SceneLine(
+            featureClass: .roadMajor, objectID: 2,
+            points: stride(from: 0.0, through: 120, by: 10).enumerated().map { ScreenPoint(x: $1, y: $0 % 2 == 0 ? 9.5 : 10.5) })
+        #expect(strips([line(1, 0...120, y: 0), wiggle], flows: [1, -1]).count == 1)
+        // A stretch with a gap of 6 m over all of it: none, whatever the samples near 4 m say.
+        let edge = SceneLine(
+            featureClass: .roadMajor, objectID: 2,
+            points: stride(from: 0.0, through: 120, by: 10).enumerated().map { ScreenPoint(x: $1, y: $0 % 2 == 0 ? 11.9 : 12.1) })
+        #expect(strips([line(1, 0...120, y: 0), edge], flows: [1, -1]).isEmpty)
+    }
+
+    @Test("Roads with different names are two roads; one without a name may be half of a named road")
+    func names() {
+        #expect(strips([line(1, 0...120, y: 0, name: "Kaj Munks vei"), line(2, 0...120, y: 10, name: "Kaj Munks vei")], flows: [1, -1]).count == 1)
+        #expect(strips([line(1, 0...120, y: 0, name: "Kaj Munks vei"), line(2, 0...120, y: 10, name: "Storoveien")], flows: [1, -1]).isEmpty)
+        #expect(strips([line(1, 0...120, y: 0, name: "Kaj Munks vei"), line(2, 0...120, y: 10)], flows: [1, -1]).count == 1)
+        #expect(strips([line(1, 0...120, y: 0), line(2, 0...120, y: 10)], flows: [1, -1]).count == 1)
     }
 
     @Test("Only the stretch where the carriageways run side by side gets a strip")
@@ -82,24 +106,32 @@ struct DividedRoadsTests {
         #expect(swapped.count == 1 && (swapped[0].ring.map(\.x).min() ?? 0) >= 36 && (swapped[0].ring.map(\.x).max() ?? 200) <= 84)
     }
 
-    @Test("A stretch shorter than 15 m is the end of a way at a junction, not a divided road")
+    @Test("A stretch shorter than 20 m is the end of a way at a junction, not a divided road")
     func shortStretch() {
         #expect(strips([line(1, 0...120, y: 0), line(2, 50...58, y: 10)], flows: [1, -1]).isEmpty)
-        #expect(strips([line(1, 0...120, y: 0), line(2, 50...75, y: 10)], flows: [1, -1]).count == 1)
-        // At a scale of 2 m per point, 25 points are 50 m and 7 points are 14 m.
-        #expect(strips([line(1, 0...120, y: 0), line(2, 50...56, y: 10)], flows: [1, -1], width: 3, metresPerPoint: 2).isEmpty)
+        #expect(strips([line(1, 0...120, y: 0), line(2, 50...65, y: 10)], flows: [1, -1]).isEmpty, "15 m")
+        #expect(strips([line(1, 0...120, y: 0), line(2, 50...75, y: 10)], flows: [1, -1]).count == 1, "25 m")
+        // At a scale of 2 m per point, 6 points are 12 m and 15 points are 30 m (the edges are 2 m apart).
+        #expect(strips([line(1, 0...120, y: 0), line(2, 50...56, y: 4)], flows: [1, -1], width: 3, metresPerPoint: 2).isEmpty)
+        #expect(strips([line(1, 0...120, y: 0), line(2, 50...65, y: 4)], flows: [1, -1], width: 3, metresPerPoint: 2).count == 1)
     }
 
-    @Test("Where the carriageways touch there is a strip but no divider line")
-    func noDividerWhereTheyMeet() throws {
-        // The edges are 0.5 m apart: the strip fills them in, a line between would end inside a solid road.
-        let result = strips([line(1, 0...120, y: 0), line(2, 0...120, y: 6.5)], flows: [1, -1])
-        #expect(result.count == 1 && result[0].dividers.isEmpty)
-        // A pair that comes together: the divider is only along the part where they are apart.
-        let converging = SceneLine(featureClass: .roadMajor, objectID: 2, points: [ScreenPoint(x: 0, y: 12), ScreenPoint(x: 120, y: 6.4)])
-        let strip = try #require(strips([line(1, 0...120, y: 0), converging], flows: [1, -1]).first)
-        let divider = try #require(strip.dividers.first)
-        #expect(strip.dividers.count == 1 && (divider.map(\.x).max() ?? 200) < 118, "it stops before the carriageways meet")
+    @Test("Carriageways that touch or overlap are not separated, so they are not a divided road")
+    func touching() {
+        #expect(strips([line(1, 0...120, y: 0), line(2, 0...120, y: 6.5)], flows: [1, -1]).isEmpty, "0.5 m between the edges")
+        #expect(strips([line(1, 0...120, y: 0), line(2, 0...120, y: 4)], flows: [1, -1]).isEmpty, "overlapping")
+        #expect(strips([line(1, 0...120, y: 0), line(2, 0...120, y: 7.5)], flows: [1, -1]).count == 1, "1.5 m between the edges")
+    }
+
+    @Test("The end of a divided road, where the carriageways come together, is left as it is")
+    func mergingEnd() throws {
+        // 4 m apart over 90 points, then the second carriageway closes in on the first: the strip stops where the gap has
+        // changed by more than 1.5 m, and the merge is left as two roads.
+        let merging = SceneLine(
+            featureClass: .roadMajor, objectID: 2, points: [ScreenPoint(x: 0, y: 10), ScreenPoint(x: 90, y: 10), ScreenPoint(x: 120, y: 6.4)])
+        let strip = try #require(strips([line(1, 0...120, y: 0), merging], flows: [1, -1]).first)
+        let end = strip.ring.map(\.x).max() ?? 0
+        #expect(end > 90 && end < 108, "it ends in the merge, not at its end: \(end)")
     }
 
     @Test("Roads that cross, or meet at an angle, are not a divided road")
@@ -110,16 +142,11 @@ struct DividedRoadsTests {
         #expect(strips([line(1, 0...120, y: 0), slanted], flows: [1, -1]).isEmpty)
     }
 
-    @Test("A road that splits in two has a strip where the carriageways are close, and none where they are apart")
-    func fork() throws {
-        // The second carriageway leaves the first at a small angle: 4 m apart at x = 40 and 20 m apart at x = 120.
-        let diverging = SceneLine(
-            featureClass: .roadMajor, objectID: 2, points: [ScreenPoint(x: 0, y: 6), ScreenPoint(x: 120, y: 20)])
-        let result = strips([line(1, 0...120, y: 0), diverging], flows: [1, -1])
-        let strip = try #require(result.first)
-        // The edges are 6 m apart where the centres are 12 m apart: at x of about 51.
-        let end = strip.ring.map(\.x).max() ?? 0
-        #expect(result.count == 1 && end > 45 && end < 60, "it ends where the gap gets too wide, not before or after: \(end)")
+    @Test("A road that forks has no strip: its gap is not steady")
+    func fork() {
+        // The second carriageway leaves the first at a small angle: 6 m apart at x = 0 and 20 m at x = 120.
+        let diverging = SceneLine(featureClass: .roadMajor, objectID: 2, points: [ScreenPoint(x: 0, y: 6), ScreenPoint(x: 120, y: 20)])
+        #expect(strips([line(1, 0...120, y: 0), diverging], flows: [1, -1]).isEmpty)
     }
 
     // MARK: In the scene and the picture

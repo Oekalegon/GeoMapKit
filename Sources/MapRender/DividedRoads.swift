@@ -5,17 +5,27 @@ import Foundation
 ///
 /// Two ways are the carriageways of one road when they are of the same class and structure, are one-way (the `oneway` tag, so
 /// only the detail band, which holds the tags, has them), their flow runs in opposite directions, and they run side by side
-/// with a gap of at most ``maximumGap`` metres between their edges. For every such stretch the result has a strip from the
+/// with a steady gap of at most 4 m between their edges (``typicalGap``), and are not named differently. For every such stretch the result has a strip from the
 /// centre line of one to the centre line of the other. Filled in the colour of the road, the strip covers the gap and the inner
 /// outlines, and the pair is drawn as one wide road with one outline. A wider divider (grass, a barrier with trees) leaves the
 /// two roads apart.
 enum DividedRoads {
-    /// The widest gap between the edges of two carriageways, in metres, that is still one road.
+    /// The widest gap, in metres, at which a sample along a carriageway is matched with the other one. It only collects the
+    /// stretch; whether the stretch is a divided road is decided on the whole of it (see ``typicalGap``).
     static let maximumGap = 6.0
+    /// The gap between the edges, in metres, that the middle value of a stretch must have to be a divided road: not less than
+    /// the first (carriageways that touch or overlap are not separated, so they are one road, or a merge), not more than the
+    /// second (a wider divider is two roads). A stretch whose gap hovers around one limit is decided once, for all of it, not
+    /// sample by sample.
+    static let typicalGap = 1.0...4.0
+    /// How far the gap of the stretch may vary, in metres, from its smallest to its largest value. A carriageway that merges
+    /// with or forks off another has a gap that runs from nothing to the width of a lane or more.
+    static let gapVariation = 2.0
+    /// The ends of a stretch whose gap differs from the middle value by more than this, in metres, are cut off: the merge or the
+    /// fork at the end of a divided road is left as two roads.
+    static let endTolerance = 1.5
     /// The shortest stretch, in metres, that is a divided road: shorter ones are the ends of ways that meet at a junction.
-    static let minimumLength = 15.0
-    /// The smallest gap between the edges of two carriageways, in metres, that gets a divider line.
-    static let minimumDividerGap = 1.0
+    static let minimumLength = 20.0
     /// The largest cosine between the flow directions of two carriageways: they must run nearly opposite (within 25 degrees).
     private static let oppositeCosine = -0.9
     /// The distance between samples along a line, in points.
@@ -63,24 +73,24 @@ enum DividedRoads {
             var run: [Match] = []
             func finish() {
                 defer { run = [] }
-                let centre = run.map { ScreenPoint(x: ($0.own.x + $0.other.x) / 2, y: ($0.own.y + $0.other.y) / 2) }
-                guard run.count >= 2, length(of: centre) * metresPerPoint >= minimumLength else { return }
-                var ring = run.map(\.own)
-                for match in run.reversed() where ring.last != match.other { ring.append(match.other) }
+                guard run.count >= 2 else { return }
+                // The stretch is judged on the whole of it, by its gap in metres: the middle value, the ends cut off where they
+                // merge or fork, and the variation of what is left.
+                let gaps = run.map { $0.gap * metresPerPoint }
+                let middle = gaps.sorted()[gaps.count / 2]
+                guard typicalGap.contains(middle) else { return }
+                var first = 0, last = run.count - 1
+                while first < last, abs(gaps[first] - middle) > endTolerance { first += 1 }
+                while last > first, abs(gaps[last] - middle) > endTolerance { last -= 1 }
+                let core = Array(run[first...last])
+                let coreGaps = gaps[first...last]
+                guard let smallest = coreGaps.min(), let largest = coreGaps.max(), largest - smallest <= gapVariation else { return }
+                let centre = core.map { ScreenPoint(x: ($0.own.x + $0.other.x) / 2, y: ($0.own.y + $0.other.y) / 2) }
+                guard core.count >= 2, length(of: centre) * metresPerPoint >= minimumLength else { return }
+                var ring = core.map(\.own)
+                for match in core.reversed() where ring.last != match.other { ring.append(match.other) }
                 guard ring.count >= 3 else { return }
-                // The divider only where the carriageways are apart: where they come together it would end inside a solid road.
-                var dividers: [[ScreenPoint]] = []
-                var current: [ScreenPoint] = []
-                for (match, point) in zip(run, centre) {
-                    if match.gap * metresPerPoint >= minimumDividerGap {
-                        current.append(point)
-                    } else {
-                        if current.count >= 2 { dividers.append(current) }
-                        current = []
-                    }
-                }
-                if current.count >= 2 { dividers.append(current) }
-                strips.append(SceneMedian(featureClass: line.featureClass, structure: line.structure, ring: ring, dividers: dividers))
+                strips.append(SceneMedian(featureClass: line.featureClass, structure: line.structure, ring: ring, divider: centre))
             }
             for (direction, point) in samples(along: line.points) {
                 let best = nearest(to: point, direction: direction, of: index, ownWidth: width, in: context)
@@ -143,6 +153,8 @@ enum DividedRoads {
             guard other.featureClass == context.lines[own].featureClass, other.structure == context.lines[own].structure,
                 let otherWidth = context.widths[segment.line]
             else { continue }
+            // Two roads that are named, and not the same, are two roads. A carriageway without a name may be one half of a named road.
+            if let ownName = context.lines[own].name, let otherName = other.name, ownName != otherName { continue }
             let sx = segment.bx - segment.ax, sy = segment.by - segment.ay
             let length = (sx * sx + sy * sy).squareRoot()
             guard length > 1e-9 else { continue }
