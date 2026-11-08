@@ -92,9 +92,31 @@ struct MultiFileCutTests {
         #expect(one.nodes.map(\.id) == single.nodes.map(\.id) && one.ways.map(\.id) == single.ways.map(\.id))
     }
 
+    @Test("A copy of a relation that touches the area is not replaced by another file's copy that is only a parent")
+    func touchingCopyIsKept() throws {
+        // File A has 200 as a parent of relation 1; file B has it listing the way 100, which is in the area.
+        let nodes = [Node(id: 1, lat: 47.5, lon: 9.5), Node(id: 5, lat: 46.5, lon: 9.5)]
+        let a = file(nodes, [Way(id: 100, nodes: [1, 5])],
+            [Relation(id: 1, members: [(100, 1)]), Relation(id: 200, members: [(1, 2)])])
+        let b = file([], [], [Relation(id: 200, members: [(100, 1)])])
+        for order in [[a, b], [b, a]] {
+            let extract = try AreaCutter().cut(order, to: box)
+            let relation = try #require(extract.relations.first { $0.relation.id == 200 })
+            #expect(extract.relations.map(\.relation.id) == [1, 200])
+            // Whichever copy is taken, it is taken once and not replaced by the other.
+            #expect(relation.relation.members.count == 1)
+        }
+        let touchingFirst = try AreaCutter().cut([b, a], to: box)
+        #expect(touchingFirst.relations.first { $0.relation.id == 200 }?.relation.members.first?.type == .way)
+        let touchingLast = try AreaCutter().cut([a, b], to: box)
+        #expect(touchingLast.relations.first { $0.relation.id == 200 }?.relation.members.first?.type == .way,
+            "the copy that touches the area wins over a parent copy that came first")
+    }
+
     /// Objects spread over two files, some in both, give the cut of the single file that holds them all.
-    @Test("Spreading a world over two files at random gives the same cut as one file", arguments: 0..<20)
+    @Test("Spreading a world over two or three files at random gives the same cut as one file", arguments: 0..<40)
     func randomSplit(seed: Int) throws {
+        let fileCount = seed < 20 ? 2 : 3
         var generator = SplitMix(seed: UInt64(seed) &+ 1)
         let nodes = [
             Node(id: 1, lat: 47.5, lon: 9.5), Node(id: 2, lat: 47.6, lon: 9.6, value: 2), Node(id: 4, lat: 46.5, lon: 9.5),
@@ -111,20 +133,18 @@ struct MultiFileCutTests {
             Relation(id: 204, members: [(2, 0)]),
             Relation(id: 201, members: [(101, 1)]),
         ]
-        func share<T>(_ items: [T]) -> (a: [T], b: [T]) {
-            var a: [T] = [], b: [T] = []
+        // Each item goes to a random non-empty set of the files: in one, in several or in all.
+        func share<T>(_ items: [T]) -> [[T]] {
+            var files = [[T]](repeating: [], count: fileCount)
             for item in items {
-                switch generator.next() % 3 {
-                case 0: a.append(item)
-                case 1: b.append(item)
-                default: a.append(item); b.append(item)
-                }
+                let mask = Int(generator.next() % UInt64((1 << fileCount) - 1)) + 1
+                for index in 0..<fileCount where mask & (1 << index) != 0 { files[index].append(item) }
             }
-            return (a, b)
+            return files
         }
         let n = share(nodes), w = share(ways), r = share(relations)
         let whole = try AreaCutter().cut(file(nodes, ways, relations), to: box)
-        let split = try AreaCutter().cut([file(n.a, w.a, r.a), file(n.b, w.b, r.b)], to: box)
+        let split = try AreaCutter().cut((0..<fileCount).map { file(n[$0], w[$0], r[$0]) }, to: box)
         #expect(split.nodes.map(\.id) == whole.nodes.map(\.id))
         #expect(split.ways.map(\.id) == whole.ways.map(\.id))
         #expect(split.relations.map(\.relation.id) == whole.relations.map(\.relation.id))

@@ -33,7 +33,8 @@ import GeoCore
 /// countries. `cut(_:to:progress:)` with an array takes several readers and runs every pass over all of them, so the result is
 /// the same as a cut of one file that held the union of the objects: an object found in more than one file is taken
 /// once, from the first file that has it (the caller orders the files), and a relation or way that one file only holds in
-/// part is completed from the others. Two objects with the same ID inside one file are still an error. For the data to
+/// part is completed from the others. Two objects with the same ID inside one file are still an error, but only among
+/// those that are taken: an object that an earlier file already holds is skipped without being checked. For the data to
 /// agree, download the files on the same day.
 ///
 /// A cut is blocking and can take a while on a large file. It checks for task
