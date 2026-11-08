@@ -11,6 +11,9 @@ public enum SourceError: Error, Equatable, Sendable {
     /// The region is already being downloaded by this manager; a second download would write to the same part file.
     case alreadyDownloading(region: String)
 
+    /// Another process is downloading into the same cache folder.
+    case cacheBusy
+
     /// The cache folder cannot be used.
     case cacheUnusable(String)
 }
@@ -23,9 +26,19 @@ extension SourceError: CustomStringConvertible {
         case .incompleteDownload(let region, let expected, let received):
             "The download of \(region) ended after \(Self.size(received)) of \(Self.size(expected)); run it again to continue."
         case .alreadyDownloading(let region): "\(region) is already being downloaded."
+        case .cacheBusy: "Another process is downloading into this cache folder; wait for it to finish."
         case .cacheUnusable(let reason): "The cache folder cannot be used: \(reason)."
         }
     }
 
-    private static func size(_ bytes: Int64) -> String { ByteCountFormatStyle(style: .file).format(bytes) }
+    /// Sizes with a dot and 1000-based units, as the tools print them, whatever the language of the system.
+    private static func size(_ bytes: Int64) -> String {
+        let value = Double(bytes)
+        switch value {
+        case ..<1_000: return "\(bytes) bytes"
+        case ..<1_000_000: return String(format: "%.1f KB", value / 1_000)
+        case ..<1_000_000_000: return String(format: "%.1f MB", value / 1_000_000)
+        default: return String(format: "%.1f GB", value / 1_000_000_000)
+        }
+    }
 }

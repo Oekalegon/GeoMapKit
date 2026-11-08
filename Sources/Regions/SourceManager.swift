@@ -15,8 +15,8 @@ import Foundation
 ///
 /// The manager is an actor, but its calls suspend while the network works, so two calls can overlap. A region that is being
 /// downloaded is claimed: a second ``fetch(_:progress:)`` that needs it fails with ``SourceError/alreadyDownloading(region:)``
-/// instead of writing to the same part file. The claim holds within one process; two processes sharing a cache folder are not
-/// guarded.
+/// instead of writing to the same part file. Between processes the folder's download lock (``SourceCache/lockDownloads()``)
+/// does the same: a second process that wants to download fails with ``SourceError/cacheBusy``.
 public actor SourceManager {
     /// The cache.
     public nonisolated let cache: SourceCache
@@ -109,6 +109,7 @@ public actor SourceManager {
     ///   - progress: Called with the region's identifier, the bytes of its file held so far and its size (`nil` if unknown).
     /// - Returns: The files of all items of the plan, in the order of the plan.
     /// - Throws: ``SourceError/alreadyDownloading(region:)`` if a region is being downloaded by another call,
+    ///   ``SourceError/cacheBusy`` if another process is downloading into the folder,
     ///   ``SourceError/notEnoughSpace(needed:available:)`` before anything is downloaded,
     ///   ``SourceError/incompleteDownload(region:expected:received:)`` if a file is short (the part file stays for a later
     ///   resume), the downloader's error, or a file error.
@@ -120,6 +121,9 @@ public actor SourceManager {
         let ids = plan.items.filter { $0.action != .useCached }.map(\.region.id)
         try claim(ids)
         defer { active.subtract(ids) }
+        // Another process may be downloading into the same folder: only one at a time.
+        let lock = ids.isEmpty ? nil : try cache.lockDownloads()
+        defer { lock?.release() }
         var files: [URL] = []
         for item in plan.items {
             let region = item.region
