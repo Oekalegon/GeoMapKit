@@ -74,7 +74,10 @@ enum DividedRoads {
                 if run.count >= 2 {
                     var ring = run.map(\.own)
                     for match in run.reversed() where ring.last != match.other { ring.append(match.other) }
-                    if ring.count >= 3 { strips.append(SceneMedian(featureClass: line.featureClass, structure: line.structure, ring: ring)) }
+                    if ring.count >= 3 {
+                        let centre = run.map { ScreenPoint(x: ($0.own.x + $0.other.x) / 2, y: ($0.own.y + $0.other.y) / 2) }
+                        strips.append(SceneMedian(featureClass: line.featureClass, structure: line.structure, ring: ring, centre: centre))
+                    }
                 }
                 run = []
             }

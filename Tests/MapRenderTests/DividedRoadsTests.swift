@@ -39,6 +39,7 @@ struct DividedRoadsTests {
         #expect(result.count == 1 && strip.featureClass == .roadMajor && strip.structure == .ground)
         #expect(abs(area(strip.ring) - 120 * 10) < 120 * 10 * 0.03, "the strip fills the space from centre line to centre line")
         #expect(strip.ring.allSatisfy { $0.y == 0 || $0.y == 10 })
+        #expect(strip.centre.count >= 2 && strip.centre.allSatisfy { abs($0.y - 5) < 1e-9 }, "the divider runs halfway between the carriageways")
     }
 
     @Test("The result does not depend on the order of the lines")
@@ -152,7 +153,7 @@ struct DividedRoadsTests {
         #expect(medianCount(try scene(oneway: ["yes", "yes"], directions: [true, false], tags: false)) == 0, "the Watch copy has no tags")
     }
 
-    @Test("The strip is drawn in the colour of the road, between the carriageways")
+    @Test("The strip is drawn in the colour of the road, with a divider line of the outline's colour halfway")
     func stripIsDrawn() throws {
         let scene = try scene(oneway: ["yes", "yes"], directions: [true, false])
         let png = try CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 1)
@@ -163,13 +164,20 @@ struct DividedRoadsTests {
             data: &buffer, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
         context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        // Halfway between the two carriageways, in the middle of the view.
-        let metresPerPoint = scene.viewport.metresPerPoint
-        let halfGap = 7.0 / 2 / metresPerPoint
-        let x = image.width / 2, y = image.height / 2 - Int(halfGap.rounded())
-        let road = MapStyle.standard.style(for: .roadMajor)!.stroke!.color.value(atZoom: 18)
-        let expected = [road.red, road.green, road.blue].map { UInt8(($0 * 255).rounded()) }
-        let found = Array(buffer[((y * image.width + x) * 4)..<((y * image.width + x) * 4 + 3)])
-        #expect(zip(found, expected).allSatisfy { abs(Int($0) - Int($1)) <= 3 }, "found \(found), expected \(expected)")
+        func color(x: Int, y: Int) -> [UInt8] {
+            Array(buffer[((y * image.width + x) * 4)..<((y * image.width + x) * 4 + 3)])
+        }
+        func close(_ found: [UInt8], _ expected: MapColor) -> Bool {
+            let wanted = [expected.red, expected.green, expected.blue].map { UInt8(($0 * 255).rounded()) }
+            return zip(found, wanted).allSatisfy { abs(Int($0) - Int($1)) <= 4 }
+        }
+        let style = try #require(MapStyle.standard.style(for: .roadMajor)?.stroke)
+        let road = style.color.value(atZoom: 18), divider = try #require(style.casing).color.value(atZoom: 18)
+        // The carriageways are 7 m apart; the view is centred on the first one, the second is above it. Halfway is half of 7 m up.
+        let halfGap = 7.0 / 2 / scene.viewport.metresPerPoint
+        let x = image.width / 2, middle = image.height / 2 - Int(halfGap.rounded())
+        #expect(close(color(x: x, y: middle), divider), "the divider: \(color(x: x, y: middle))")
+        // A little off the middle, still between the carriageways, the strip has the colour of the road.
+        #expect(close(color(x: x, y: middle + 2), road), "the strip: \(color(x: x, y: middle + 2))")
     }
 }

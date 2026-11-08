@@ -13,11 +13,15 @@ public struct SceneMedian: Sendable, Equatable {
     public var structure: Structure
     /// The closed ring of the strip, in screen points: along the centre line of one carriageway and back along the other.
     public var ring: [ScreenPoint]
+    /// The line halfway between the two carriageways, in screen points. The renderer draws it as the divider, in the colour of
+    /// the road's outline, so the two lanes of the road can still be told apart.
+    public var centre: [ScreenPoint]
 
     /// Creates a median strip.
-    public init(featureClass: FeatureClass, structure: Structure, ring: [ScreenPoint]) {
+    public init(featureClass: FeatureClass, structure: Structure, ring: [ScreenPoint], centre: [ScreenPoint] = []) {
         self.featureClass = featureClass
         self.structure = structure
         self.ring = ring
+        self.centre = centre
     }
 }
