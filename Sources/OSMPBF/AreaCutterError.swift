@@ -4,6 +4,9 @@ public enum AreaCutterError: Error, Equatable, Sendable {
     /// north of its north edge, or its west edge is east of its east edge.
     case invalidBoundingBox
 
+    /// A cut of several files was asked for with no file.
+    case noInput
+
     /// The file contains two objects of the same kind with the same ID among the
     /// objects the cut needs. OSM IDs are unique within a kind, so the file is
     /// corrupt or is a history file; the cut refuses to guess which one is right.

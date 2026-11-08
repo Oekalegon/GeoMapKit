@@ -43,7 +43,20 @@ public enum ToolRunner {
     /// - Returns: Timings, memory and what the extract contains.
     /// - Throws: ``ToolError`` if the file is missing, or whatever the cutter throws.
     public static func cut(url: URL, area: BoundingBox, options: AreaCutter.Options = .init()) throws -> CutReport {
-        try cutExtract(url: url, area: area, options: options).report
+        try cut(urls: [url], area: area, options: options)
+    }
+
+    /// Cuts an area out of several files, as one (for an area over a country border), and times each pass.
+    ///
+    /// - Parameters:
+    ///   - urls: The PBF files, in order of preference: an object that several files hold is taken from the first.
+    ///   - area: The area to cut.
+    ///   - options: The cutter settings.
+    /// - Returns: Timings, memory and what the extract contains. The file name is the names of all files and the file size
+    ///   is their sum.
+    /// - Throws: ``ToolError`` if there is no file or one is missing, or whatever the cutter throws.
+    public static func cut(urls: [URL], area: BoundingBox, options: AreaCutter.Options = .init()) throws -> CutReport {
+        try cutExtract(urls: urls, area: area, options: options).report
     }
 
     /// Cuts an area, builds a feature store file from it, writes the file and verifies it.
@@ -61,11 +74,27 @@ public enum ToolRunner {
     public static func build(
         url: URL, area: BoundingBox, output: URL, profile: BuildProfile, options: AreaCutter.Options = .init()
     ) throws -> BuildCommandReport {
+        try build(urls: [url], area: area, output: output, profile: profile, options: options)
+    }
+
+    /// Cuts an area out of several files, builds a feature store file from it, writes the file and verifies it.
+    ///
+    /// - Parameters:
+    ///   - urls: The PBF files, in order of preference (see ``cut(urls:area:options:)``).
+    ///   - area: The area to cut.
+    ///   - output: Where to write the store file. The write is atomic.
+    ///   - profile: The copy to build.
+    ///   - options: The cutter settings.
+    /// - Returns: Timings, sizes and what was stored.
+    /// - Throws: ``ToolError`` for a missing input file or an unwritable output path, or whatever the cutter, builder or `FeatureStoreFile.verify()` throws.
+    public static func build(
+        urls: [URL], area: BoundingBox, output: URL, profile: BuildProfile, options: AreaCutter.Options = .init()
+    ) throws -> BuildCommandReport {
         try checkWritable(output)
         // The builder writes only cells that lie completely inside the area, so cut a box of whole cells that contains
         // the one asked for; the file then covers all of it.
         let cutArea = FeatureStoreBuilder.cellAlignedBox(covering: area)
-        let (extract, cutReport) = try cutExtract(url: url, area: cutArea, options: options)
+        let (extract, cutReport) = try cutExtract(urls: urls, area: cutArea, options: options)
 
         let clock = ContinuousClock()
         let started = clock.now
@@ -89,16 +118,17 @@ public enum ToolRunner {
     }
 
     private static func cutExtract(
-        url: URL, area: BoundingBox, options: AreaCutter.Options
+        urls: [URL], area: BoundingBox, options: AreaCutter.Options
     ) throws -> (extract: OSMExtract, report: CutReport) {
-        let size = try fileSize(url)
-        let reader = try PBFReader(url: url)
+        guard !urls.isEmpty else { throw ToolError("needs at least one PBF file") }
+        let size = try urls.reduce(Int64(0)) { try $0 + fileSize($1) }
+        let readers = try urls.map { try PBFReader(url: $0) }
 
         // Each stage lasts from its start to the start of the next stage (or the end).
         let clock = ContinuousClock()
         var starts: [(pass: AreaCutter.Pass, instant: ContinuousClock.Instant, memory: Int64)] = []
         let begin = clock.now
-        let extract = try AreaCutter(options: options).cut(reader, to: area) { pass in
+        let extract = try AreaCutter(options: options).cut(readers, to: area) { pass in
             starts.append((pass, clock.now, ProcessMemory.peakFootprintBytes() ?? ProcessMemory.peakResidentBytes()))
         }
         let end = clock.now
@@ -108,7 +138,8 @@ public enum ToolRunner {
             return PassTiming(pass: start.pass, duration: finish - start.instant, peakMemoryAtStart: start.memory)
         }
         let report = CutReport(
-            fileName: url.lastPathComponent, fileSize: size, area: area, passes: passes, totalTime: end - begin,
+            fileName: urls.map(\.lastPathComponent).joined(separator: ", "), fileSize: size, area: area, passes: passes,
+            totalTime: end - begin,
             summary: ExtractSummary(extract),
             peakFootprint: ProcessMemory.peakFootprintBytes(), peakResident: ProcessMemory.peakResidentBytes()
         )
