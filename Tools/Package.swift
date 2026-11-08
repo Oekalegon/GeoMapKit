@@ -26,6 +26,7 @@ let package = Package(
                 .product(name: "FeatureStoreBuilder", package: "GeoMapKit"),
                 .product(name: "MapStyle", package: "GeoMapKit"),
                 .product(name: "MapRender", package: "GeoMapKit"),
+                .product(name: "Regions", package: "GeoMapKit"),
             ]
         ),
         // A Mac test app for MapView: swift run mapviewer [file.gmk].
@@ -40,7 +41,7 @@ let package = Package(
         // A thin executable: parse the command line, call ToolCommands, print.
         .executableTarget(
             name: "geomapkit",
-            dependencies: ["ToolSupport", "ToolCommands", .product(name: "FeatureStoreBuilder", package: "GeoMapKit")]
+            dependencies: ["ToolSupport", "ToolCommands", .product(name: "FeatureStoreBuilder", package: "GeoMapKit"), .product(name: "Regions", package: "GeoMapKit")]
         ),
         .testTarget(name: "ToolSupportTests", dependencies: ["ToolSupport", .product(name: "GeoCore", package: "GeoMapKit")]),
         .testTarget(
@@ -48,6 +49,7 @@ let package = Package(
             dependencies: [
                 "ToolCommands", .product(name: "OSMPBF", package: "GeoMapKit"), .product(name: "GeoCore", package: "GeoMapKit"),
                 .product(name: "FeatureStore", package: "GeoMapKit"), .product(name: "FeatureStoreBuilder", package: "GeoMapKit"), .product(name: "MapStyle", package: "GeoMapKit"),
+                .product(name: "Regions", package: "GeoMapKit"),
             ]
         ),
     ],
