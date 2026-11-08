@@ -125,7 +125,9 @@ public struct CoreGraphicsRenderer: MapRenderer {
                     flat.join = .round
                     context.setStrokeColor(divider.cgColor)
                     for median in step.medians {
-                        strokePath(median.centre, width: max(0.6, casing.extraPoints.value(atZoom: zoom)), stroke: flat, dashed: false, in: context)
+                        for divider in median.dividers {
+                            strokePath(divider, width: max(0.6, casing.extraPoints.value(atZoom: zoom)), stroke: flat, dashed: false, in: context)
+                        }
                     }
                     context.setStrokeColor(color.cgColor)
                 }

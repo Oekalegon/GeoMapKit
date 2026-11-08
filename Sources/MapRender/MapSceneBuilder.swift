@@ -57,9 +57,8 @@ public struct MapSceneBuilder: Sendable {
                     if lineInfo[key] == nil {
                         // Tags are looked up only where the style uses them: `lanes` for classes with a ground width.
                         let usesLanes = style.style(for: featureClass)?.stroke?.width.ground != nil
-                        lineInfo[key] = (
-                            usesLanes ? lanes(of: feature) : nil, name(of: feature), Structure(subclass: feature.subclass),
-                            usesLanes ? flow(of: feature) : 0)
+                        let road = usesLanes ? roadTags(of: feature) : (lanes: nil, flow: 0)
+                        lineInfo[key] = (road.lanes, name(of: feature), Structure(subclass: feature.subclass), road.flow)
                     }
                 case .area:
                     if let area = makeArea(feature, featureClass: featureClass, viewport: viewport, visible: visible) {
@@ -211,31 +210,32 @@ public struct MapSceneBuilder: Sendable {
         feature.nameID.flatMap { file.string(at: $0) }
     }
 
-    /// The direction of a one-way road: 1 along the vertices of the way, -1 against them, 0 if it is two-way, a roundabout, or has
-    /// no tags (only the detail band holds them).
-    private func flow(of feature: StoredFeature) -> Int {
+    /// The tags of a road that the scene uses, read in one pass: the `lanes` tag as a positive integer (or `nil`), and the direction of
+    /// a one-way road (1 along the vertices of the way, -1 against them, 0 for a two-way road, a roundabout, or no tags). Tags exist in
+    /// the detail band only.
+    private func roadTags(of feature: StoredFeature) -> (lanes: Int?, flow: Int) {
+        var lanes: Int?
         var oneway: String?
+        var roundabout = false
         for tag in feature.tags {
             switch file.string(at: tag.key) {
-            case "oneway": oneway = file.string(at: tag.value)
-            case "junction": if file.string(at: tag.value) == "roundabout" { return 0 }
-            default: break
+            case "lanes":
+                if let text = file.string(at: tag.value), let count = Int(text), count >= 1 { lanes = count }
+            case "oneway":
+                oneway = file.string(at: tag.value)
+            case "junction":
+                roundabout = file.string(at: tag.value) == "roundabout"
+            default:
+                break
             }
         }
+        // A roundabout is one-way whatever else it says, but its sides are no carriageways of a divided road.
+        guard !roundabout else { return (lanes, 0) }
         switch oneway {
-        case "yes", "true", "1": return 1
-        case "-1", "reverse": return -1
-        default: return 0
+        case "yes", "true", "1": return (lanes, 1)
+        case "-1", "reverse": return (lanes, -1)
+        default: return (lanes, 0)
         }
-    }
-
-    /// The `lanes` tag as a positive integer. Tags exist in the detail band only.
-    private func lanes(of feature: StoredFeature) -> Int? {
-        for tag in feature.tags where file.string(at: tag.key) == "lanes" {
-            guard let text = file.string(at: tag.value), let count = Int(text), count >= 1 else { return nil }
-            return count
-        }
-        return nil
     }
 }
 

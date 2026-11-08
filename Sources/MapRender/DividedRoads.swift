@@ -12,20 +12,21 @@ import Foundation
 enum DividedRoads {
     /// The widest gap between the edges of two carriageways, in metres, that is still one road.
     static let maximumGap = 6.0
+    /// The shortest stretch, in metres, that is a divided road: shorter ones are the ends of ways that meet at a junction.
+    static let minimumLength = 15.0
+    /// The smallest gap between the edges of two carriageways, in metres, that gets a divider line.
+    static let minimumDividerGap = 1.0
     /// The largest cosine between the flow directions of two carriageways: they must run nearly opposite (within 25 degrees).
     private static let oppositeCosine = -0.9
     /// The distance between samples along a line, in points.
     private static let sampleSpacing = 3.0
 
-    private struct Segment {
-        var line: Int
-        var ax, ay, bx, by: Double
-    }
-
     private struct Match {
         var partner: Int
         var own: ScreenPoint
         var other: ScreenPoint
+        /// The distance between the edges of the two carriageways, in points.
+        var gap: Double
     }
 
     /// Finds the strips between carriageways.
@@ -50,41 +51,39 @@ enum DividedRoads {
         let gapPoints = maximumGap / max(metresPerPoint, 1e-9)
         let cellSize = max(32.0, widest + gapPoints)
 
-        var grid: [Int64: [Segment]] = [:]
-        func key(_ column: Int, _ row: Int) -> Int64 { (Int64(column) << 32) ^ (Int64(row) & 0xFFFF_FFFF) }
-        func cell(_ value: Double) -> Int { Int((value / cellSize).rounded(.down)) }
-        for index in candidates {
-            let points = lines[index].points
-            for position in 0..<(points.count - 1) {
-                let a = points[position], b = points[position + 1]
-                guard a != b else { continue }
-                let segment = Segment(line: index, ax: a.x, ay: a.y, bx: b.x, by: b.y)
-                for column in cell(min(a.x, b.x))...cell(max(a.x, b.x)) {
-                    for row in cell(min(a.y, b.y))...cell(max(a.y, b.y)) { grid[key(column, row), default: []].append(segment) }
-                }
-            }
-        }
+        let context = Context(
+            lines: lines, flows: flows, widths: widths, gapPoints: gapPoints,
+            grid: CarriagewayGrid(lines: lines, indices: candidates, cellSize: cellSize))
 
         var strips: [SceneMedian] = []
+        let metresPerPoint = max(metresPerPoint, 1e-9)
         for index in candidates {
             let line = lines[index]
             guard let width = widths[index] else { continue }
             var run: [Match] = []
             func finish() {
-                if run.count >= 2 {
-                    var ring = run.map(\.own)
-                    for match in run.reversed() where ring.last != match.other { ring.append(match.other) }
-                    if ring.count >= 3 {
-                        let centre = run.map { ScreenPoint(x: ($0.own.x + $0.other.x) / 2, y: ($0.own.y + $0.other.y) / 2) }
-                        strips.append(SceneMedian(featureClass: line.featureClass, structure: line.structure, ring: ring, centre: centre))
+                defer { run = [] }
+                let centre = run.map { ScreenPoint(x: ($0.own.x + $0.other.x) / 2, y: ($0.own.y + $0.other.y) / 2) }
+                guard run.count >= 2, length(of: centre) * metresPerPoint >= minimumLength else { return }
+                var ring = run.map(\.own)
+                for match in run.reversed() where ring.last != match.other { ring.append(match.other) }
+                guard ring.count >= 3 else { return }
+                // The divider only where the carriageways are apart: where they come together it would end inside a solid road.
+                var dividers: [[ScreenPoint]] = []
+                var current: [ScreenPoint] = []
+                for (match, point) in zip(run, centre) {
+                    if match.gap * metresPerPoint >= minimumDividerGap {
+                        current.append(point)
+                    } else {
+                        if current.count >= 2 { dividers.append(current) }
+                        current = []
                     }
                 }
-                run = []
+                if current.count >= 2 { dividers.append(current) }
+                strips.append(SceneMedian(featureClass: line.featureClass, structure: line.structure, ring: ring, dividers: dividers))
             }
             for (direction, point) in samples(along: line.points) {
-                let best = nearest(
-                    to: point, direction: direction, flow: flows[index], of: index, lines: lines, flows: flows, widths: widths,
-                    ownWidth: width, gapPoints: gapPoints, cellSize: cellSize, grid: grid)
+                let best = nearest(to: point, direction: direction, of: index, ownWidth: width, in: context)
                 if let best {
                     if let last = run.last, last.partner != best.partner { finish() }
                     run.append(best)
@@ -95,6 +94,10 @@ enum DividedRoads {
             finish()
         }
         return strips
+    }
+
+    private static func length(of points: [ScreenPoint]) -> Double {
+        zip(points, points.dropFirst()).reduce(0) { $0 + hypot($1.1.x - $1.0.x, $1.1.y - $1.0.y) }
     }
 
     /// The samples along a polyline: the unit direction there, and the point.
@@ -119,39 +122,46 @@ enum DividedRoads {
         return result
     }
 
+    /// What the search for the carriageway beside a point looks at.
+    private struct Context {
+        var lines: [SceneLine]
+        var flows: [Int]
+        var widths: [Double?]
+        var gapPoints: Double
+        var grid: CarriagewayGrid
+    }
+
     /// The nearest carriageway of another way beside a point: of the same class and structure, flowing the opposite way, within
     /// reach, and with the point opposite the middle of a segment of it, not past its end. Only ways of a higher index count,
     /// so every pair is found once.
     private static func nearest(
-        to point: ScreenPoint, direction: (x: Double, y: Double), flow: Int, of own: Int, lines: [SceneLine], flows: [Int],
-        widths: [Double?], ownWidth: Double, gapPoints: Double, cellSize: Double, grid: [Int64: [Segment]]
+        to point: ScreenPoint, direction: (x: Double, y: Double), of own: Int, ownWidth: Double, in context: Context
     ) -> Match? {
-        func key(_ column: Int, _ row: Int) -> Int64 { (Int64(column) << 32) ^ (Int64(row) & 0xFFFF_FFFF) }
-        let column = Int((point.x / cellSize).rounded(.down)), row = Int((point.y / cellSize).rounded(.down))
         var best: (match: Match, distance: Double)?
-        for c in (column - 1)...(column + 1) {
-            for r in (row - 1)...(row + 1) {
-                for segment in grid[key(c, r)] ?? [] where segment.line > own {
-                    guard lines[segment.line].featureClass == lines[own].featureClass,
-                        lines[segment.line].structure == lines[own].structure, let otherWidth = widths[segment.line]
-                    else { continue }
-                    let sx = segment.bx - segment.ax, sy = segment.by - segment.ay
-                    let length = (sx * sx + sy * sy).squareRoot()
-                    guard length > 1e-9 else { continue }
-                    let ux = sx / length, uy = sy / length
-                    // Opposite flows: the directions of travel, not of the vertices, point against each other.
-                    let along = Double(flow * flows[segment.line]) * (direction.x * ux + direction.y * uy)
-                    guard along < oppositeCosine else { continue }
-                    let t = min(max(((point.x - segment.ax) * sx + (point.y - segment.ay) * sy) / (length * length), 0), 1)
-                    let qx = segment.ax + sx * t, qy = segment.ay + sy * t
-                    let distance = ((qx - point.x) * (qx - point.x) + (qy - point.y) * (qy - point.y)).squareRoot()
-                    guard distance > 1e-6, distance <= (ownWidth + otherWidth) / 2 + gapPoints else { continue }
-                    // Beside the point, not beyond the end of the other carriageway.
-                    guard abs((qx - point.x) * ux + (qy - point.y) * uy) <= 0.25 * distance + 0.5 else { continue }
-                    if best == nil || distance < best!.distance {
-                        best = (Match(partner: segment.line, own: point, other: ScreenPoint(x: qx, y: qy)), distance)
-                    }
-                }
+        for segment in context.grid.segments(near: point) where segment.line > own {
+            let other = context.lines[segment.line]
+            guard other.featureClass == context.lines[own].featureClass, other.structure == context.lines[own].structure,
+                let otherWidth = context.widths[segment.line]
+            else { continue }
+            let sx = segment.bx - segment.ax, sy = segment.by - segment.ay
+            let length = (sx * sx + sy * sy).squareRoot()
+            guard length > 1e-9 else { continue }
+            let ux = sx / length, uy = sy / length
+            // Opposite flows: the directions of travel, not of the vertices, point against each other.
+            let along = Double(context.flows[own] * context.flows[segment.line]) * (direction.x * ux + direction.y * uy)
+            guard along < oppositeCosine else { continue }
+            let t = min(max(((point.x - segment.ax) * sx + (point.y - segment.ay) * sy) / (length * length), 0), 1)
+            let qx = segment.ax + sx * t, qy = segment.ay + sy * t
+            let distance = ((qx - point.x) * (qx - point.x) + (qy - point.y) * (qy - point.y)).squareRoot()
+            guard distance > 1e-6, distance <= (ownWidth + otherWidth) / 2 + context.gapPoints else { continue }
+            // Beside the point, not beyond the end of the other carriageway.
+            guard abs((qx - point.x) * ux + (qy - point.y) * uy) <= 0.25 * distance + 0.5 else { continue }
+            if best == nil || distance < best!.distance {
+                best = (
+                    Match(
+                        partner: segment.line, own: point, other: ScreenPoint(x: qx, y: qy),
+                        gap: distance - (ownWidth + otherWidth) / 2),
+                    distance)
             }
         }
         return best?.match

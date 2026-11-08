@@ -39,7 +39,8 @@ struct DividedRoadsTests {
         #expect(result.count == 1 && strip.featureClass == .roadMajor && strip.structure == .ground)
         #expect(abs(area(strip.ring) - 120 * 10) < 120 * 10 * 0.03, "the strip fills the space from centre line to centre line")
         #expect(strip.ring.allSatisfy { $0.y == 0 || $0.y == 10 })
-        #expect(strip.centre.count >= 2 && strip.centre.allSatisfy { abs($0.y - 5) < 1e-9 }, "the divider runs halfway between the carriageways")
+        let divider = try #require(strip.dividers.first)
+        #expect(strip.dividers.count == 1 && divider.count >= 2 && divider.allSatisfy { abs($0.y - 5) < 1e-9 }, "the divider runs halfway between the carriageways")
     }
 
     @Test("The result does not depend on the order of the lines")
@@ -81,6 +82,26 @@ struct DividedRoadsTests {
         #expect(swapped.count == 1 && (swapped[0].ring.map(\.x).min() ?? 0) >= 36 && (swapped[0].ring.map(\.x).max() ?? 200) <= 84)
     }
 
+    @Test("A stretch shorter than 15 m is the end of a way at a junction, not a divided road")
+    func shortStretch() {
+        #expect(strips([line(1, 0...120, y: 0), line(2, 50...58, y: 10)], flows: [1, -1]).isEmpty)
+        #expect(strips([line(1, 0...120, y: 0), line(2, 50...75, y: 10)], flows: [1, -1]).count == 1)
+        // At a scale of 2 m per point, 25 points are 50 m and 7 points are 14 m.
+        #expect(strips([line(1, 0...120, y: 0), line(2, 50...56, y: 10)], flows: [1, -1], width: 3, metresPerPoint: 2).isEmpty)
+    }
+
+    @Test("Where the carriageways touch there is a strip but no divider line")
+    func noDividerWhereTheyMeet() throws {
+        // The edges are 0.5 m apart: the strip fills them in, a line between would end inside a solid road.
+        let result = strips([line(1, 0...120, y: 0), line(2, 0...120, y: 6.5)], flows: [1, -1])
+        #expect(result.count == 1 && result[0].dividers.isEmpty)
+        // A pair that comes together: the divider is only along the part where they are apart.
+        let converging = SceneLine(featureClass: .roadMajor, objectID: 2, points: [ScreenPoint(x: 0, y: 12), ScreenPoint(x: 120, y: 6.4)])
+        let strip = try #require(strips([line(1, 0...120, y: 0), converging], flows: [1, -1]).first)
+        let divider = try #require(strip.dividers.first)
+        #expect(strip.dividers.count == 1 && (divider.map(\.x).max() ?? 200) < 118, "it stops before the carriageways meet")
+    }
+
     @Test("Roads that cross, or meet at an angle, are not a divided road")
     func crossing() {
         let across = SceneLine(featureClass: .roadMajor, objectID: 2, points: [ScreenPoint(x: 60, y: -50), ScreenPoint(x: 60, y: 50)])
@@ -96,14 +117,19 @@ struct DividedRoadsTests {
             featureClass: .roadMajor, objectID: 2, points: [ScreenPoint(x: 0, y: 6), ScreenPoint(x: 120, y: 20)])
         let result = strips([line(1, 0...120, y: 0), diverging], flows: [1, -1])
         let strip = try #require(result.first)
-        #expect(result.count == 1 && (strip.ring.map(\.x).max() ?? 0) < 110, "it ends where the gap gets too wide")
+        // The edges are 6 m apart where the centres are 12 m apart: at x of about 51.
+        let end = strip.ring.map(\.x).max() ?? 0
+        #expect(result.count == 1 && end > 45 && end < 60, "it ends where the gap gets too wide, not before or after: \(end)")
     }
 
     // MARK: In the scene and the picture
 
     private let latitude: Int32 = 471_000_000
 
-    private func scene(oneway: [String?], directions: [Bool], tags: Bool = true) throws -> MapScene {
+    private func scene(
+        oneway: [String?], directions: [Bool], tags: Bool = true, featureClass: FeatureClass = .roadMajor, subclass: UInt8 = 4,
+        extra: [(String, String)] = [], extraFirst: Bool = false
+    ) throws -> MapScene {
         var writer = FeatureStoreWriter(
             boundingBox: BoundingBox(south: 47.0, west: 9.4, north: 47.3, east: 9.7), attribution: "© OpenStreetMap contributors, ODbL")
         let cell = try #require(TileID.containing(Coordinate(latitude: 47.1, longitude: 9.5), zoom: 13))
@@ -116,10 +142,16 @@ struct DividedRoadsTests {
             ]
             if !directions[index] { points.reverse() }
             var stored: [StoredTag] = []
-            if tags, let value { stored = [StoredTag(key: writer.intern("oneway"), value: writer.intern(value))] }
+            if tags {
+                var more: [StoredTag] = []
+                for (key, text) in extra { more.append(StoredTag(key: writer.intern(key), value: writer.intern(text))) }
+                if extraFirst { stored += more }
+                if let value { stored.append(StoredTag(key: writer.intern("oneway"), value: writer.intern(value))) }
+                if !extraFirst { stored += more }
+            }
             try writer.add(
                 StoredFeature(
-                    classID: FeatureClass.roadMajor.rawValue, subclass: 4, kind: .line, objectType: .way, objectID: Int64(index + 1),
+                    classID: featureClass.rawValue, subclass: subclass, kind: .line, objectType: .way, objectID: Int64(index + 1),
                     tags: stored, parts: [GeometryPart(points: points)]),
                 band: .detail, cell: cell)
         }
@@ -144,6 +176,29 @@ struct DividedRoadsTests {
         // Both vertex lists run the same way; the second is one-way against them.
         #expect(medianCount(try scene(oneway: ["yes", "-1"], directions: [true, true])) >= 1)
         #expect(medianCount(try scene(oneway: ["yes", "yes"], directions: [true, true])) == 0)
+    }
+
+    @Test("A roundabout has no strip, whatever the order of its tags")
+    func roundabout() throws {
+        // The `oneway` tag comes first in the helper's order, so the `junction` tag comes after it: it must still win.
+        #expect(medianCount(try scene(oneway: ["yes", "yes"], directions: [true, false], extra: [("junction", "roundabout")])) == 0)
+        #expect(medianCount(try scene(oneway: ["yes", "yes"], directions: [true, false], extra: [("junction", "roundabout")], extraFirst: true)) == 0)
+        #expect(medianCount(try scene(oneway: ["yes", "yes"], directions: [true, false], extra: [("junction", "circular")])) >= 1)
+    }
+
+    @Test("Two carriageways of a minor road are a divided road too, and so are two on a bridge")
+    func otherClassesAndStructures() throws {
+        let minor = try scene(oneway: ["yes", "yes"], directions: [true, false], featureClass: .roadMinor)
+        #expect(minor.steps.contains { $0.step.featureClass == .roadMinor && !$0.medians.isEmpty })
+        let bridge = try scene(oneway: ["yes", "yes"], directions: [true, false], subclass: 4 | SubclassBits.bridge)
+        let bridgeSteps = bridge.steps.filter { $0.step.featureClass == .roadMajor && $0.step.part == .body }
+        #expect(bridgeSteps.contains { $0.step.structure == .bridge && !$0.medians.isEmpty })
+        #expect(bridgeSteps.filter { $0.step.structure == .ground }.allSatisfy { $0.medians.isEmpty }, "not on the ground")
+    }
+
+    @Test("Two carriageways in a tunnel have no strip")
+    func tunnel() throws {
+        #expect(medianCount(try scene(oneway: ["yes", "yes"], directions: [true, false], subclass: 4 | SubclassBits.tunnel)) == 0)
     }
 
     @Test("Ways that are not one-way, and a store with no tags, have no strip")
