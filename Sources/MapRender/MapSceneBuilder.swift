@@ -35,7 +35,7 @@ public struct MapSceneBuilder: Sendable {
         let visible = ScreenBounds(width: viewport.width, height: viewport.height, margin: Self.cullingMargin)
 
         var linePieces: [LineKey: [LinePiece]] = [:]
-        var lineInfo: [LineKey: (lanes: Int?, name: String?, structure: Structure)] = [:]
+        var lineInfo: [LineKey: (lanes: Int?, name: String?, structure: Structure, flow: Int)] = [:]
         var areas: [FeatureClass: [SceneArea]] = [:]
         var points: [FeatureClass: [ScenePoint]] = [:]
 
@@ -57,7 +57,9 @@ public struct MapSceneBuilder: Sendable {
                     if lineInfo[key] == nil {
                         // Tags are looked up only where the style uses them: `lanes` for classes with a ground width.
                         let usesLanes = style.style(for: featureClass)?.stroke?.width.ground != nil
-                        lineInfo[key] = (usesLanes ? lanes(of: feature) : nil, name(of: feature), Structure(subclass: feature.subclass))
+                        lineInfo[key] = (
+                            usesLanes ? lanes(of: feature) : nil, name(of: feature), Structure(subclass: feature.subclass),
+                            usesLanes ? flow(of: feature) : 0)
                     }
                 case .area:
                     if let area = makeArea(feature, featureClass: featureClass, viewport: viewport, visible: visible) {
@@ -75,13 +77,13 @@ public struct MapSceneBuilder: Sendable {
             }
         }
 
-        var joined: [(key: LineKey, info: (lanes: Int?, name: String?, structure: Structure), polyline: [PackedPoint])] = []
+        var joined: [(key: LineKey, info: (lanes: Int?, name: String?, structure: Structure, flow: Int), polyline: [PackedPoint])] = []
         // The ends of the lines that are drawn as bridges or tunnels: the lines on the ground that end there end flat.
         var structureEnds = Set<PackedPoint>()
         // The vertices in the middle of the roads: a road that ends at one meets another road side on (a T junction).
         var throughPoints = Set<PackedPoint>()
         for (key, pieces) in linePieces {
-            let info = lineInfo[key] ?? (nil, nil, .ground)
+            let info = lineInfo[key] ?? (nil, nil, .ground, 0)
             let classStyle = style.style(for: key.featureClass)
             let drawn = classStyle?.drawnStructure(for: info.structure) ?? .ground
             let isRoad = classStyle?.stroke?.width.ground != nil
@@ -97,6 +99,7 @@ public struct MapSceneBuilder: Sendable {
         var built: [SceneLine] = []
         var ends: [(start: PackedPoint?, end: PackedPoint?)] = []
         var roadWidths: [Double?] = []
+        var flows: [Int] = []
         for (key, info, polyline) in joined {
             let screen = polyline.map(viewport.screenPoint(for:))
             guard let bounds = ScreenBounds(of: screen), bounds.intersects(visible) else { continue }
@@ -112,10 +115,16 @@ public struct MapSceneBuilder: Sendable {
                 featureClass: key.featureClass, objectID: key.objectID, points: screen, lanes: info.lanes, name: info.name,
                 structure: info.structure, flatStart: endsFlat(polyline.first), flatEnd: endsFlat(polyline.last)))
             ends.append((polyline.first, polyline.last))
+            flows.append(info.flow)
             roadWidths.append(classStyle?.stroke?.width.ground == nil ? nil : classStyle?.stroke?.width.resolved(
                 atZoom: viewport.zoom, metresPerPoint: viewport.metresPerPoint, lanes: info.lanes))
         }
         RoadTaper.apply(to: &built, nodes: ends, widths: roadWidths)
+        // The strips between the carriageways of divided roads (one-way ways side by side; the `oneway` tag is in the detail band).
+        var medians: [FeatureClass: [SceneMedian]] = [:]
+        for strip in DividedRoads.medians(lines: built, flows: flows, widths: roadWidths, metresPerPoint: viewport.metresPerPoint) {
+            medians[strip.featureClass, default: []].append(strip)
+        }
         var lines: [FeatureClass: [SceneLine]] = [:]
         for line in built { lines[line.featureClass, default: []].append(line) }
         // Dictionary order is not stable; sort so the same input always gives the same scene.
@@ -131,15 +140,18 @@ public struct MapSceneBuilder: Sendable {
             let classStyle = style.style(for: featureClass)
             let stepLines = (lines[featureClass] ?? []).filter { classStyle?.drawnStructure(for: $0.structure) == step.structure }
             let sceneStep: SceneStep
+            let stepMedians = (medians[featureClass] ?? []).filter { classStyle?.drawnStructure(for: $0.structure) == step.structure }
             switch step.part {
             case .casing:
                 sceneStep = SceneStep(step: step, lines: stepLines)
             case .body where step.structure == .ground:
-                sceneStep = SceneStep(step: step, lines: stepLines, areas: areas[featureClass] ?? [], points: points[featureClass] ?? [])
+                sceneStep = SceneStep(
+                    step: step, lines: stepLines, areas: areas[featureClass] ?? [], points: points[featureClass] ?? [],
+                    medians: stepMedians)
             case .body:
-                sceneStep = SceneStep(step: step, lines: stepLines)
+                sceneStep = SceneStep(step: step, lines: stepLines, medians: stepMedians)
             }
-            if !sceneStep.lines.isEmpty || !sceneStep.areas.isEmpty || !sceneStep.points.isEmpty { steps.append(sceneStep) }
+            if !sceneStep.lines.isEmpty || !sceneStep.areas.isEmpty || !sceneStep.points.isEmpty || !sceneStep.medians.isEmpty { steps.append(sceneStep) }
         }
         return MapScene(viewport: viewport, band: band, steps: steps, cellCount: cellCount, attribution: file.attribution)
     }
@@ -197,6 +209,24 @@ public struct MapSceneBuilder: Sendable {
 
     private func name(of feature: StoredFeature) -> String? {
         feature.nameID.flatMap { file.string(at: $0) }
+    }
+
+    /// The direction of a one-way road: 1 along the vertices of the way, -1 against them, 0 if it is two-way, a roundabout, or has
+    /// no tags (only the detail band holds them).
+    private func flow(of feature: StoredFeature) -> Int {
+        var oneway: String?
+        for tag in feature.tags {
+            switch file.string(at: tag.key) {
+            case "oneway": oneway = file.string(at: tag.value)
+            case "junction": if file.string(at: tag.value) == "roundabout" { return 0 }
+            default: break
+            }
+        }
+        switch oneway {
+        case "yes", "true", "1": return 1
+        case "-1", "reverse": return -1
+        default: return 0
+        }
     }
 
     /// The `lanes` tag as a positive integer. Tags exist in the detail band only.
