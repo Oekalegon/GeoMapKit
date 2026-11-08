@@ -14,7 +14,7 @@ import SwiftUI
 ///
 /// Gestures: drag to pan; on iOS, iPadOS and macOS pinch to zoom; on watchOS the Digital Crown zooms and a drag pans.
 /// To show another store, give the view a new identity (`.id(...)`); a changed `style` is picked up by itself.
-/// Mouse-only Mac users cannot zoom yet (no scroll wheel or buttons); trackpad pinch works.
+/// On the Mac the scroll wheel zooms about the pointer, and a two-finger scroll on a trackpad pans.
 ///
 /// The data credit is drawn into the image as the style's `attribution` setting says.
 public struct MapView: View {
@@ -27,6 +27,9 @@ public struct MapView: View {
     @State private var dragStart: MapViewport?
     @State private var pinchStart: Double?
     @State private var interacting = false
+    #if os(macOS)
+    @State private var scrollEnd: Task<Void, Never>?
+    #endif
     #if os(watchOS)
     @State private var crownZoom = 0.0
     #endif
@@ -73,6 +76,9 @@ public struct MapView: View {
             .gesture(pan(in: geometry.size))
             #if !os(watchOS)
             .gesture(pinch())
+            #if os(macOS)
+            .background(ScrollWheelMonitor { scroll in handle(scroll, in: geometry.size) })
+            #endif
             #else
             .focusable()
             .digitalCrownRotation(
@@ -121,6 +127,26 @@ public struct MapView: View {
         if longitude < 0 { longitude += 360 }
         return Coordinate(latitude: min(max(coordinate.latitude, -limit), limit), longitude: longitude - 180)
     }
+
+    #if os(macOS)
+    /// A scroll wheel zooms about the pointer, a trackpad scroll pans. The frame is redrawn a moment after the last event.
+    private func handle(_ scroll: ScrollWheelMonitor.Scroll, in size: CGSize) {
+        let viewport = MapViewport(center: center, zoom: zoom, width: size.width, height: size.height)
+        interacting = true
+        if scroll.precise {
+            center = Self.normalized(MapScroll.panned(viewport, dx: scroll.dx, dy: scroll.dy))
+        } else {
+            let result = MapScroll.zoomed(viewport, at: scroll.pointer, delta: scroll.dy, in: Self.zoomRange)
+            center = Self.normalized(result.center)
+            zoom = result.zoom
+        }
+        scrollEnd?.cancel()
+        scrollEnd = Task {
+            try? await Task.sleep(for: .milliseconds(200))
+            if !Task.isCancelled { interacting = dragStart != nil || pinchStart != nil }
+        }
+    }
+    #endif
 
     #if !os(watchOS)
     private func pinch() -> some Gesture {

@@ -3,7 +3,7 @@ import Foundation
 
 /// Finds the divided roads in a scene: pairs of one-way ways side by side, running in opposite directions.
 ///
-/// Two ways are the carriageways of one road when they are of the same class and structure, are one-way (the `oneway` tag, so
+/// Two ways are the carriageways of one road when they are of the same class and structure, are one-way (the `oneway` tag, or a motorway without one, so
 /// only the detail band, which holds the tags, has them), their flow runs in opposite directions, and they run side by side
 /// with a steady gap of at most 4 m between their edges (``typicalGap``), and are not named differently. For every such stretch the result has a strip from the
 /// centre line of one to the centre line of the other. Filled in the colour of the road, the strip covers the gap and the inner

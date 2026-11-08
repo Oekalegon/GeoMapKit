@@ -205,6 +205,19 @@ struct DividedRoadsTests {
         #expect(medianCount(try scene(oneway: ["yes", "yes"], directions: [true, true])) == 0)
     }
 
+    @Test("A motorway is one-way without a tag, unless the tag says otherwise; other roads are not")
+    func impliedOneway() throws {
+        let motorway = [("highway", "motorway")]
+        #expect(medianCount(try scene(oneway: [nil, nil], directions: [true, false], extra: motorway)) >= 1)
+        #expect(medianCount(try scene(oneway: [nil, nil], directions: [true, false], extra: [("highway", "motorway_link")])) >= 1)
+        #expect(medianCount(try scene(oneway: [nil, nil], directions: [true, false], extra: motorway, extraFirst: true)) >= 1)
+        #expect(medianCount(try scene(oneway: ["no", "no"], directions: [true, false], extra: motorway)) == 0)
+        #expect(medianCount(try scene(oneway: [nil, nil], directions: [true, false], extra: [("highway", "trunk")])) == 0)
+        #expect(medianCount(try scene(oneway: [nil, nil], directions: [true, false], extra: motorway + [("junction", "roundabout")])) == 0)
+        // One carriageway tagged -1 against the implied flow of the other.
+        #expect(medianCount(try scene(oneway: [nil, "-1"], directions: [true, true], extra: motorway)) >= 1)
+    }
+
     @Test("A roundabout has no strip, whatever the order of its tags")
     func roundabout() throws {
         // The `oneway` tag comes first in the helper's order, so the `junction` tag comes after it: it must still win.

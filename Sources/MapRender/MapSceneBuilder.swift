@@ -211,12 +211,13 @@ public struct MapSceneBuilder: Sendable {
     }
 
     /// The tags of a road that the scene uses, read in one pass: the `lanes` tag as a positive integer (or `nil`), and the direction of
-    /// a one-way road (1 along the vertices of the way, -1 against them, 0 for a two-way road, a roundabout, or no tags). Tags exist in
+    /// a one-way road (1 along the vertices of the way, -1 against them, 0 for a two-way road, a roundabout, or no tags; a motorway is one-way without a tag). Tags exist in
     /// the detail band only.
     private func roadTags(of feature: StoredFeature) -> (lanes: Int?, flow: Int) {
         var lanes: Int?
         var oneway: String?
-        var roundabout = false
+        var junction: String?
+        var highway: String?
         for tag in feature.tags {
             switch file.string(at: tag.key) {
             case "lanes":
@@ -224,18 +225,16 @@ public struct MapSceneBuilder: Sendable {
             case "oneway":
                 oneway = file.string(at: tag.value)
             case "junction":
-                roundabout = file.string(at: tag.value) == "roundabout"
+                junction = file.string(at: tag.value)
+            case "highway":
+                highway = file.string(at: tag.value)
             default:
                 break
             }
         }
         // A roundabout is one-way whatever else it says, but its sides are no carriageways of a divided road.
-        guard !roundabout else { return (lanes, 0) }
-        switch oneway {
-        case "yes", "true", "1": return (lanes, 1)
-        case "-1", "reverse": return (lanes, -1)
-        default: return (lanes, 0)
-        }
+        guard junction != "roundabout" else { return (lanes, 0) }
+        return (lanes, OnewayRule.flow(oneway: oneway, highway: highway, junction: junction))
     }
 }
 
