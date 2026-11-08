@@ -15,14 +15,20 @@ public struct SourcesReport: Sendable {
     public let downloaded: Bool
     /// How long the download took, if there was one.
     public let downloadTime: Duration?
+    /// For files chosen by region: the number of blocks that need them. `nil` for files chosen by an area.
+    public let blockCount: Int?
 
     /// Creates a report.
-    public init(area: BoundingBox, cacheDirectory: URL, plan: DownloadPlan, downloaded: Bool = false, downloadTime: Duration? = nil) {
+    public init(
+        area: BoundingBox, cacheDirectory: URL, plan: DownloadPlan, downloaded: Bool = false, downloadTime: Duration? = nil,
+        blockCount: Int? = nil
+    ) {
         self.area = area
         self.cacheDirectory = cacheDirectory
         self.plan = plan
         self.downloaded = downloaded
         self.downloadTime = downloadTime
+        self.blockCount = blockCount
     }
 }
 

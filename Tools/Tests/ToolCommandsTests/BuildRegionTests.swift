@@ -130,6 +130,41 @@ struct BuildRegionTests {
         #expect(!FileManager.default.fileExists(atPath: s.output.appendingPathComponent("manifest.json").path))
     }
 
+    @Test("A block that is rebuilt and has nothing to store any more leaves the manifest, and its file goes")
+    func becomesEmpty() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        let first = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let before = try StoreManifest(json: Data(contentsOf: first.manifestURL))
+        let files = before.blocks.map { s.output.appendingPathComponent($0.file) }
+        #expect(!before.blocks.isEmpty && files.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+
+        // The source file is replaced by one with nothing in the area.
+        let data = TinyPBF.makeElsewhere()
+        let part = try s.cacheStore.preparePart(regionID: "tiny", etag: "\"e9\"", keepBytes: false)
+        try data.write(to: part)
+        try s.cacheStore.install(regionID: "tiny", from: tinyURL, info: RemoteFileInfo(size: Int64(data.count), etag: "\"e9\"", lastModified: "Tue"))
+        let again = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        #expect(built(again).isEmpty && again.outcomes.allSatisfy { $0.status == .empty })
+        let after = try StoreManifest(json: Data(contentsOf: again.manifestURL))
+        #expect(after.blocks.isEmpty, "the manifest no longer lists a block that has no file")
+        #expect(files.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    @Test("An area of too many blocks is refused before any work is done")
+    func tooManyBlocks() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        await #expect(throws: ToolError.self) {
+            try await ToolRunner.buildRegion(request(s, area: .box(BoundingBox(south: -60, west: -170, north: 70, east: 170))), catalog: s.catalog)
+        }
+        // The same area is fine at a low zoom, up to the limit of blocks.
+        var coarse = request(s, area: .box(BoundingBox(south: 46, west: 8, north: 49, east: 10.5)))
+        coarse.blockZoom = 6
+        let report = try await ToolRunner.buildRegion(coarse, catalog: s.catalog)
+        #expect(!report.outcomes.isEmpty)
+    }
+
     @Test("A manifest of another profile is not reused")
     func otherProfile() async throws {
         let s = try setup()

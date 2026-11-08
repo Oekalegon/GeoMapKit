@@ -71,7 +71,8 @@ public enum ReportFormatter {
     public static func text(for report: SourcesReport) -> String {
         let area = report.area
         var lines = [
-            "Area: south \(area.south), west \(area.west), north \(area.north), east \(area.east) (whole cells)",
+            report.blockCount.map { "Blocks: \($0), in south \(area.south), west \(area.west), north \(area.north), east \(area.east)" }
+                ?? "Area: south \(area.south), west \(area.west), north \(area.north), east \(area.east) (whole cells)",
             "Cache: \(report.cacheDirectory.path)",
             "",
             "Source files (the one that covers most of the area first)",
@@ -88,7 +89,9 @@ public enum ReportFormatter {
             if item.alreadyDownloaded > 0, !report.downloaded { line += " (\(Formatting.bytes(item.alreadyDownloaded)) already there)" }
             lines.append(line)
         }
-        lines.append("  The outlines of these regions cover \(Int((report.plan.coveredShare * 100).rounded())) % of the area.")
+        if report.blockCount == nil {
+            lines.append("  The outlines of these regions cover \(Int((report.plan.coveredShare * 100).rounded())) % of the area.")
+        }
         lines.append("")
         if report.downloaded {
             lines.append("Downloaded in \(report.downloadTime.map(Formatting.seconds) ?? "-").")
@@ -105,7 +108,8 @@ public enum ReportFormatter {
     public static func text(for comparison: StoreComparison) -> String {
         var lines = [
             "Cells in both stores: \(Formatting.count(comparison.cellsCompared)), identical: \(Formatting.count(comparison.cellsIdentical)), different: \(Formatting.count(comparison.cellsCompared - comparison.cellsIdentical))",
-            "Cells only in the first store: \(Formatting.count(comparison.cellsOnlyInFirst))",
+            "Cells only in the first store: \(Formatting.count(comparison.cellsOnlyInFirst))"
+                + (comparison.cellsSkippedNearEdge > 0 ? "; left out near its edge: \(Formatting.count(comparison.cellsSkippedNearEdge))" : ""),
             "Features that differ: \(Formatting.count(comparison.differenceCount))",
         ]
         for difference in comparison.differences {

@@ -39,15 +39,12 @@ extension ToolRunner {
         var tasks: [BlockTask] = []
         var outcomes: [Int: BlockOutcome] = [:]
         var needed: [String: SourceRegion] = [:]
-        let tiles = try blockTiles(for: request, in: index)
-        for (position, tile) in tiles.enumerated() {
-            let box = cutBox(of: tile, margin: request.margin)
-            let regions = index.regions(covering: box).regions
-            if regions.isEmpty {
-                outcomes[position] = BlockOutcome(x: tile.x, y: tile.y, status: .empty, regions: [])
+        for planned in try plannedBlocks(area: request.area, blockZoom: request.blockZoom, margin: request.margin, in: index) {
+            if planned.regions.isEmpty {
+                outcomes[planned.position] = BlockOutcome(x: planned.tile.x, y: planned.tile.y, status: .empty, regions: [])
             } else {
-                for region in regions { needed[region.id] = region }
-                tasks.append(BlockTask(position: position, tile: tile, cutBox: box, regions: regions))
+                for region in planned.regions { needed[region.id] = region }
+                tasks.append(planned)
             }
         }
         guard !tasks.isEmpty else { throw ToolError("No source region covers this area.") }
@@ -68,7 +65,7 @@ extension ToolRunner {
         }
         guard missing.isEmpty else {
             throw ToolError(
-                "These source files are not in the cache: \(missing.joined(separator: ", ")). Run 'geomapkit fetch' for the area first (--region or --bbox, with --yes).")
+                "These source files are not in the cache: \(missing.joined(separator: ", ")). Run 'geomapkit fetch' with the same --region or area, and --yes, first.")
         }
 
         let blocksFolder = request.output.appendingPathComponent("blocks", isDirectory: true)
@@ -88,6 +85,7 @@ extension ToolRunner {
         }
         var kept = Dictionary(uniqueKeysWithValues: (manifest?.blocks ?? []).map { (BlockKey(x: $0.x, y: $0.y), $0) })
         var toBuild: [BlockTask] = []
+        var removedFiles: [BlockKey: String] = [:]
         for task in tasks {
             let sources = task.regions.compactMap { records[$0.id] }
             let key = BlockKey(x: task.tile.x, y: task.tile.y)
@@ -96,6 +94,7 @@ extension ToolRunner {
                 outcomes[task.position] = outcome
                 progress(outcome)
             } else {
+                if let old = kept[key] { removedFiles[key] = old.file }
                 kept[key] = nil
                 toBuild.append(task)
             }
@@ -143,6 +142,14 @@ extension ToolRunner {
                     outcomes[task.position] = outcome
                     progress(outcome)
                 } else {
+                    // The block has nothing to store now: its old entry and file go, and the manifest says so.
+                    if let old = removedFiles[BlockKey(x: task.tile.x, y: task.tile.y)] {
+                        try? FileManager.default.removeItem(at: request.output.appendingPathComponent(old))
+                        if manifest != nil {
+                            manifest?.blocks = kept.values.sorted { ($0.y, $0.x) < ($1.y, $1.x) }
+                            if let manifest { try Self.write(manifest, to: manifestURL) }
+                        }
+                    }
                     let outcome = BlockOutcome(x: task.tile.x, y: task.tile.y, status: .empty, regions: regionIDs)
                     outcomes[task.position] = outcome
                     progress(outcome)
@@ -163,11 +170,19 @@ extension ToolRunner {
 
     private struct BlockKey: Hashable { var x: Int; var y: Int }
 
-    private struct BlockTask: Sendable {
+    struct BlockTask: Sendable {
         var position: Int
         var tile: TileID
         var cutBox: BoundingBox
         var regions: [SourceRegion]
+    }
+
+    /// The blocks of an area with, for each, the box that is cut and the regions whose files it needs (none if no region covers it).
+    static func plannedBlocks(area: BlockRequest.Area, blockZoom: Int, margin: Double, in index: RegionIndex) throws -> [BlockTask] {
+        try blockTiles(for: area, blockZoom: blockZoom, in: index).enumerated().map { position, tile in
+            let box = cutBox(of: tile, margin: margin)
+            return BlockTask(position: position, tile: tile, cutBox: box, regions: index.regions(covering: box).regions)
+        }
     }
 
     private struct BuiltBlock: Sendable {
@@ -189,11 +204,10 @@ extension ToolRunner {
     }
 
     /// The tiles of the block grid that the request covers, in order of row and column.
-    private static func blockTiles(for request: BlockRequest, in index: RegionIndex) throws -> [TileID] {
-        let zoom = request.blockZoom
+    private static func blockTiles(for area: BlockRequest.Area, blockZoom zoom: Int, in index: RegionIndex) throws -> [TileID] {
         let box: BoundingBox
         var named: [SourceRegion] = []
-        switch request.area {
+        switch area {
         case .box(let area):
             guard area.isValid else { throw ToolError("The area is not valid") }
             box = area
@@ -208,6 +222,11 @@ extension ToolRunner {
             box = BoundingBox(
                 south: named.map(\.boundingBox.south).min() ?? 0, west: named.map(\.boundingBox.west).min() ?? 0,
                 north: named.map(\.boundingBox.north).max() ?? 0, east: named.map(\.boundingBox.east).max() ?? 0)
+        }
+        // A box this large at this zoom would be thousands of blocks; the regions of the whole world are not what this is for.
+        let columnsAcross = (box.east - box.west) / 360 * Double(1 << zoom)
+        guard columnsAcross < 1_000, (box.north - box.south) / 170 * Double(1 << zoom) < 1_000 else {
+            throw ToolError("This area is too large for blocks of zoom \(zoom): use a smaller area or a lower --block-zoom.")
         }
         guard let northWest = TileID.containing(Coordinate(latitude: min(box.north, TileID.maximumLatitude), longitude: box.west), zoom: zoom),
             let southEast = TileID.containing(Coordinate(latitude: max(box.south, -TileID.maximumLatitude), longitude: min(box.east, 179.999999)), zoom: zoom)
@@ -235,6 +254,9 @@ extension ToolRunner {
             }
         }
         guard !tiles.isEmpty else { throw ToolError("No block lies in this area.") }
+        guard tiles.count <= 2_000 else {
+            throw ToolError("This area is \(tiles.count) blocks of zoom \(zoom); the limit is 2,000. Use a smaller area or a lower --block-zoom.")
+        }
         return tiles
     }
 

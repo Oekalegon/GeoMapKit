@@ -39,7 +39,11 @@ GeoMapKit tools
       older than 30 days, and the size of each file that is not cached. The
       default cache is GeoMapKit/Sources in the application support folder.
 
-  geomapkit fetch (area as above) [--cache DIR] [--yes]
+  geomapkit sources --region id[,id...] [--block-zoom 8] [--margin 0.1] [--cache DIR]
+      The same for the blocks of regions (what build-region needs): the files
+      of the regions and of the neighbours that the blocks reach into.
+
+  geomapkit fetch (area as above | --region id[,id...]) [--cache DIR] [--yes]
       Show the same plan and, only with --yes, download the files that are
       missing or out of date. Files that were checked within 30 days are not
       asked about again. An interrupted download continues where it stopped.
@@ -55,10 +59,12 @@ GeoMapKit tools
       is, so a run that was stopped can be run again. --region takes the ids of
       the region index (sweden, ostlandet); the blocks that meet them are built.
 
-  geomapkit compare <first> <second> [--limit N]
+  geomapkit compare <first> <second> [--limit N] [--inner N]
       Compare two stores (a .gmk file or a manifest.json) in the cells both
       hold, and list the features that differ: a check that blocks give the
-      same map as one file.
+      same map as one file. A store from one cut is poor at its own edge, so
+      --inner N leaves out the cells within N cells of the edge of the first
+      store (try 10), and says how many.
 
   geomapkit render <file.gmk> --center lat,lon --zoom Z --output <file.png> [--bearing DEGREES]
                    [--size WxH] [--scale S] [--style standard|watch|file.json]
@@ -142,28 +148,58 @@ do {
         }
         print(ReportFormatter.text(for: report, blockZoom: request.blockZoom))
     case "compare":
-        let parsed = try CommandLineArguments(rest, knownOptions: ["limit"])
+        let parsed = try CommandLineArguments(rest, knownOptions: ["limit", "inner"])
         guard parsed.positional.count == 2 else { throw ToolError("compare needs two stores") }
-        var limit = 20
+        var limit = 20, inner = 0
         if let text = parsed.value(for: "limit") {
             guard let value = Int(text), value >= 0 else { throw ToolError("--limit expects a whole number") }
             limit = value
         }
+        if let text = parsed.value(for: "inner") {
+            guard let value = Int(text), value >= 0 else { throw ToolError("--inner expects a whole number") }
+            inner = value
+        }
         print(ReportFormatter.text(for: try ToolRunner.compareStores(
-            URL(fileURLWithPath: parsed.positional[0]), URL(fileURLWithPath: parsed.positional[1]), limit: limit)))
+            URL(fileURLWithPath: parsed.positional[0]), URL(fileURLWithPath: parsed.positional[1]), limit: limit, inner: inner)))
     case "sources", "fetch":
-        let parsed = try CommandLineArguments(rest, knownOptions: ["bbox", "center", "radius-km", "cache"], knownFlags: ["yes"])
+        let parsed = try CommandLineArguments(
+            rest, knownOptions: ["bbox", "center", "radius-km", "cache", "region", "block-zoom", "margin"], knownFlags: ["yes"])
         guard parsed.positional.isEmpty else { throw ToolError("\(command) takes an area, not files") }
-        let area = try AreaArgument.parse(
-            bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"), radiusKilometres: parsed.value(for: "radius-km"))
         let cache = parsed.value(for: "cache").map { URL(fileURLWithPath: $0) }
         let report: SourcesReport
-        if command == "sources" {
-            report = try await ToolRunner.sources(area: area, cacheDirectory: cache)
+        if let list = parsed.value(for: "region") {
+            guard parsed.value(for: "bbox") == nil, parsed.value(for: "center") == nil else {
+                throw ToolError("Use --region or an area (--bbox, --center), not both")
+            }
+            let ids = list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            var blockZoom = 8
+            if let text = parsed.value(for: "block-zoom") {
+                guard let value = Int(text), (0...13).contains(value) else { throw ToolError("--block-zoom expects a whole number from 0 to 13") }
+                blockZoom = value
+            }
+            var margin = 0.1
+            if let text = parsed.value(for: "margin") {
+                guard let value = Double(text), (0...2).contains(value) else { throw ToolError("--margin expects degrees from 0 to 2") }
+                margin = value
+            }
+            if command == "sources" {
+                report = try await ToolRunner.sources(regions: ids, blockZoom: blockZoom, margin: margin, cacheDirectory: cache)
+            } else {
+                let printer = ProgressPrinter()
+                report = try await ToolRunner.fetch(
+                    regions: ids, blockZoom: blockZoom, margin: margin, cacheDirectory: cache, confirmed: parsed.hasFlag("yes")
+                ) { id, bytes, total in printer.report(id, bytes, total) }
+            }
         } else {
-            let printer = ProgressPrinter()
-            report = try await ToolRunner.fetch(area: area, cacheDirectory: cache, confirmed: parsed.hasFlag("yes")) { id, bytes, total in
-                printer.report(id, bytes, total)
+            let area = try AreaArgument.parse(
+                bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"), radiusKilometres: parsed.value(for: "radius-km"))
+            if command == "sources" {
+                report = try await ToolRunner.sources(area: area, cacheDirectory: cache)
+            } else {
+                let printer = ProgressPrinter()
+                report = try await ToolRunner.fetch(area: area, cacheDirectory: cache, confirmed: parsed.hasFlag("yes")) { id, bytes, total in
+                    printer.report(id, bytes, total)
+                }
             }
         }
         print(ReportFormatter.text(for: report))

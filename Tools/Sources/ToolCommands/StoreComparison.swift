@@ -24,6 +24,8 @@ public struct StoreComparison: Sendable {
     public let cellsIdentical: Int
     /// The number of cells of the first store that the second does not have.
     public let cellsOnlyInFirst: Int
+    /// The number of cells that were left out because they lie near the edge of the first store (see `inner`).
+    public let cellsSkippedNearEdge: Int
     /// The differences, at most the first `limit`.
     public let differences: [Difference]
     /// The total number of differing features.
@@ -37,14 +39,24 @@ extension ToolRunner {
     ///   - first: A `.gmk` file or a manifest.
     ///   - second: A `.gmk` file or a manifest.
     ///   - limit: How many differences to keep in the report.
+    ///   - inner: Cells within this many cells of the edge of the first store are left out. A store made from one cut is poor
+    ///     at its own edge (objects are cut off, the sea is not closed), so against such a reference the edge would count as
+    ///     differences that the other store does not have. 0 compares every cell.
     /// - Returns: The comparison, over the cells that both stores hold.
     /// - Throws: ``ToolError`` if a store cannot be opened, and the errors of the readers.
-    public static func compareStores(_ first: URL, _ second: URL, limit: Int = 20) throws -> StoreComparison {
+    public static func compareStores(_ first: URL, _ second: URL, limit: Int = 20, inner: Int = 0) throws -> StoreComparison {
         let a = try openStore(first), b = try openStore(second)
         guard a.source.storageZoom == b.source.storageZoom else { throw ToolError("The stores have different cell zooms") }
-        var compared = 0, identical = 0, onlyFirst = 0, count = 0
+        var compared = 0, identical = 0, onlyFirst = 0, count = 0, skipped = 0
         var differences: [StoreComparison.Difference] = []
-        for cell in try a.cells() {
+        let firstCells = try a.cells()
+        let columns = firstCells.map(\.x), rows = firstCells.map(\.y)
+        let (west, east, north, south) = (columns.min() ?? 0, columns.max() ?? 0, rows.min() ?? 0, rows.max() ?? 0)
+        for cell in firstCells {
+            if inner > 0, cell.x < west + inner || cell.x > east - inner || cell.y < north + inner || cell.y > south - inner {
+                skipped += 1
+                continue
+            }
             guard let fileA = try a.source.file(containing: cell) else { continue }
             guard let fileB = try b.source.file(containing: cell) else { onlyFirst += 1; continue }
             compared += 1
@@ -65,7 +77,8 @@ extension ToolRunner {
             if same { identical += 1 }
         }
         return StoreComparison(
-            cellsCompared: compared, cellsIdentical: identical, cellsOnlyInFirst: onlyFirst, differences: differences, differenceCount: count)
+            cellsCompared: compared, cellsIdentical: identical, cellsOnlyInFirst: onlyFirst, cellsSkippedNearEdge: skipped,
+            differences: differences, differenceCount: count)
     }
 
     private struct OpenStore {
