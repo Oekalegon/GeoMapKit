@@ -31,10 +31,18 @@ enum BoundarySides {
             var last: Int64
             var points: [Coordinate]
         }
-        var members: [Member?] = []
+        // Count what is missing before any point is loaded: a relation of a large region, mostly outside the extract, is
+        // turned down here without decoding its ways.
         var wayCount = 0, missing = 0
         for member in relation.members where member.type == .way {
             wayCount += 1
+            if member.role != "inner", extract.ways.index(ofID: member.id) == nil { missing += 1 }
+        }
+        guard wayCount > 0, Double(missing) <= Double(wayCount) * maximumMissingShare else { return [:] }
+
+        var members: [Member?] = []
+        missing = 0
+        for member in relation.members where member.type == .way {
             // An inner ring bounds a hole in the region: the region is on the other side of it. Left out, like what is missing.
             guard member.role != "inner" else { members.append(nil); continue }
             guard let index = extract.ways.index(ofID: member.id) else { missing += 1; members.append(nil); continue }

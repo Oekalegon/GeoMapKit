@@ -121,6 +121,46 @@ struct BorderNamesTests {
         #expect(try names(of: .countryBorder, in: &world) == ["North\n"])
     }
 
+    @Test("A relation with too many ways missing from the extract is not followed: the names are in alphabetical order")
+    func tooManyMissing() throws {
+        var world = SyntheticWorld()
+        neighbours(&world, north: false, south: false)
+        // One of the four ways of each relation is not in the extract: 25%, far over the limit.
+        world.relation(50, [(10, "outer", 1), (11, "outer", 1), (12, "outer", 1), (99, "outer", 1)], level2 + [("name", "North")])
+        world.relation(51, [(10, "outer", 1), (13, "outer", 1), (14, "outer", 1), (98, "outer", 1)], level2 + [("name", "South")])
+        #expect(try names(of: .countryBorder, in: &world) == ["North – South"])
+    }
+
+    @Test("A relation whose ways do not join up is not followed")
+    func notJoined() throws {
+        var world = SyntheticWorld()
+        neighbours(&world, north: false, south: false)
+        // The other ways lie apart from way 10, so no direction of travel can be found.
+        world.node(20, 5.5, 5.0); world.node(21, 5.6, 5.0); world.node(22, 6.5, 6.0); world.node(23, 6.6, 6.0)
+        world.way(30, [20, 21]); world.way(31, [22, 23])
+        world.relation(50, [(30, "outer", 1), (10, "outer", 1), (31, "outer", 1)], level2 + [("name", "North")])
+        world.relation(51, [(31, "outer", 1), (10, "outer", 1), (30, "outer", 1)], level2 + [("name", "South")])
+        #expect(try names(of: .countryBorder, in: &world) == ["North – South"])
+    }
+
+    @Test("The stored border keeps the direction of its way, which the sides are given in")
+    func directionKept() throws {
+        var world = SyntheticWorld()
+        neighbours(&world)
+        let result = try FeatureStoreBuilder().build(from: try world.extract())
+        let file = try FeatureStoreFile(data: result.data)
+        var pieces = 0
+        for cell in try file.cells() {
+            for feature in try file.features(in: cell, band: .overview) where feature.classID == FeatureClass.countryBorder.rawValue {
+                for part in feature.parts {
+                    pieces += 1
+                    #expect(zip(part.points, part.points.dropFirst()).allSatisfy { $0.0.longitude <= $0.1.longitude }, "west to east, as the way")
+                }
+            }
+        }
+        #expect(pieces > 0)
+    }
+
     @Test("A ring clockwise on the map has its region on the right")
     func clockwise() {
         func ring(_ points: [(Double, Double)]) -> [Coordinate] { points.map { Coordinate(latitude: $0.0, longitude: $0.1) } }

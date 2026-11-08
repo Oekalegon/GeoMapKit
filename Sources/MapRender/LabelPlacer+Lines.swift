@@ -8,7 +8,8 @@ extension LabelPlacer {
     static let sameTextDistance = 200.0
     /// The most places tried for the name along one run of line.
     private static let maximumSlots = 8
-    /// The distance, in points, from the middle of the line to the edge of the text box beside it: the letters nearly touch the line and may overlap the wide band of a national border.
+    /// The distance, in points, from the middle of the line to the edge of the text box beside it: the letters nearly touch
+    /// the line and may overlap the wide band of a national border.
     private static let sideGap = 1.0
 
     /// Places the name along a line, as many times as fits, and returns the labels.

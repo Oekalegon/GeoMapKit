@@ -29,6 +29,8 @@ extension LabelStyle: Codable {
         try c.encode(haloWidth, forKey: .haloWidth)
         try c.encode(priority, forKey: .priority)
         try c.encode([visibleZoom.lowerBound, visibleZoom.upperBound], forKey: .visibleZoom)
-        try c.encode(placement, forKey: .placement)
+        // Only written when it is not the default, so that style files without besideLine labels stay as they were and
+        // older readers (which refuse unknown keys) can still read them.
+        if placement != .onLine { try c.encode(placement, forKey: .placement) }
     }
 }
