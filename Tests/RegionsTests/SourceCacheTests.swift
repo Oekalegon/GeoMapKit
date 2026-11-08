@@ -144,8 +144,10 @@ struct SourceCacheTests {
         third.release()
     }
 
-    @Test("The errors read as sentences")
+    @Test("The errors read as sentences, with sizes written the way the tools write them")
     func messages() {
+        #expect("\(SourceError.incompleteDownload(region: "sweden", expected: 949_756_885, received: 0))" == "The download of sweden ended after 0 bytes of 949.8 MB; run it again to continue.")
+        #expect("\(SourceError.notEnoughSpace(needed: 2_500_000_000, available: 12_345))".contains("2.5 GB needed (with a margin), 12.3 KB available"))
         #expect("\(SourceError.alreadyDownloading(region: "norway"))" == "norway is already being downloaded.")
         #expect("\(SourceError.notEnoughSpace(needed: 1_500_000_000, available: 300_000_000))".contains("needed (with a margin)"))
         let url = URL(string: "https://example.org/a.pbf")!

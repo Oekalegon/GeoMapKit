@@ -262,6 +262,17 @@ struct SourceManagerTests {
         #expect(await s.server.requests(containing: "GET").count == 2)
     }
 
+    @Test("A fetch with everything in the cache needs no lock, so it works while another holder has it")
+    func cachedNeedsNoLock() async throws {
+        let s = await setup()
+        defer { try? FileManager.default.removeItem(at: s.directory) }
+        _ = try await s.manager.fetch(try await s.manager.plan(for: selection()))
+        let other = try SourceCache(directory: s.directory).lockDownloads()
+        defer { other.release() }
+        let files = try await s.manager.fetch(try await s.manager.plan(for: selection()))
+        #expect(files.count == 2)
+    }
+
     @Test("A region that is being downloaded cannot be downloaded again at the same time")
     func concurrent() async throws {
         let gate = Gate()

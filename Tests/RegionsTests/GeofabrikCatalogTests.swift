@@ -90,6 +90,20 @@ struct GeofabrikCatalogTests {
         await #expect(throws: RegionError.self) { try await s.catalog.index() }
     }
 
+    @Test("While another holder has the download lock the copy is used, and without a copy the lock is the error")
+    func lockHeld() async throws {
+        let s = await setup()
+        defer { try? FileManager.default.removeItem(at: s.directory) }
+        let other = try SourceCache(directory: s.directory).lockDownloads()
+        await #expect(throws: SourceError.cacheBusy) { try await s.catalog.index() }
+        other.release()
+        _ = try await s.catalog.index()
+        s.clock.advance(days: 60)
+        let again = try SourceCache(directory: s.directory).lockDownloads()
+        #expect(try await s.catalog.index().regions.count == 2, "the old copy, renewal waits")
+        again.release()
+    }
+
     @Test("A copy that cannot be read is downloaded again")
     func damagedCopy() async throws {
         let s = await setup()

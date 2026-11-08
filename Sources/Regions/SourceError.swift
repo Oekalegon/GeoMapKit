@@ -31,5 +31,14 @@ extension SourceError: CustomStringConvertible {
         }
     }
 
-    private static func size(_ bytes: Int64) -> String { ByteCountFormatStyle(style: .file).format(bytes) }
+    /// Sizes with a dot and 1000-based units, as the tools print them, whatever the language of the system.
+    private static func size(_ bytes: Int64) -> String {
+        let value = Double(bytes)
+        switch value {
+        case ..<1_000: return "\(bytes) bytes"
+        case ..<1_000_000: return String(format: "%.1f KB", value / 1_000)
+        case ..<1_000_000_000: return String(format: "%.1f MB", value / 1_000_000)
+        default: return String(format: "%.1f GB", value / 1_000_000_000)
+        }
+    }
 }
