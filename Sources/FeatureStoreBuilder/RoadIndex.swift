@@ -9,8 +9,7 @@ import OSMPBF
 /// when most of its length lies within ``maximumDistance`` of a road and runs the same way (within about 25 degrees), so a
 /// footway that crosses a road or ends at it does not count for the stretch where it meets it.
 ///
-/// Positions are turned into metres with a flat projection at the latitude of the middle of the extract, which is accurate
-/// to about a percent over the half degree an extract covers. Only roads count (`roadMajor` and `roadMinor` that are not
+/// Positions are turned into metres with ``LocalMetres``. Only roads count (`roadMajor` and `roadMinor` that are not
 /// pedestrian streets and not tunnels).
 struct RoadIndex {
     /// The farthest a footway may be from a road, in metres, to be beside it.
@@ -28,8 +27,7 @@ struct RoadIndex {
         var x0, y0, x1, y1: Double
     }
 
-    private let metresPerDegreeLongitude: Double
-    private let metresPerDegreeLatitude = Geodesy.earthRadius * Double.pi / 180
+    private let projection: LocalMetres
     private var grid: [Int64: [Segment]] = [:]
 
     /// Builds the index from the ways of an extract.
@@ -38,8 +36,7 @@ struct RoadIndex {
     ///   - extract: The extract.
     ///   - classifier: The classifier that says which ways are roads.
     init(extract: OSMExtract, classifier: FeatureClassifier) {
-        let box = extract.boundingBox
-        metresPerDegreeLongitude = Geodesy.earthRadius * Double.pi / 180 * cos((box.south + box.north) / 2 * Double.pi / 180)
+        projection = LocalMetres()
         for position in extract.ways.indices {
             let tags = extract.ways.tags(at: position)
             guard tags.value(forKey: "highway") != nil, tags.value(forKey: "highway") != "pedestrian" else { continue }
@@ -82,9 +79,7 @@ struct RoadIndex {
 
     // MARK: Grid
 
-    private func project(_ point: PackedPoint) -> (x: Double, y: Double) {
-        (Double(point.longitude) / 1e7 * metresPerDegreeLongitude, Double(point.latitude) / 1e7 * metresPerDegreeLatitude)
-    }
+    private func project(_ point: PackedPoint) -> (x: Double, y: Double) { projection.project(point) }
 
     private static func key(_ column: Int, _ row: Int) -> Int64 { (Int64(column) << 32) ^ (Int64(row) & 0xFFFF_FFFF) }
 
