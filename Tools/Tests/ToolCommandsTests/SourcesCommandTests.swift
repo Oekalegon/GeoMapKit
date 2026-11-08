@@ -39,6 +39,24 @@ struct SourcesCommandTests {
         }
     }
 
+    /// A network on which every file has changed since it was downloaded.
+    private struct ReplacingNetwork: Downloader {
+        let base: Network
+        func metadata(of url: URL, ifNoneMatch etag: String?) async throws -> RemoteMetadata {
+            .info(RemoteFileInfo(size: 123_456, etag: "\"new\""))
+        }
+        func download(
+            from url: URL, to file: URL, resumeFrom offset: Int64, ifRange etag: String?, progress: @Sendable (Int64) -> Void
+        ) async throws -> RemoteFileInfo { try await base.download(from: url, to: file, resumeFrom: offset, ifRange: etag, progress: progress) }
+    }
+
+    private struct OfflineNetwork: Downloader {
+        func metadata(of url: URL, ifNoneMatch etag: String?) async throws -> RemoteMetadata { throw URLError(.notConnectedToInternet) }
+        func download(
+            from url: URL, to file: URL, resumeFrom offset: Int64, ifRange etag: String?, progress: @Sendable (Int64) -> Void
+        ) async throws -> RemoteFileInfo { throw URLError(.notConnectedToInternet) }
+    }
+
     private func region(_ id: String, _ url: URL, west: Double, east: Double) -> SourceRegion {
         let ring = [
             Coordinate(latitude: 46, longitude: west), Coordinate(latitude: 46, longitude: east),
@@ -116,6 +134,45 @@ struct SourcesCommandTests {
         let cached = try await ToolRunner.cachedSources(area: area, cacheDirectory: s.cache, catalog: s.catalog, downloader: s.network)
         #expect(cached.files.map(\.lastPathComponent) == ["tiny.osm.pbf"] && cached.records.map(\.regionID) == ["tiny"])
         #expect(cached.coveredShare > 0.9)
+    }
+
+    @Test("A file the server has replaced is refused for a build unless stale files are allowed, and then a warning says so")
+    func staleSources() async throws {
+        let s = try await setup()
+        defer { try? FileManager.default.removeItem(at: s.cache) }
+        _ = try await ToolRunner.fetch(area: area, cacheDirectory: s.cache, catalog: s.catalog, downloader: s.network, confirmed: true)
+        // The server now has another version of the file, and the cached one is older than 30 days.
+        let later = ReplacingNetwork(base: s.network)
+        let old = SourceCache(directory: s.cache)
+        var record = try #require(old.status(ofRegionID: "tiny").record)
+        record.checkedAt = Date().addingTimeInterval(-40 * 86_400)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(record).write(to: s.cache.appendingPathComponent("tiny.osm.pbf.json"))
+        do {
+            _ = try await ToolRunner.cachedSources(area: area, cacheDirectory: s.cache, catalog: s.catalog, downloader: later)
+            Issue.record("it did not refuse")
+        } catch let error as ToolError {
+            #expect("\(error)".contains("out of date") && "\(error)".contains("--allow-stale"))
+        }
+        let allowed = try await ToolRunner.cachedSources(
+            area: area, cacheDirectory: s.cache, catalog: s.catalog, downloader: later, allowStale: true)
+        #expect(allowed.files.count == 1 && allowed.warnings.count == 1 && allowed.warnings[0].contains("older than the file on the server"))
+    }
+
+    @Test("A file that cannot be checked is used with a warning")
+    func unchecked() async throws {
+        let s = try await setup()
+        defer { try? FileManager.default.removeItem(at: s.cache) }
+        _ = try await ToolRunner.fetch(area: area, cacheDirectory: s.cache, catalog: s.catalog, downloader: s.network, confirmed: true)
+        let old = SourceCache(directory: s.cache)
+        var record = try #require(old.status(ofRegionID: "tiny").record)
+        record.checkedAt = Date().addingTimeInterval(-40 * 86_400)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(record).write(to: s.cache.appendingPathComponent("tiny.osm.pbf.json"))
+        let cached = try await ToolRunner.cachedSources(area: area, cacheDirectory: s.cache, catalog: s.catalog, downloader: OfflineNetwork())
+        #expect(cached.warnings.count == 1 && cached.warnings[0].contains("could not be checked"))
     }
 
     @Test("A build from the cache makes a store and records its sources next to it")

@@ -1,3 +1,5 @@
+import Foundation
+
 /// An error of the source data manager.
 public enum SourceError: Error, Equatable, Sendable {
     /// There is not enough free space for the files to download.
@@ -11,4 +13,19 @@ public enum SourceError: Error, Equatable, Sendable {
 
     /// The cache folder cannot be used.
     case cacheUnusable(String)
+}
+
+extension SourceError: CustomStringConvertible {
+    public var description: String {
+        switch self {
+        case .notEnoughSpace(let needed, let available):
+            "Not enough free space: \(Self.size(needed)) needed (with a margin), \(Self.size(available)) available."
+        case .incompleteDownload(let region, let expected, let received):
+            "The download of \(region) ended after \(Self.size(received)) of \(Self.size(expected)); run it again to continue."
+        case .alreadyDownloading(let region): "\(region) is already being downloaded."
+        case .cacheUnusable(let reason): "The cache folder cannot be used: \(reason)."
+        }
+    }
+
+    private static func size(_ bytes: Int64) -> String { ByteCountFormatStyle(style: .file).format(bytes) }
 }

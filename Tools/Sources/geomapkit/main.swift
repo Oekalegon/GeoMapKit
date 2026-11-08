@@ -21,7 +21,10 @@ GeoMapKit tools
 
   geomapkit build <file.osm.pbf>... (--bbox south,west,north,east | --center lat,lon --radius-km R)
                   --output <file.gmk> [--profile full|watch] [--limit N]
-  geomapkit build --from-cache (area as above) --output <file.gmk> [--cache DIR] [--profile full|watch]
+  geomapkit build --from-cache (area as above) --output <file.gmk> [--cache DIR] [--allow-stale] [--profile full|watch]
+      With --from-cache the files come from the cache (see fetch) and nothing
+      is downloaded; --allow-stale uses cached files that the server has
+      replaced, with a warning. The sources are recorded in <file.gmk>.sources.json.
       Cut an area, build a feature store file from it, write it atomically,
       verify it, and print times, sizes and what was stored. The default
       profile is full; watch builds the reduced Watch copy. Only whole cells
@@ -104,7 +107,7 @@ do {
         print(ReportFormatter.text(for: report))
     case "build":
         let parsed = try CommandLineArguments(
-            rest, knownOptions: ["bbox", "center", "radius-km", "limit", "output", "profile", "cache"], knownFlags: ["from-cache"])
+            rest, knownOptions: ["bbox", "center", "radius-km", "limit", "output", "profile", "cache"], knownFlags: ["from-cache", "allow-stale"])
         guard parsed.hasFlag("from-cache") || !parsed.positional.isEmpty else { throw ToolError("build needs a file, or --from-cache") }
         guard !(parsed.hasFlag("from-cache") && !parsed.positional.isEmpty) else {
             throw ToolError("build takes files or --from-cache, not both")
@@ -123,7 +126,10 @@ do {
         var urls = parsed.positional.map { URL(fileURLWithPath: $0) }
         var cached: CachedSources?
         if parsed.hasFlag("from-cache") {
-            let sources = try await ToolRunner.cachedSources(area: area, cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) })
+            let sources = try await ToolRunner.cachedSources(
+                area: area, cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) },
+                allowStale: parsed.hasFlag("allow-stale"))
+            for warning in sources.warnings { FileHandle.standardError.write(Data("warning: \(warning)\n".utf8)) }
             urls = sources.files
             cached = sources
         }

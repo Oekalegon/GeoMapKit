@@ -132,14 +132,18 @@ private final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked 
 
 /// Writes a response to a file as it arrives and finishes a continuation with what the server said.
 ///
-/// `@unchecked Sendable` because the session calls the delegate on one serial queue (`maxConcurrentOperationCount` is 1), so
-/// the state below is only touched from that queue after `start`, and the continuation is resumed exactly once.
+/// `@unchecked Sendable`: the session calls the delegate on one serial queue (`maxConcurrentOperationCount` is 1), so the
+/// download state is only touched from that queue; `start` runs on the caller's thread, so the continuation and the result that
+/// may arrive before it are kept under a lock, and the continuation is resumed exactly once.
 private final class StreamingDownload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let handle: FileHandle
     private let requestedOffset: Int64
     /// Dropped when the download ends, so that nothing keeps the caller's closure alive after the call returns.
     private var progress: (@Sendable (Int64) -> Void)?
+    private let lock = NSLock()
     private var continuation: CheckedContinuation<RemoteFileInfo, Error>?
+    /// The end of the download, if it came before `start` stored the continuation (a task cancelled before it ran).
+    private var pending: Result<RemoteFileInfo, Error>?
     private var info = RemoteFileInfo()
     private var written: Int64
     private var failure: Error?
@@ -152,8 +156,28 @@ private final class StreamingDownload: NSObject, URLSessionDataDelegate, @unchec
     }
 
     func start(_ task: URLSessionDataTask, _ continuation: CheckedContinuation<RemoteFileInfo, Error>) {
+        lock.lock()
+        if let pending {
+            lock.unlock()
+            continuation.resume(with: pending)
+            return
+        }
         self.continuation = continuation
+        lock.unlock()
         task.resume()
+    }
+
+    /// Ends the download: resumes the continuation, or keeps the result for `start` if it has not stored one yet.
+    private func finish(_ result: Result<RemoteFileInfo, Error>) {
+        lock.lock()
+        guard let waiting = continuation else {
+            if pending == nil { pending = result }
+            lock.unlock()
+            return
+        }
+        continuation = nil
+        lock.unlock()
+        waiting.resume(with: result)
     }
 
     func urlSession(
@@ -222,14 +246,12 @@ private final class StreamingDownload: NSObject, URLSessionDataDelegate, @unchec
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         progress = nil
-        guard let continuation else { return }
-        self.continuation = nil
         if let failure {
-            continuation.resume(throwing: failure)
+            finish(.failure(failure))
         } else if let error {
-            continuation.resume(throwing: error)
+            finish(.failure(error))
         } else {
-            continuation.resume(returning: info)
+            finish(.success(info))
         }
     }
 }

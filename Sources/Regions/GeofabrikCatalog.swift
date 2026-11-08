@@ -5,7 +5,8 @@ import Foundation
 /// The index is downloaded once and then used as it is for 30 days (``staleAfter``). After that the server is asked with the
 /// `ETag` of the copy that is held: "not modified" renews the check date, a changed index is downloaded, read and, only if it
 /// is valid, put in place. If the server cannot be reached, the copy that is held is used. Without a copy the error is raised.
-/// Nothing large is downloaded: the index is a few megabytes.
+/// Nothing large is downloaded: the index is a few megabytes. Call ``index()`` once at a time: two overlapping calls would write
+/// the same part file.
 public struct GeofabrikCatalog: RegionCatalog {
     /// Where Geofabrik publishes the index.
     public static let indexURL = URL(string: "https://download.geofabrik.de/index-v1.json")!

@@ -34,6 +34,8 @@ public struct CachedSources: Sendable {
     public let records: [CachedSource]
     /// The share of the area the regions' outlines cover.
     public let coveredShare: Double
+    /// Things to tell before the build: a file that could not be checked, or one that is older than the server's.
+    public let warnings: [String]
 }
 
 /// What a build was made from, written next to the store file as `name.gmk.sources.json`, so that "this area is out of date" is a

@@ -177,6 +177,39 @@ struct URLSessionDownloaderTests {
         #expect(try Data(contentsOf: file) == big)
     }
 
+    @Test("A task that is cancelled before the request starts ends and does not hang", .timeLimit(.minutes(1)))
+    func cancelledBeforeStart() async throws {
+        let name = host()
+        StubURLProtocol.register(host: name, server())
+        let file = try part()
+        defer { try? FileManager.default.removeItem(at: file) }
+        let client = downloader()
+        let url = URL(string: "https://\(name)/a")!
+        for _ in 0..<20 {
+            let task = Task { try await client.download(from: url, to: file, resumeFrom: 0, ifRange: nil) { _ in } }
+            task.cancel()
+            // Either it was cancelled in time or it had already finished: both end, neither hangs.
+            _ = try? await task.value
+        }
+    }
+
+    @Test("A response without Content-Length gives an unknown size, for a question and for a download")
+    func unknownLength() async throws {
+        let name = host()
+        StubURLProtocol.register(host: name) { request in
+            StubResponse(headers: ["ETag": "\"n\""], body: request.httpMethod == "HEAD" ? Data() : Data(repeating: 4, count: 3_000))
+        }
+        let url = URL(string: "https://\(name)/a")!
+        let result = try await downloader().metadata(of: url, ifNoneMatch: nil)
+        guard case .info(let info) = result else { Issue.record("not info"); return }
+        #expect(info.size == nil && info.etag == "\"n\"")
+        let file = try part()
+        defer { try? FileManager.default.removeItem(at: file) }
+        let received = try await downloader().download(from: url, to: file, resumeFrom: 0, ifRange: nil) { _ in }
+        let stored = try Data(contentsOf: file)
+        #expect(received.size == nil && stored.count == 3_000)
+    }
+
     @Test("Cancelling the task stops a download that hangs")
     func cancelling() async throws {
         let name = host()
@@ -188,7 +221,8 @@ struct URLSessionDownloaderTests {
         let client = downloader()
         let url = URL(string: "https://\(name)/a")!
         let task = Task { try await client.download(from: url, to: file, resumeFrom: 0, ifRange: nil) { _ in } }
-        try await Task.sleep(for: .milliseconds(300))
+        // Wait until the request has reached the server, then cancel.
+        while StubURLProtocol.requests(host: name).isEmpty { try await Task.sleep(for: .milliseconds(5)) }
         task.cancel()
         await #expect(throws: (any Error).self) { try await task.value }
     }

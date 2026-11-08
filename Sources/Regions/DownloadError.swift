@@ -11,3 +11,14 @@ public enum DownloadError: Error, Equatable, Sendable {
     /// A partial answer starts somewhere other than where the download asked for. The text is the `Content-Range` header.
     case unexpectedRange(String)
 }
+
+extension DownloadError: CustomStringConvertible {
+    public var description: String {
+        switch self {
+        case .httpStatus(let status, let url): "The server answered \(status) for \(url.absoluteString)."
+        case .insecureRedirect(let url): "The server redirected to \(url.absoluteString), which is not https; it was not followed."
+        case .notHTTP: "The answer was not an HTTP response."
+        case .unexpectedRange(let range): "The server sent a part of the file that does not continue the one held (Content-Range: \(range))."
+        }
+    }
+}
