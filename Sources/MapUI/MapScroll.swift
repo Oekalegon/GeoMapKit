@@ -3,8 +3,9 @@ import MapRender
 
 /// How a scroll wheel or a two-finger scroll moves the map: the arithmetic apart from the events, so it can be tested.
 enum MapScroll {
-    /// The zoom levels gained per unit of wheel delta (one notch of a mouse wheel is about one unit, more when it spins fast).
-    static let zoomPerUnit = 0.1
+    /// The zoom levels gained per unit of wheel delta: one notch of a mouse wheel is about one unit (more when it spins fast), so
+    /// four notches are one zoom level.
+    static let zoomPerUnit = 0.25
 
     /// The viewport after a wheel turn: zoomed in or out so that the coordinate under the pointer stays under the pointer.
     ///

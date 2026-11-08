@@ -6,7 +6,8 @@ import SwiftUI
 /// Reports scroll events over its own area to a handler, without taking mouse clicks or drags from the views around it.
 ///
 /// A mouse wheel has no gesture in SwiftUI, so the view listens to the scroll events of its window and passes on those that
-/// lie inside its frame. The events are not consumed, so a scroll view around the map would still see them.
+/// lie inside its frame. Events for another window (a sheet or a popover over the map) are ignored. The events are not consumed,
+/// so a scroll view around the map would still see them.
 struct ScrollWheelMonitor: NSViewRepresentable {
     /// What a scroll event carries: where the pointer was, the deltas, and whether they come from a trackpad (precise, in points)
     /// or from a wheel (in lines).
@@ -35,12 +36,16 @@ struct ScrollWheelMonitor: NSViewRepresentable {
         /// Never the target of a click: the gestures of the map see them.
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
+        /// Removes the monitor as soon as the view is taken out of its window, or the window closes.
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            super.viewWillMove(toWindow: newWindow)
             if let monitor { NSEvent.removeMonitor(monitor) }
             monitor = nil
-            // The monitor is removed when the view leaves its window (the window is nil then), which is before it is freed.
-            guard window != nil else { return }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil, monitor == nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
                 self?.receive(event)
                 return event

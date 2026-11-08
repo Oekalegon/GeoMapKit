@@ -213,6 +213,7 @@ struct DividedRoadsTests {
         #expect(medianCount(try scene(oneway: [nil, nil], directions: [true, false], extra: motorway, extraFirst: true)) >= 1)
         #expect(medianCount(try scene(oneway: ["no", "no"], directions: [true, false], extra: motorway)) == 0)
         #expect(medianCount(try scene(oneway: [nil, nil], directions: [true, false], extra: [("highway", "trunk")])) == 0)
+        #expect(medianCount(try scene(oneway: [nil, nil], directions: [true, false], extra: motorway + [("junction", "roundabout")])) == 0)
         // One carriageway tagged -1 against the implied flow of the other.
         #expect(medianCount(try scene(oneway: [nil, "-1"], directions: [true, true], extra: motorway)) >= 1)
     }

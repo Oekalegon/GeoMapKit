@@ -216,8 +216,8 @@ public struct MapSceneBuilder: Sendable {
     private func roadTags(of feature: StoredFeature) -> (lanes: Int?, flow: Int) {
         var lanes: Int?
         var oneway: String?
-        var roundabout = false
-        var impliesOneway = false
+        var junction: String?
+        var highway: String?
         for tag in feature.tags {
             switch file.string(at: tag.key) {
             case "lanes":
@@ -225,23 +225,16 @@ public struct MapSceneBuilder: Sendable {
             case "oneway":
                 oneway = file.string(at: tag.value)
             case "junction":
-                roundabout = file.string(at: tag.value) == "roundabout"
+                junction = file.string(at: tag.value)
             case "highway":
-                // A motorway and its slip roads are one-way unless the tag says otherwise (`oneway=no`, or `-1` to turn the flow).
-                let value = file.string(at: tag.value)
-                impliesOneway = value == "motorway" || value == "motorway_link"
+                highway = file.string(at: tag.value)
             default:
                 break
             }
         }
         // A roundabout is one-way whatever else it says, but its sides are no carriageways of a divided road.
-        guard !roundabout else { return (lanes, 0) }
-        switch oneway {
-        case "yes", "true", "1": return (lanes, 1)
-        case "-1", "reverse": return (lanes, -1)
-        case nil: return (lanes, impliesOneway ? 1 : 0)
-        default: return (lanes, 0)
-        }
+        guard junction != "roundabout" else { return (lanes, 0) }
+        return (lanes, OnewayRule.flow(oneway: oneway, highway: highway, junction: junction))
     }
 }
 
