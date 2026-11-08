@@ -51,8 +51,9 @@ extension FeatureClassifier {
                 [("secondary", 4), ("tertiary", 5), ("motorway_link", 9), ("trunk_link", 10),
                  ("primary_link", 11), ("secondary_link", 12), ("tertiary_link", 13)]),
             make(.roadMinor, .mid, watch: true, [("unclassified", 1)]),
-            make(.roadMinor, .detail, watch: true,
-                [("residential", 2), ("service", 3), ("living_street", 4), ("pedestrian", 5), ("road", 6)]))))
+            // Streets belong in the mid band: a map at zoom 14 without them is a map of the main roads and the paths only.
+            make(.roadMinor, .mid, watch: true, [("residential", 2), ("living_street", 4), ("pedestrian", 5), ("road", 6)]),
+            make(.roadMinor, .detail, watch: true, [("service", 3)]))))
         rules.append(ClassifierRule("railway", merged(
             make(.railway, .overview, watch: true, [("rail", 1), ("light_rail", 2), ("narrow_gauge", 3), ("funicular", 4)]),
             make(.railway, .detail, watch: true, [("tram", 5)]),
@@ -104,7 +105,7 @@ extension FeatureClassifier {
         rules.append(ClassifierRule("natural", make(.coastline, .overview, watch: false, [("coastline", 1)])))
 
         // Buildings, then barriers, stops and road details, then other points of interest.
-        rules.append(ClassifierRule("building", any: one(.building, .detail, watch: false)))
+        rules.append(ClassifierRule("building", any: one(.building, .mid, watch: false)))
         rules.append(ClassifierRule("building:part", any: one(.building, .detail, watch: false)))
         rules.append(ClassifierRule("barrier", make(.barrier, .detail, watch: false,
             [("fence", 1), ("wall", 2), ("gate", 3), ("hedge", 4), ("retaining_wall", 5), ("bollard", 6), ("cattle_grid", 7),

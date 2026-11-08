@@ -135,6 +135,16 @@ struct MapStyleTests {
         }
     }
 
+    @Test func buildingsShowFromZoomFourteenAsAFillAndGetTheirOutlineByFifteen() throws {
+        let building = try #require(MapStyle.standard.style(for: .building))
+        #expect(building.visibleZoom.lowerBound == 14 && building.fill != nil)
+        let outline = try #require(building.stroke?.color)
+        #expect(outline.value(atZoom: 14).alpha == 0, "no outline at zoom 14")
+        #expect(outline.value(atZoom: 15).alpha == 1, "the full outline at zoom 15")
+        #expect(outline.value(atZoom: 14.75).alpha > 0 && outline.value(atZoom: 14.75).alpha < 1)
+        #expect(MapStyle.standard.visibleClasses(atZoom: 14).contains(.building))
+    }
+
     @Test func visibleClassesFollowZoomAndLayerOrder() {
         let low = MapStyle.standard.visibleClasses(atZoom: 9)
         #expect(low.contains(.forest) && low.contains(.waterArea) && low.contains(.place))
@@ -175,8 +185,8 @@ struct MapStyleTests {
 
     @Test func noClassShowsBelowTheBandThatHoldsItsGeometry() {
         // Lowest bands from the rule table: detail starts at zoom 15, mid at zoom 12.
-        let detailOnly: [FeatureClass] = [.building, .poi, .poiAnchor, .tree, .barrier, .transportStop, .roadPoint]
-        let midOrHigher: [FeatureClass] = [.peak, .path, .track, .landcover, .landuseUrban, .piste, .powerLine, .aerialway]
+        let detailOnly: [FeatureClass] = [.poi, .poiAnchor, .tree, .barrier, .transportStop, .roadPoint]
+        let midOrHigher: [FeatureClass] = [.peak, .path, .track, .landcover, .landuseUrban, .piste, .powerLine, .aerialway, .building]
         for style in [MapStyle.standard, MapStyle.watch] {
             for featureClass in detailOnly {
                 if let lower = style.style(for: featureClass)?.visibleZoom.lowerBound {

@@ -16,9 +16,13 @@ extension MapStyle {
             .landcover: ClassStyle(fill: FillStyle(color: .color(0xDDE8C8)), visibleZoom: 12...24, layer: 11),
             .forest: ClassStyle(fill: FillStyle(color: .color(0xC5DDB0)), layer: 12),
             .waterArea: ClassStyle(fill: FillStyle(color: .color(0xAAD3EA)), layer: 13),
+            // Buildings from zoom 14 as a fill, which shows where a town is built; the outline fades in by zoom 15.
             .building: ClassStyle(
-                fill: FillStyle(color: .color(0xD9D0C9)), stroke: .line(0xBFB5AB, .constant(0.5)),
-                visibleZoom: 15...24, layer: 14),
+                fill: FillStyle(color: .color(0xD9D0C9)),
+                stroke: StrokeStyle(
+                    color: ZoomValue((14.5, MapColor(hex: 0xBFB5AB, alpha: 0)), (15, MapColor(hex: 0xBFB5AB))),
+                    width: LineWidth(points: .constant(0.5))),
+                visibleZoom: 14...24, layer: 14),
             .boundary: ClassStyle(
                 stroke: .line(0x9E7CB1, ZoomValue((8, 0.8), (16, 1.5)), dash: [6, 3]), layer: 20),
             // A national border: the boundary line on a wide, solid, transparent band of the same colour.

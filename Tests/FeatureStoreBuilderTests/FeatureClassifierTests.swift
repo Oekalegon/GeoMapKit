@@ -46,9 +46,10 @@ struct FeatureClassifierTests {
         Case(tags: ["highway": "tertiary"], featureClass: .roadMajor, band: .mid, watch: true),
         Case(tags: ["highway": "tertiary_link"], featureClass: .roadMajor, band: .mid, watch: true),
         Case(tags: ["highway": "unclassified"], featureClass: .roadMinor, band: .mid, watch: true),
-        Case(tags: ["highway": "residential"], featureClass: .roadMinor, band: .detail, watch: true),
+        Case(tags: ["highway": "residential"], featureClass: .roadMinor, band: .mid, watch: true),
+        Case(tags: ["highway": "living_street"], featureClass: .roadMinor, band: .mid, watch: true),
         Case(tags: ["highway": "service"], featureClass: .roadMinor, band: .detail, watch: true),
-        Case(tags: ["highway": "pedestrian"], featureClass: .roadMinor, band: .detail, watch: true),
+        Case(tags: ["highway": "pedestrian"], featureClass: .roadMinor, band: .mid, watch: true),
         Case(tags: ["railway": "rail"], featureClass: .railway, band: .overview, watch: true),
         Case(tags: ["railway": "funicular"], featureClass: .railway, band: .overview, watch: true),
         Case(tags: ["railway": "tram"], featureClass: .railway, band: .detail, watch: true),
@@ -94,8 +95,8 @@ struct FeatureClassifierTests {
         Case(tags: ["leisure": "pitch"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["landuse": "residential"], featureClass: .landuseUrban, band: .mid, watch: false),
         Case(tags: ["landuse": "military"], featureClass: .landuseUrban, band: .mid, watch: false),
-        Case(tags: ["building": "yes"], featureClass: .building, band: .detail, watch: false),
-        Case(tags: ["building": "house"], featureClass: .building, band: .detail, watch: false),
+        Case(tags: ["building": "yes"], featureClass: .building, band: .mid, watch: false),
+        Case(tags: ["building": "house"], featureClass: .building, band: .mid, watch: false),
         Case(tags: ["building:part": "yes"], featureClass: .building, band: .detail, watch: false),
         Case(tags: ["amenity": "restaurant"], featureClass: .poi, band: .detail, watch: false),
         Case(tags: ["shop": "bakery"], featureClass: .poi, band: .detail, watch: false),
@@ -331,9 +332,9 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
-    @Test("The rule table version is 9, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 10, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 9)
+        #expect(FeatureClassifier.version == 10)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
