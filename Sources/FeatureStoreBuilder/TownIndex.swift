@@ -18,12 +18,13 @@ struct TownIndex {
     static let minimumLength = 10.0
     private static let sampleSpacing = 5.0
 
-    private let projection = LocalMetres()
+    private let projection: LocalMetres
     private(set) var town = AreaLayer()
     private(set) var green = AreaLayer()
 
     /// Builds the index from the closed ways and the multipolygon relations of an extract.
     init(extract: OSMExtract, classifier: FeatureClassifier) {
+        projection = LocalMetres(around: extract.boundingBox)
         let areas = AreaPolygons.collect(extract: extract, classifier: classifier) { classification, tags in
             let isPlatform = tags.value(forKey: "railway") == "platform" || tags.value(forKey: "public_transport") == "platform"
             let role = Self.role(of: classification, tags, isPlatform: isPlatform)

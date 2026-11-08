@@ -34,18 +34,22 @@ struct TownIndexTests {
         #expect(!layer.contains(x: 35_000, y: 10) && !layer.contains(x: -5, y: 5) && !layer.contains(x: 40_025, y: 75))
     }
 
-    @Test("A flat projection scales east-west distances with the latitude")
+    @Test("The projection scales east-west distances with one latitude, and a step north stays a step north at any longitude")
     func projection() {
-        let metres = LocalMetres()
+        let metres = LocalMetres(referenceLatitude: 60)
         func eastWest(at latitude: Int32) -> Double {
             let a = metres.project(PackedPoint(longitude: 100_000_000, latitude: latitude))
             let b = metres.project(PackedPoint(longitude: 100_100_000, latitude: latitude))      // 0.01 degrees east
             return b.x - a.x
         }
-        #expect(abs(eastWest(at: 0) - 1_111.95) < 1)
-        #expect(abs(eastWest(at: 600_000_000) - 1_111.95 / 2) < 1, "half as far at 60 degrees")
+        #expect(abs(eastWest(at: 600_000_000) - 1_111.95 / 2) < 1, "half as far at the reference latitude of 60 degrees")
+        #expect(abs(eastWest(at: 590_000_000) - eastWest(at: 600_000_000)) < 1e-9, "the same at every latitude of the area")
         let north = metres.project(PackedPoint(longitude: 0, latitude: 100_000)).y - metres.project(PackedPoint(longitude: 0, latitude: 0)).y
         #expect(abs(north - 1_111.95) < 1)
+        // 100 m north at 25 degrees east: no shift sideways (it was 37 m with the cosine of each point's own latitude).
+        let south = metres.project(PackedPoint(longitude: 250_000_000, latitude: 592_000_000))
+        let up = metres.project(PackedPoint(longitude: 250_000_000, latitude: 592_000_000 + 8_993))
+        #expect(abs(up.x - south.x) < 1e-9 && abs((up.y - south.y) - 100) < 0.1)
     }
 
     private func classID(of id: Int64, in file: FeatureStoreFile) throws -> UInt8? {

@@ -12,12 +12,14 @@ struct ShoreTests {
         PackedPoint(longitude: Int32(longitude * 1e7), latitude: Int32(latitude * 1e7))
     }
 
+    private let projection = LocalMetres(referenceLatitude: 60)
+
     // MARK: Line splitter
 
     @Test("A line is cut where the answer changes, and the stretches together are the line")
     func splitter() {
         let line = [point(10.0, 60.0), point(10.01, 60.0)]
-        let stretches = LineSplitter.split(line, spacing: 25) { $0.point.longitude > 100_050_000 }
+        let stretches = LineSplitter.split(line, projection: projection, spacing: 25) { $0.point.longitude > 100_050_000 }
         #expect(stretches.count == 2)
         #expect(stretches[0].answer == false && stretches[1].answer == true)
         #expect(stretches[0].points.first == line[0] && stretches[1].points.last == line[1])
@@ -29,18 +31,30 @@ struct ShoreTests {
     @Test("Removing keeps the other stretches and counts the removed ones")
     func removing() {
         let line = [point(10.0, 60.0), point(10.01, 60.0)]
-        let result = LineSplitter.removing(from: [line], spacing: 25) { $0.point.longitude > 100_030_000 && $0.point.longitude < 100_060_000 }
+        let result = LineSplitter.removing(from: [line], projection: projection, spacing: 25) { $0.point.longitude > 100_030_000 && $0.point.longitude < 100_060_000 }
         #expect(result.dropped == 1 && result.kept.count == 2)
-        let nothing = LineSplitter.removing(from: [line], spacing: 25) { _ in true }
+        let nothing = LineSplitter.removing(from: [line], projection: projection, spacing: 25) { _ in true }
         #expect(nothing.kept.isEmpty && nothing.dropped == 1)
-        let everything = LineSplitter.removing(from: [line], spacing: 25) { _ in false }
+        let everything = LineSplitter.removing(from: [line], projection: projection, spacing: 25) { _ in false }
         #expect(everything.kept == [line] && everything.dropped == 0)
+    }
+
+    @Test("A closed line cut at its first vertex has one stretch on each side, not two")
+    func splitterClosedRing() throws {
+        let a = point(10, 60), b = point(10.02, 60), c = point(10.02, 60.01), d = point(10, 60.01)
+        let stretches = LineSplitter.split([a, b, c, d, a], projection: LocalMetres(referenceLatitude: 60), spacing: 25) {
+            $0.point.longitude > 100_100_000
+        }
+        #expect(stretches.count == 2, "the left half is one stretch although the ring starts in it")
+        let left = try #require(stretches.first { !$0.answer })
+        #expect(left.points.contains(a) && left.points.contains(d))
+        #expect(left.points.first != left.points.last, "the two ends are the two cuts")
     }
 
     @Test("A line of one point, and a segment of no length, give nothing")
     func splitterDegenerate() {
-        #expect(LineSplitter.split([point(10, 60)], spacing: 25) { _ in true }.isEmpty)
-        #expect(LineSplitter.split([point(10, 60), point(10, 60)], spacing: 25) { _ in true }.isEmpty)
+        #expect(LineSplitter.split([point(10, 60)], projection: projection, spacing: 25) { _ in true }.isEmpty)
+        #expect(LineSplitter.split([point(10, 60), point(10, 60)], projection: projection, spacing: 25) { _ in true }.isEmpty)
     }
 
     // MARK: Sea lookup
@@ -118,6 +132,51 @@ struct ShoreTests {
         #expect(report.coastlineStretchesInRivers == 0)
     }
 
+    @Test("A coastline along a river bank, mapped a few metres inside the river's area, is kept")
+    func coastAlongABank() throws {
+        var world = SyntheticWorld()
+        world.node(1, -0.3, 1.5); world.node(2, 1.5, 1.5); world.node(3, 3.3, 1.5)
+        world.way(10, [1, 2, 3], [("natural", "coastline")])
+        // The river lies on the sea side, and its area reaches 5 m (0.0015 of a cell) over the coast onto the land.
+        let river = world.rectangle(first: 20, 0.5, 1.5 - 0.0015, 2.5, 2.5)
+        world.way(11, river, [("natural", "water")])
+        let (_, report) = try build(&world)
+        #expect(report.coastlineStretchesInRivers == 0, "10 and 20 m inland is not in the river")
+    }
+
+    @Test("Where two water areas meet there is no outline, and every other side has one")
+    func adjacentLakes() throws {
+        var world = SyntheticWorld()
+        // Two lakes that share the edge at x = 1.5 (with nodes of their own at the same places).
+        world.way(100, world.rectangle(first: 10, 0.5, 0.3, 1.5, 0.8), [("natural", "water")])
+        world.way(101, world.rectangle(first: 20, 1.5, 0.3, 2.5, 0.8), [("natural", "water")])
+        let (file, _) = try build(&world)
+        // No edge lies on a cell border: such an edge would be stored in both cells and counted twice.
+        let metres = LocalMetres(referenceLatitude: Double(world.block.point(1.5, 0.55).latitude) / 1e7)
+        func perimeter(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double) -> Double {
+            let corners = [world.block.point(x0, y0), world.block.point(x1, y0), world.block.point(x1, y1), world.block.point(x0, y1), world.block.point(x0, y0)]
+            return zip(corners, corners.dropFirst()).reduce(0) {
+                let a = metres.project($1.0), b = metres.project($1.1)
+                return $0 + ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)).squareRoot()
+            }
+        }
+        var drawn = 0.0
+        for cell in try file.cells() {
+            for feature in try file.features(in: cell, band: .detail) where feature.classID == FeatureClass.waterEdge.rawValue {
+                for part in feature.parts {
+                    for (p, q) in zip(part.points, part.points.dropFirst()) {
+                        let a = metres.project(p), b = metres.project(q)
+                        drawn += ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)).squareRoot()
+                    }
+                }
+            }
+        }
+        let union = perimeter(0.5, 0.3, 2.5, 0.8)
+        let both = perimeter(0.5, 0.3, 1.5, 0.8) + perimeter(1.5, 0.3, 2.5, 0.8)
+        #expect(abs(drawn - union) < union * 0.03, "the outline of the two lakes together: drawn \(drawn), union \(union), both \(both)")
+        #expect(drawn < both - 0.5 * (both - union), "less than the two perimeters: the shared edge is gone")
+    }
+
     @Test("A park border is green on land and blue in the sea")
     func parkBorderSea() throws {
         var world = SyntheticWorld()
@@ -161,6 +220,25 @@ struct ShoreTests {
         let (_, report) = try build(&world)
         #expect(report.featuresByClass[.parkBorder] == 1)
         #expect(report.waysSuppressed == 2 && report.waysStored == 0)
+    }
+
+    @Test("A protected area that is incomplete in the extract is stored as outlines with the incomplete flag, never as an area")
+    func parkBorderIncomplete() throws {
+        var world = SyntheticWorld()
+        world.node(1, 0.5, 1.0); world.node(2, 2.5, 1.0); world.node(3, 2.5, 2.0)
+        world.way(11, [1, 2, 3], [])
+        // The second way of the border is not in the file.
+        world.relation(50, [(11, "outer", 1), (12, "outer", 1)], [("type", "boundary"), ("boundary", "protected_area")])
+        let (file, report) = try build(&world)
+        #expect(report.featuresByClass[.parkBorder] == 1 && report.multipolygonsIncomplete == 1)
+        var flagged = 0
+        for cell in try file.cells() {
+            for feature in try file.features(in: cell, band: .detail) where feature.classID == FeatureClass.parkBorder.rawValue {
+                #expect(feature.kind == .line)
+                if feature.flags.contains(.incomplete) { flagged += 1 }
+            }
+        }
+        #expect(flagged >= 1)
     }
 
     @Test("A way that is the border of a protected area and a member of its relation is drawn only with the relation")

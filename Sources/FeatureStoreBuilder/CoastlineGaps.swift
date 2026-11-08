@@ -66,7 +66,7 @@ enum CoastlineGaps {
         }
         candidates.sort { ($0.distance, $0.end, $0.start) < ($1.distance, $1.end, $1.start) }
 
-        let projection = LocalMetres()
+        let projection = LocalMetres(referenceLatitude: (Double(block.south) + Double(block.north)) / 2e7)
         var next: [Int: Int] = [:]
         var taken = Set<Int>()
         var gaps: [Double] = []

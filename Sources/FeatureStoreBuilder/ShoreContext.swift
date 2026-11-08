@@ -26,6 +26,7 @@ struct ShoreContext {
 
     private let extract: OSMExtract
     private let classifier: FeatureClassifier
+    private let projection: LocalMetres
     private var coastGrid: SegmentGrid?
     private var waterLayer: AreaLayer?
     /// The sea of the stored area, or `nil` if there is none.
@@ -34,12 +35,12 @@ struct ShoreContext {
     init(extract: OSMExtract, classifier: FeatureClassifier) {
         self.extract = extract
         self.classifier = classifier
+        projection = LocalMetres(around: extract.boundingBox)
     }
 
     private mutating func coast() -> SegmentGrid {
         if let coastGrid { return coastGrid }
         var grid = SegmentGrid()
-        let projection = LocalMetres()
         for position in extract.ways.indices where extract.ways.tags(at: position).value(forKey: "natural") == "coastline" {
             for run in FeatureStoreBuilder.runs(ofWayAt: position, in: extract).runs { grid.add(points: run.map { projection.project($0) }) }
         }
@@ -63,7 +64,7 @@ struct ShoreContext {
     mutating func outline(of rings: [[PackedPoint]]) -> [[PackedPoint]] {
         let coast = coast()
         let water = water()
-        return LineSplitter.removing(from: rings, spacing: Self.spacing) { sample in
+        return LineSplitter.removing(from: rings, projection: projection, spacing: Self.spacing) { sample in
             if coast.isNear(x: sample.x, y: sample.y, tolerance: Self.coastTolerance) { return true }
             let dx = -sample.directionY * Self.sideOffset, dy = sample.directionX * Self.sideOffset
             return water.contains(x: sample.x + dx, y: sample.y + dy) && water.contains(x: sample.x - dx, y: sample.y - dy)
@@ -74,7 +75,7 @@ struct ShoreContext {
     mutating func coastline(_ lines: [[PackedPoint]]) -> (kept: [[PackedPoint]], dropped: Int) {
         let water = water()
         guard !water.polygons.isEmpty else { return (lines, 0) }
-        return LineSplitter.removing(from: lines, spacing: Self.spacing) { sample in
+        return LineSplitter.removing(from: lines, projection: projection, spacing: Self.spacing) { sample in
             Self.landSide.allSatisfy {
                 water.contains(x: sample.x - sample.directionY * $0, y: sample.y + sample.directionX * $0)
             }
@@ -85,7 +86,7 @@ struct ShoreContext {
     mutating func waterLine(_ lines: [[PackedPoint]]) -> (kept: [[PackedPoint]], dropped: Int) {
         let water = water()
         guard !water.polygons.isEmpty else { return (lines, 0) }
-        return LineSplitter.removing(from: lines, spacing: Self.spacing) { water.contains(x: $0.x, y: $0.y) }
+        return LineSplitter.removing(from: lines, projection: projection, spacing: Self.spacing) { water.contains(x: $0.x, y: $0.y) }
     }
 
     /// The border of a protected area, split into what lies on land and what lies in the sea.
@@ -93,7 +94,7 @@ struct ShoreContext {
         guard let sea else { return (lines, []) }
         var land: [[PackedPoint]] = [], inSea: [[PackedPoint]] = []
         for line in lines {
-            for stretch in LineSplitter.split(line, spacing: Self.spacing, test: { sea.contains($0.point) }) where stretch.points.count >= 2 {
+            for stretch in LineSplitter.split(line, projection: projection, spacing: Self.spacing, test: { sea.contains($0.point) }) where stretch.points.count >= 2 {
                 if stretch.answer { inSea.append(stretch.points) } else { land.append(stretch.points) }
             }
         }

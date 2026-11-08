@@ -62,7 +62,7 @@ public enum ReportFormatter {
         ]
         if let built = report.outdatedRuleTable, let current = report.currentRuleTable {
             lines.append("")
-            lines.append("note: the store was built with rule table \(built), this tool builds with \(current). Classes and bands added since (the sea, sidewalks, road areas, streets and buildings at zoom 14) may be missing; rebuild the store to get them.")
+            lines.append("note: the store was built with rule table \(built), this tool builds with \(current). Classes and bands added since (the sea, sidewalks, road areas, streets and buildings at zoom 14, water outlines, park borders, piers) may be missing, and borders may be drawn the old way; rebuild the store to get them.")
         }
         return lines.joined(separator: "\n")
     }

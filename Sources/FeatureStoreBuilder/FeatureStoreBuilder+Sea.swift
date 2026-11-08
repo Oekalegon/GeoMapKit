@@ -2,13 +2,6 @@ import FeatureStore
 import GeoCore
 import OSMPBF
 
-/// The sea of the stored area, made from the coastlines and ready to be stored.
-struct PreparedSea {
-    let joined: CoastlineJoiner.Result
-    let whole: SeaBuilder.Result
-    let block: CellRect
-}
-
 extension FeatureStoreBuilder {
     /// Joins the coastlines in the extract and builds the sea of the whole stored area.
     ///

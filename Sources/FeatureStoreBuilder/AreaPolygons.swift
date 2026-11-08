@@ -15,7 +15,7 @@ enum AreaPolygons {
         extract: OSMExtract, classifier: FeatureClassifier,
         role: (Classification, any ClassifierTags) -> Role?
     ) -> [(role: Role, polygon: AreaPolygon)] {
-        let projection = LocalMetres()
+        let projection = LocalMetres(around: extract.boundingBox)
         func polygon(from rings: [[PackedPoint]]) -> AreaPolygon? {
             AreaPolygon(rings: rings.map { $0.map { projection.project($0) } })
         }
