@@ -360,9 +360,9 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
-    @Test("The rule table version is 13, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 14, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 13)
+        #expect(FeatureClassifier.version == 14)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)

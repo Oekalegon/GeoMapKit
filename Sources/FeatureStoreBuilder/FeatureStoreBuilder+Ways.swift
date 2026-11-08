@@ -9,6 +9,7 @@ extension FeatureStoreBuilder {
         // Built when the first footway needs it: an extract without footways never pays for it.
         var roads: RoadIndex?
         var town: TownIndex?
+        var borders: BorderNames?
         for position in extract.ways.indices {
             if position % 4096 == 0 { try Task.checkCancellation() }
             let id = extract.ways.ids[position]
@@ -69,8 +70,16 @@ extension FeatureStoreBuilder {
             }
             guard !runs.isEmpty else { continue }
             let geometry: FeatureSpec.Geometry = classification.kind == .area ? .rings([runs[0]]) : .lines(runs)
+            var borderName: String?
+            if classification.featureClass == .countryBorder || classification.featureClass == .boundary,
+                tags.value(forKey: "name") == nil
+            {
+                if borders == nil { borders = BorderNames(extract: extract, classifier: classifier) }
+                borderName = borders?.name(ofWay: id, as: classification.featureClass)
+            }
             try emitter.emit(FeatureSpec(
-                classification: classification, objectType: .way, objectID: id, tags: tags.orderedTags, geometry: geometry))
+                classification: classification, objectType: .way, objectID: id, tags: tags.orderedTags,
+                fallbackName: borderName, geometry: geometry))
             emitter.report.waysStored += 1
             if classification.featureClass == .waterArea, classification.kind == .area, isClosed {
                 try storeWaterEdge(
