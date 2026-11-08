@@ -249,6 +249,19 @@ struct SourceManagerTests {
         #expect(s.manager.cache.status(ofRegionID: "norway").record?.size == 4000)
     }
 
+    @Test("A fetch is refused while another process holds the cache's download lock, and nothing is downloaded")
+    func otherProcess() async throws {
+        let s = await setup()
+        defer { try? FileManager.default.removeItem(at: s.directory) }
+        let plan = try await s.manager.plan(for: selection())
+        let other = try SourceCache(directory: s.directory).lockDownloads()
+        await #expect(throws: SourceError.cacheBusy) { try await s.manager.fetch(plan) }
+        #expect(await s.server.requests(containing: "GET").isEmpty)
+        other.release()
+        _ = try await s.manager.fetch(plan)
+        #expect(await s.server.requests(containing: "GET").count == 2)
+    }
+
     @Test("A region that is being downloaded cannot be downloaded again at the same time")
     func concurrent() async throws {
         let gate = Gate()

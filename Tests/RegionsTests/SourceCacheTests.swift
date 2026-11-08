@@ -128,6 +128,22 @@ struct SourceCacheTests {
         #expect(cache.partialDownload(regionID: "denmark")?.bytes == 300 && cache.partialDownload(regionID: "denmark")?.etag == nil)
     }
 
+    @Test("The download lock is held by one holder at a time, and is free again after release")
+    func downloadLock() throws {
+        let (cache, directory, _) = try makeCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = try cache.lockDownloads()
+        #expect(throws: SourceError.cacheBusy) { try cache.lockDownloads() }
+        first.release()
+        first.release()
+        let second = try cache.lockDownloads()
+        second.release()
+        // A lock that is dropped without release is given up too.
+        _ = try cache.lockDownloads()
+        let third = try cache.lockDownloads()
+        third.release()
+    }
+
     @Test("The errors read as sentences")
     func messages() {
         #expect("\(SourceError.alreadyDownloading(region: "norway"))" == "norway is already being downloaded.")
