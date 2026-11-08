@@ -64,7 +64,9 @@ struct FeatureClassifierTests {
         Case(tags: ["landuse": "basin"], featureClass: .waterArea, band: .overview, watch: true),
         Case(tags: ["natural": "wood"], featureClass: .forest, band: .overview, watch: true),
         Case(tags: ["landuse": "forest"], featureClass: .forest, band: .overview, watch: true),
-        Case(tags: ["boundary": "administrative"], featureClass: .boundary, band: .overview, watch: false),
+        Case(tags: ["boundary": "administrative"], featureClass: .other, band: .detail, watch: false),
+        Case(tags: ["boundary": "administrative", "admin_level": "4"], featureClass: .boundary, band: .overview, watch: false),
+        Case(tags: ["boundary": "administrative", "admin_level": "7"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["boundary": "administrative", "admin_level": "2"], featureClass: .countryBorder, band: .overview, watch: false),
         Case(tags: ["boundary": "protected_area"], featureClass: .boundary, band: .overview, watch: false),
         Case(tags: ["boundary": "national_park"], featureClass: .boundary, band: .overview, watch: false),
@@ -267,19 +269,27 @@ struct FeatureClassifierTests {
         #expect(classify(["power": "tower"], .node).kind == .point && classify(["power": "line"], .openWay).kind == .line)
     }
 
-    @Test("A national border is an administrative boundary of level 2")
+    @Test("Of the administrative boundaries only national borders and the level of states are kept")
     func countryBorder() {
         let border = classify(["boundary": "administrative", "admin_level": "2"], .openWay)
         #expect(border.featureClass == .countryBorder && border.kind == .line)
         #expect(border.minimumBand == .overview && !border.showsOnWatch)
-        for level in ["3", "4", "6", "8", ""] {
-            #expect(classify(["boundary": "administrative", "admin_level": level], .openWay).featureClass == .boundary, "level \(level)")
+        #expect(classify(["boundary": "administrative", "admin_level": "4"], .openWay).featureClass == .boundary, "states and counties")
+        for level in ["3", "5", "6", "7", "8", "9", "10", ""] {
+            #expect(classify(["boundary": "administrative", "admin_level": level], .openWay).featureClass == .other, "level \(level)")
         }
-        #expect(classify(["boundary": "administrative"], .openWay).featureClass == .boundary)
+        #expect(classify(["boundary": "administrative"], .openWay).featureClass == .other, "no level")
+        // Protected areas and national parks stay boundaries, whatever else they say.
         #expect(classify(["boundary": "protected_area", "admin_level": "2"], .openWay).featureClass == .boundary)
-        #expect(
-            classify(["boundary": "administrative", "admin_level": "2", "maritime": "yes"], .openWay).featureClass == .boundary,
-            "a border in the sea is not a land border")
+        // A border in the sea between two countries is a national border (the Idefjord between Norway and Sweden)...
+        let fjord = classify(["boundary": "administrative", "admin_level": "2", "maritime": "yes"], .openWay)
+        #expect(fjord.featureClass == .countryBorder)
+        // ...but the limit of the territorial waters, or of an economic zone, is not drawn.
+        for type in ["territorial", "eez", "contiguous"] {
+            let limit = classify(["boundary": "administrative", "admin_level": "2", "maritime": "yes", "border_type": type], .openWay)
+            #expect(limit.featureClass == .other, "border type \(type)")
+        }
+        #expect(classify(["boundary": "administrative", "admin_level": "2", "border_type": "nation"], .openWay).featureClass == .countryBorder)
     }
 
     @Test("A road or path that is an area is a road area to fill, not a line to stroke")
@@ -332,9 +342,9 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
-    @Test("The rule table version is 11, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 12, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 11)
+        #expect(FeatureClassifier.version == 12)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)

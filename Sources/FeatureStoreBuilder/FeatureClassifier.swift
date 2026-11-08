@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 11
+    public static let version: UInt16 = 12
 
     /// Creates a classifier.
     public init() {}
@@ -24,12 +24,22 @@ public struct FeatureClassifier: Sendable {
     ///   (see ``isArea(_:)``) and a line otherwise.
     public func classify(_ tags: some ClassifierTags, shape: ElementShape) -> Classification {
         var outcome = firstOutcome(in: tags) ?? Self.fallback
-        // A national border is an administrative boundary of level 2; the rule table matches one key only. Borders in
-        // the sea (`maritime=yes`, the limit of territorial waters) stay boundaries, so no wide band is drawn on water.
-        if outcome.featureClass == .boundary, tags.value(forKey: "boundary") == "administrative",
-            tags.value(forKey: "admin_level") == "2", tags.value(forKey: "maritime") != "yes"
-        {
-            outcome = ClassifierOutcome(featureClass: .countryBorder, subclass: 0, band: outcome.band, watch: false)
+        // Of the administrative boundaries only two kinds are kept as such, because a map of towns, villages and municipalities
+        // every few kilometres is of no use to a runner and hides the ones that matter: national borders (level 2, on land or in
+        // the sea, but not the limit of the territorial waters or an economic zone, which no one crosses on foot) and the
+        // level of states or counties (level 4). The rule table matches one key only, so this is checked afterwards. The other
+        // levels become `other`: their tags stay in the store, and nothing draws them.
+        if outcome.featureClass == .boundary, tags.value(forKey: "boundary") == "administrative" {
+            switch tags.value(forKey: "admin_level") {
+            case "2":
+                if Self.seaLimits.contains(tags.value(forKey: "border_type") ?? "") {
+                    outcome = Self.fallback
+                } else {
+                    outcome = ClassifierOutcome(featureClass: .countryBorder, subclass: 0, band: outcome.band, watch: false)
+                }
+            case "4": break
+            default: outcome = Self.fallback
+            }
         }
         // A sidewalk or a crossing is a footway too, but it is part of the street, not a path to run: it gets its own class.
         if outcome.featureClass == .path, tags.value(forKey: "highway") == "footway",
@@ -97,6 +107,9 @@ public struct FeatureClassifier: Sendable {
 
     /// The classes that are lines of the movement network; as areas they become `roadArea`.
     private static let roadClasses: Set<FeatureClass> = [.roadMajor, .roadMinor, .roadService, .path, .track, .pavement]
+
+    /// The `border_type` values of a boundary that is the limit of an area of sea, not the border between two countries.
+    private static let seaLimits: Set<String> = ["territorial", "eez", "exclusive_economic_zone", "contiguous", "contiguous_zone"]
 
     /// The `footway` values that mark a footway as part of a street.
     private static let pavementKinds: Set<String> = ["sidewalk", "crossing", "traffic_island", "access_aisle"]
