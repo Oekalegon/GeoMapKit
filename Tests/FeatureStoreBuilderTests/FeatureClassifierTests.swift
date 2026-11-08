@@ -48,7 +48,7 @@ struct FeatureClassifierTests {
         Case(tags: ["highway": "unclassified"], featureClass: .roadMinor, band: .mid, watch: true),
         Case(tags: ["highway": "residential"], featureClass: .roadMinor, band: .mid, watch: true),
         Case(tags: ["highway": "living_street"], featureClass: .roadMinor, band: .mid, watch: true),
-        Case(tags: ["highway": "service"], featureClass: .roadMinor, band: .mid, watch: true),
+        Case(tags: ["highway": "service"], featureClass: .roadService, band: .mid, watch: true),
         Case(tags: ["highway": "pedestrian"], featureClass: .roadMinor, band: .mid, watch: true),
         Case(tags: ["railway": "rail"], featureClass: .railway, band: .overview, watch: true),
         Case(tags: ["railway": "funicular"], featureClass: .railway, band: .overview, watch: true),
@@ -68,15 +68,15 @@ struct FeatureClassifierTests {
         Case(tags: ["boundary": "administrative", "admin_level": "2"], featureClass: .countryBorder, band: .overview, watch: false),
         Case(tags: ["boundary": "protected_area"], featureClass: .boundary, band: .overview, watch: false),
         Case(tags: ["boundary": "national_park"], featureClass: .boundary, band: .overview, watch: false),
-        Case(tags: ["natural": "scrub"], featureClass: .landcover, band: .mid, watch: true),
-        Case(tags: ["natural": "scree"], featureClass: .landcover, band: .mid, watch: true),
-        Case(tags: ["natural": "glacier"], featureClass: .landcover, band: .mid, watch: true),
-        Case(tags: ["natural": "wetland"], featureClass: .landcover, band: .mid, watch: true),
-        Case(tags: ["landuse": "meadow"], featureClass: .landcover, band: .mid, watch: true),
-        Case(tags: ["landuse": "farmland"], featureClass: .landcover, band: .mid, watch: true),
+        Case(tags: ["natural": "scrub"], featureClass: .landcover, band: .overview, watch: true),
+        Case(tags: ["natural": "scree"], featureClass: .landcover, band: .overview, watch: true),
+        Case(tags: ["natural": "glacier"], featureClass: .landcover, band: .overview, watch: true),
+        Case(tags: ["natural": "wetland"], featureClass: .landcover, band: .overview, watch: true),
+        Case(tags: ["landuse": "meadow"], featureClass: .landcover, band: .overview, watch: true),
+        Case(tags: ["landuse": "farmland"], featureClass: .landcover, band: .overview, watch: true),
         Case(tags: ["landuse": "village_green"], featureClass: .landcover, band: .mid, watch: true),
-        Case(tags: ["landuse": "farmyard"], featureClass: .landuseUrban, band: .mid, watch: false),
-        Case(tags: ["natural": "shrubbery"], featureClass: .landcover, band: .mid, watch: true),
+        Case(tags: ["landuse": "farmyard"], featureClass: .landuseUrban, band: .overview, watch: false),
+        Case(tags: ["natural": "shrubbery"], featureClass: .landcover, band: .overview, watch: true),
         Case(tags: ["natural": "cliff"], featureClass: .cliff, band: .mid, watch: false),
         Case(tags: ["natural": "coastline"], featureClass: .coastline, band: .overview, watch: false),
         Case(tags: ["place": "farm"], featureClass: .place, band: .detail, watch: false),
@@ -90,11 +90,11 @@ struct FeatureClassifierTests {
         Case(tags: ["addr:housenumber": "5", "addr:street": "Storgata"], featureClass: .address, band: .detail, watch: false),
         Case(tags: ["addr:city": "Oslo"], featureClass: .address, band: .detail, watch: false),
         Case(tags: ["highway": "footway", "footway": "sidewalk"], featureClass: .pavement, band: .detail, watch: false),
-        Case(tags: ["landuse": "quarry"], featureClass: .landcover, band: .mid, watch: true),
+        Case(tags: ["landuse": "quarry"], featureClass: .landcover, band: .overview, watch: true),
         Case(tags: ["leisure": "park"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["leisure": "pitch"], featureClass: .landcover, band: .mid, watch: true),
-        Case(tags: ["landuse": "residential"], featureClass: .landuseUrban, band: .mid, watch: false),
-        Case(tags: ["landuse": "military"], featureClass: .landuseUrban, band: .mid, watch: false),
+        Case(tags: ["landuse": "residential"], featureClass: .landuseUrban, band: .overview, watch: false),
+        Case(tags: ["landuse": "military"], featureClass: .landuseUrban, band: .overview, watch: false),
         Case(tags: ["building": "yes"], featureClass: .building, band: .mid, watch: false),
         Case(tags: ["building": "house"], featureClass: .building, band: .mid, watch: false),
         Case(tags: ["building:part": "yes"], featureClass: .building, band: .detail, watch: false),
@@ -291,8 +291,8 @@ struct FeatureClassifierTests {
         #expect(classify(["highway": "footway", "area": "yes"], .closedWay).featureClass == .roadArea)
         #expect(classify(["highway": "pedestrian"], .multipolygon).featureClass == .roadArea, "a road mapped as a multipolygon")
         // The same tags on a line, and a closed road, stay roads.
-        #expect(classify(["highway": "service"], .openWay).featureClass == .roadMinor)
-        #expect(classify(["highway": "service"], .closedWay).featureClass == .roadMinor && classify(["highway": "service"], .closedWay).kind == .line)
+        #expect(classify(["highway": "service"], .openWay).featureClass == .roadService)
+        #expect(classify(["highway": "service"], .closedWay).featureClass == .roadService && classify(["highway": "service"], .closedWay).kind == .line)
         #expect(classify(["highway": "residential", "area": "no"], .closedWay).featureClass == .roadMinor)
     }
 
@@ -332,12 +332,12 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
-    @Test("The rule table version is 10, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 11, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 10)
+        #expect(FeatureClassifier.version == 11)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
-        #expect(FeatureClass.allCases.count == 31)
+        #expect(FeatureClass.allCases.count == 32)
     }
 }

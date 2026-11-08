@@ -392,4 +392,23 @@ struct FeatureStoreBuilderTests {
         let watchDetail = try ids(watchFile, .detail)
         #expect(!watchMid.contains(200) && !watchDetail.contains(200), "and no house")
     }
+
+    @Test("Urban land use and the large land cover are in the overview band, small land cover starts at the mid band")
+    func landUseInTheOverviewBand() throws {
+        var world = SyntheticWorld()
+        world.way(10, world.rectangle(first: 10, 0.3, 0.3, 1.3, 1.3), [("landuse", "residential")])
+        world.way(11, world.rectangle(first: 20, 1.6, 0.3, 2.6, 1.3), [("landuse", "farmland")])
+        world.way(12, world.rectangle(first: 30, 0.3, 1.6, 1.3, 2.6), [("natural", "heath")])
+        world.way(13, world.rectangle(first: 40, 1.6, 1.6, 2.6, 2.6), [("landuse", "grass")])
+        let extract = try world.extract()
+        func ids(_ file: FeatureStoreFile, _ band: ZoomBand) throws -> Set<Int64> {
+            Set(try file.cells().flatMap { try file.features(in: $0, band: band) }.map(\.objectID))
+        }
+        let file = try FeatureStoreFile(data: try FeatureStoreBuilder().build(from: extract).data)
+        let overview = try ids(file, .overview), mid = try ids(file, .mid)
+        #expect(overview.isSuperset(of: [10, 11, 12]), "a village, a field and heath are in the overview band")
+        #expect(!overview.contains(13) && mid.contains(13), "a lawn starts at the mid band")
+        let watch = try FeatureStoreFile(data: try FeatureStoreBuilder(profile: .watch).build(from: extract).data)
+        #expect(try ids(watch, .mid).isSuperset(of: [11, 12, 13]), "the Watch copy has them in its mid band")
+    }
 }

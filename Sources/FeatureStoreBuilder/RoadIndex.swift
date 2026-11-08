@@ -9,7 +9,7 @@ import OSMPBF
 /// when most of its length lies within ``maximumDistance`` of a road and runs the same way (within about 25 degrees), so a
 /// footway that crosses a road or ends at it does not count for the stretch where it meets it.
 ///
-/// Positions are turned into metres with ``LocalMetres``. Only roads count (`roadMajor` and `roadMinor` that are not
+/// Positions are turned into metres with ``LocalMetres``. Only roads count (`roadMajor`, `roadMinor` and `roadService` that are not
 /// pedestrian streets and not tunnels).
 struct RoadIndex {
     /// The farthest a footway may be from a road, in metres, to be beside it.
@@ -41,7 +41,7 @@ struct RoadIndex {
             let tags = extract.ways.tags(at: position)
             guard tags.value(forKey: "highway") != nil, tags.value(forKey: "highway") != "pedestrian" else { continue }
             let classification = classifier.classify(tags, shape: .openWay)
-            guard classification.featureClass == .roadMajor || classification.featureClass == .roadMinor,
+            guard [.roadMajor, .roadMinor, .roadService].contains(classification.featureClass),
                 !SubclassBits.isTunnel(classification.subclass)
             else { continue }
             let (runs, _) = FeatureStoreBuilder.runs(ofWayAt: position, in: extract)

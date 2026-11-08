@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 10
+    public static let version: UInt16 = 11
 
     /// Creates a classifier.
     public init() {}
@@ -47,7 +47,7 @@ public struct FeatureClassifier: Sendable {
         case .track:
             subclass = Self.trackGrade(tags.value(forKey: "tracktype"))
             fallthrough
-        case .path, .pavement, .roadMajor, .roadMinor, .railway, .waterLine:
+        case .path, .pavement, .roadMajor, .roadMinor, .roadService, .railway, .waterLine:
             if Self.isSet(tags.value(forKey: "bridge")) { subclass |= SubclassBits.bridge }
             if Self.isSet(tags.value(forKey: "tunnel")) { subclass |= SubclassBits.tunnel }
         default:
@@ -96,7 +96,7 @@ public struct FeatureClassifier: Sendable {
     }
 
     /// The classes that are lines of the movement network; as areas they become `roadArea`.
-    private static let roadClasses: Set<FeatureClass> = [.roadMajor, .roadMinor, .path, .track, .pavement]
+    private static let roadClasses: Set<FeatureClass> = [.roadMajor, .roadMinor, .roadService, .path, .track, .pavement]
 
     /// The `footway` values that mark a footway as part of a street.
     private static let pavementKinds: Set<String> = ["sidewalk", "crossing", "traffic_island", "access_aisle"]

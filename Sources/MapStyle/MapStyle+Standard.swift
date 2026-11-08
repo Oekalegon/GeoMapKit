@@ -12,8 +12,8 @@ extension MapStyle {
             // A road that is an area (a yard, a square): filled like a road, with a thin outline, over the land cover and under the buildings and roads.
             .roadArea: ClassStyle(
                 fill: FillStyle(color: .color(0xFFFFFF)), stroke: .line(0xB0B0B0, .constant(0.5)), visibleZoom: 14...24, layer: 13),
-            .landuseUrban: ClassStyle(fill: FillStyle(color: .color(0xE6E0D8)), visibleZoom: 12...24, layer: 10),
-            .landcover: ClassStyle(fill: FillStyle(color: .color(0xDDE8C8)), visibleZoom: 12...24, layer: 11),
+            .landuseUrban: ClassStyle(fill: FillStyle(color: .color(0xE6E0D8)), visibleZoom: 9...24, layer: 10),
+            .landcover: ClassStyle(fill: FillStyle(color: .color(0xDDE8C8)), visibleZoom: 10...24, layer: 11),
             .forest: ClassStyle(fill: FillStyle(color: .color(0xC5DDB0)), layer: 12),
             .waterArea: ClassStyle(fill: FillStyle(color: .color(0xAAD3EA)), layer: 13),
             // Buildings from zoom 14 as a fill, which shows where a town is built; the outline fades in by zoom 15.
@@ -56,6 +56,18 @@ extension MapStyle {
                 visibleZoom: 12...24, layer: 30, casingLayer: 29,
                 bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.6), (16, 1.8)))),
                 tunnel: TunnelStyle(opacity: 0.5, dash: [5, 3])),
+            // Service roads (driveways, parking aisles, yard roads): runnable like a street but finer, so a dense area is not a
+            // tangle of white lines. They are in the mid band with the streets, and show with them from zoom 12.
+            .roadService: ClassStyle(
+                stroke: StrokeStyle(
+                    color: .color(0xFFFFFF),
+                    width: LineWidth(
+                        points: ZoomValue((12, 0.5), (16, 1.6)),
+                        ground: GroundWidth(metresPerLane: 3, defaultLanes: 1)),
+                    casing: .init(color: .color(0xBBBBBB), extraPoints: ZoomValue((14, 0), (15, 0.4), (18, 1)))),
+                visibleZoom: 12...24, layer: 30, casingLayer: 29,
+                bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.5), (16, 1.4)))),
+                tunnel: TunnelStyle(opacity: 0.5, dash: [4, 3])),
             .roadMajor: ClassStyle(
                 stroke: StrokeStyle(
                     color: .color(0xFDD27F),

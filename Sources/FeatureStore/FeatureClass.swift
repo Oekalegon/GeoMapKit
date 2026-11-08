@@ -66,4 +66,6 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     case coastline = 29
     /// A road, track or path that is an area: a yard, a pedestrian square, a parking aisle drawn as a polygon (`area=yes` with a `highway` tag). Added in rule table version 7.
     case roadArea = 30
+    /// Service roads (`highway=service`): driveways, parking aisles, ways through a yard. Runnable like any street, but drawn finer than the streets. Added in rule table version 11.
+    case roadService = 31
 }

@@ -135,6 +135,16 @@ struct StyleJSONTests {
         #expect(MapStyle.standard.style(for: .address) == nil && MapStyle.watch.style(for: .address) == nil)
     }
 
+    @Test func aStyleFileWithoutRoadServiceDrawsServiceRoadsAsStreets() throws {
+        var object = try #require(JSONSerialization.jsonObject(with: MapStyle.standard.jsonData()) as? [String: Any])
+        var classes = try #require(object["classes"] as? [String: Any])
+        #expect(classes.removeValue(forKey: "roadService") != nil)
+        object["classes"] = classes
+        let old = try MapStyle(json: JSONSerialization.data(withJSONObject: object))
+        #expect(old.style(for: .roadService) == old.style(for: .roadMinor))
+        #expect(try MapStyle(json: MapStyle.standard.jsonData()).style(for: .roadService) != old.style(for: .roadMinor))
+    }
+
     @Test func layersAreLimitedToZeroThroughNinetyNine() throws {
         #expect(try parse(document(classBody: "\"layer\": 99, \"casingLayer\": 0")).style(for: .roadMajor)?.layer == 99)
         #expect(reason(document(classBody: "\"layer\": 100")).contains("layer"))
@@ -171,13 +181,13 @@ struct StyleJSONTests {
         let names = [
             "other", "path", "track", "roadMajor", "roadMinor", "railway", "waterLine", "waterArea", "forest", "landcover",
             "landuseUrban", "building", "peak", "place", "poiAnchor", "poi", "boundary", "powerLine", "piste", "aerialway",
-            "tree", "barrier", "transportStop", "roadPoint", "countryBorder", "address", "pavement", "cliff", "sea", "coastline", "roadArea",
+            "tree", "barrier", "transportStop", "roadPoint", "countryBorder", "address", "pavement", "cliff", "sea", "coastline", "roadArea", "roadService",
         ]
         #expect(FeatureClass.allCases.map { String(describing: $0) } == names)
         for name in names {
             let json = document().replacingOccurrences(of: "roadMajor", with: name)
-            // `boundary` also fills in `countryBorder` for files written before that class existed.
-            #expect(try parse(json).classes.count == (name == "boundary" ? 2 : 1), "class \(name)")
+            // `boundary` and `roadMinor` also fill in `countryBorder` and `roadService` for files written before those existed.
+            #expect(try parse(json).classes.count == (["boundary", "roadMinor"].contains(name) ? 2 : 1), "class \(name)")
         }
     }
 
