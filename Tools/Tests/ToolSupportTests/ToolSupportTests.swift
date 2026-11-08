@@ -123,10 +123,11 @@ struct ProfileArgumentTests {
 struct RenderArgumentTests {
     private func parse(
         center: String? = "47.14,9.52", zoom: String? = "15", size: String? = nil, scale: String? = nil,
-        style: String? = nil, output: String? = "out.png", attribution: String? = nil
+        style: String? = nil, output: String? = "out.png", attribution: String? = nil, bearing: String? = nil
     ) throws -> RenderRequest {
         try RenderArgument.parse(
-            center: center, zoom: zoom, size: size, scale: scale, style: style, output: output, attribution: attribution)
+            center: center, zoom: zoom, size: size, scale: scale, style: style, output: output, attribution: attribution,
+            bearing: bearing)
     }
 
     @Test("A .json value for --style is a style file")
@@ -142,6 +143,14 @@ struct RenderArgumentTests {
         #expect(try parse(attribution: "compact").attribution == .compact)
         #expect(try parse(attribution: "none").attribution == RenderRequest.Attribution.none)
         #expect(throws: ToolError.self) { try parse(attribution: "hidden") }
+    }
+
+    @Test("The bearing defaults to north up and takes 0 to 360 degrees")
+    func bearing() throws {
+        #expect(try parse().bearing == 0)
+        #expect(try parse(bearing: "45.5").bearing == 45.5)
+        #expect(try parse(bearing: "360").bearing == 360)
+        for bad in ["-1", "361", "north", "nan"] { #expect(throws: ToolError.self) { try parse(bearing: bad) } }
     }
 
     @Test("Defaults: 800x600 points, scale 2, standard style")

@@ -24,7 +24,7 @@ GeoMapKit tools
       than one cell, about 0.044 degrees, per side) and the file covers all
       of it; the report shows the stored extent.
 
-  geomapkit render <file.gmk> --center lat,lon --zoom Z --output <file.png>
+  geomapkit render <file.gmk> --center lat,lon --zoom Z --output <file.png> [--bearing DEGREES]
                    [--size WxH] [--scale S] [--style standard|watch|file.json]
                    [--attribution full|compact|none]
       Draw a map from a feature store file into a PNG. Size is in points
@@ -87,12 +87,12 @@ do {
             url: URL(fileURLWithPath: path), area: area, output: URL(fileURLWithPath: output), profile: profile, options: options)
         print(ReportFormatter.text(for: report))
     case "render":
-        let parsed = try CommandLineArguments(rest, knownOptions: ["center", "zoom", "output", "size", "scale", "style", "attribution"])
+        let parsed = try CommandLineArguments(rest, knownOptions: ["center", "zoom", "output", "size", "scale", "style", "attribution", "bearing"])
         guard let path = parsed.positional.first else { throw ToolError("render needs a store file") }
         let request = try RenderArgument.parse(
             center: parsed.value(for: "center"), zoom: parsed.value(for: "zoom"), size: parsed.value(for: "size"),
             scale: parsed.value(for: "scale"), style: parsed.value(for: "style"), output: parsed.value(for: "output"),
-            attribution: parsed.value(for: "attribution"))
+            attribution: parsed.value(for: "attribution"), bearing: parsed.value(for: "bearing"))
         print(ReportFormatter.text(for: try ToolRunner.render(store: URL(fileURLWithPath: path), request: request)))
     case "inspect":
         let parsed = try CommandLineArguments(rest, knownOptions: ["class", "top"])

@@ -1,3 +1,4 @@
+import Foundation
 import FeatureStore
 import GeoCore
 import Testing
@@ -85,5 +86,58 @@ struct MapViewportTests {
 
     @Test func invalidStorageZoomGivesNoCells() {
         #expect(MapViewport(center: center, zoom: 13, width: 100, height: 100).cells(storageZoom: 99).isEmpty)
+    }
+
+    // MARK: Bearing
+
+    @Test("With a bearing of 90 degrees east is at the top, and with 180 north is at the bottom")
+    func bearingPutsThatDirectionUp() {
+        let east = Coordinate(latitude: 47.14, longitude: 9.521)
+        let north = Coordinate(latitude: 47.141, longitude: 9.52)
+        let toTheEast = MapViewport(center: center, zoom: 15, width: 400, height: 300, bearing: 90)
+        #expect(toTheEast.screenPoint(for: east).y < 150 && abs(toTheEast.screenPoint(for: east).x - 200) < 1e-6)
+        #expect(toTheEast.screenPoint(for: north).x < 200, "facing east, north is on the left")
+        let toTheSouth = MapViewport(center: center, zoom: 15, width: 400, height: 300, bearing: 180)
+        #expect(toTheSouth.screenPoint(for: north).y > 150)
+    }
+
+    @Test("The bearing is wrapped into 0..<360, and a bad value is north up")
+    func bearingIsNormalised() {
+        func bearing(_ value: Double) -> Double { MapViewport(center: center, zoom: 15, width: 400, height: 300, bearing: value).bearing }
+        #expect(bearing(-90) == 270 && bearing(450) == 90 && bearing(360) == 0)
+        #expect(bearing(.nan) == 0 && bearing(.infinity) == 0)
+    }
+
+    @Test("Screen and coordinate round trip at every bearing, and distances on screen do not change with it")
+    func roundTripAtEveryBearing() {
+        let coordinate = Coordinate(latitude: 60.1, longitude: 10.2)
+        let reference = MapViewport(center: center, zoom: 16, width: 400, height: 300)
+        for bearing in stride(from: 0.0, to: 360, by: 7.5) {
+            let viewport = MapViewport(center: Coordinate(latitude: 60.1, longitude: 10.19), zoom: 16.3, width: 400, height: 300, bearing: bearing)
+            let back = viewport.coordinate(at: viewport.screenPoint(for: coordinate))
+            #expect(abs(back.latitude - coordinate.latitude) < 1e-9 && abs(back.longitude - coordinate.longitude) < 1e-9, "bearing \(bearing)")
+            let turned = MapViewport(center: center, zoom: 16, width: 400, height: 300, bearing: bearing)
+            let a = turned.screenPoint(for: Coordinate(latitude: 47.1405, longitude: 9.5207))
+            let b = turned.screenPoint(for: Coordinate(latitude: 47.1395, longitude: 9.5193))
+            let c = reference.screenPoint(for: Coordinate(latitude: 47.1405, longitude: 9.5207))
+            let d = reference.screenPoint(for: Coordinate(latitude: 47.1395, longitude: 9.5193))
+            #expect(abs(hypot(a.x - b.x, a.y - b.y) - hypot(c.x - d.x, c.y - d.y)) < 1e-6)
+        }
+    }
+
+    @Test("The cells of a turned view cover every corner of it, and a turned view reads more cells than a straight one")
+    func cellsCoverATurnedView() throws {
+        let storageZoom = 13
+        let straight = MapViewport(center: center, zoom: 13, width: 900, height: 300).cells(storageZoom: storageZoom).count
+        for bearing in stride(from: 0.0, to: 360, by: 15) {
+            let viewport = MapViewport(center: center, zoom: 13, width: 900, height: 300, bearing: bearing)
+            let cells = viewport.cells(storageZoom: storageZoom)
+            for corner in [(0.0, 0.0), (900.0, 0.0), (0.0, 300.0), (900.0, 300.0)] {
+                let coordinate = viewport.coordinate(at: ScreenPoint(x: corner.0, y: corner.1))
+                let tile = try #require(TileID.containing(coordinate, zoom: storageZoom))
+                #expect(cells.contains(tile), "corner \(corner) at bearing \(bearing)")
+            }
+            if bearing == 45 { #expect(cells.count > straight) }
+        }
     }
 }

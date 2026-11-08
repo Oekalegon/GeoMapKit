@@ -2,11 +2,12 @@ import Foundation
 import GeoCore
 import FeatureStore
 
-/// The part of the world on screen: a centre, a zoom level and a size in points.
+/// The part of the world on screen: a centre, a zoom level, a size in points and a bearing.
 ///
 /// The projection is Web Mercator with 256-point tiles, so at zoom `z` the world is
-/// `256 × 2^z` points wide. Zoom is fractional. North is up; rotation is not supported
-/// (see "Renderer scope" in the architecture document).
+/// `256 × 2^z` points wide. Zoom is fractional. The map can be turned: the bearing is the compass direction that points up
+/// the screen, in degrees clockwise from north, so 0 is north up and 90 has east at the top. The turn is part of the
+/// projection, so everything built on screen points (clipping, label placement, which keeps text upright) works unchanged.
 ///
 /// Screen positions are computed relative to the centre in `Double`, so there is no
 /// precision loss at high zoom levels where absolute world coordinates are large.
@@ -22,6 +23,8 @@ public struct MapViewport: Sendable, Equatable {
     public let width: Double
     /// The height of the view in points.
     public let height: Double
+    /// The compass direction at the top of the view, in degrees clockwise from north, 0 up to (not including) 360.
+    public let bearing: Double
 
     /// Creates a viewport.
     ///
@@ -34,7 +37,9 @@ public struct MapViewport: Sendable, Equatable {
     ///   - zoom: The fractional zoom level.
     ///   - width: The view width in points.
     ///   - height: The view height in points.
-    public init(center: Coordinate, zoom: Double, width: Double, height: Double) {
+    ///   - bearing: The compass direction at the top of the view in degrees clockwise from north. Any finite value is
+    ///     wrapped into 0..<360; a non-finite one becomes 0 (north up).
+    public init(center: Coordinate, zoom: Double, width: Double, height: Double, bearing: Double = 0) {
         let latitude = center.latitude.isFinite ? min(max(center.latitude, -TileID.maximumLatitude), TileID.maximumLatitude) : 0
         var longitude = center.longitude.isFinite ? (center.longitude + 180).truncatingRemainder(dividingBy: 360) : 180
         if longitude < 0 { longitude += 360 }
@@ -42,6 +47,13 @@ public struct MapViewport: Sendable, Equatable {
         self.zoom = zoom.isFinite ? min(max(zoom, 0), Double(TileID.maximumZoom)) : 0
         self.width = width.isFinite ? max(width, 0) : 0
         self.height = height.isFinite ? max(height, 0) : 0
+        var turn = bearing.isFinite ? bearing.truncatingRemainder(dividingBy: 360) : 0
+        if turn < 0 { turn += 360 }
+        // A value that rounds to 360 is north again.
+        self.bearing = turn >= 360 ? 0 : turn
+        let radians = self.bearing * .pi / 180
+        cosBearing = cos(radians)
+        sinBearing = sin(radians)
         let world = Self.tileSize * exp2(self.zoom)
         centerX = Self.worldX(longitude: self.center.longitude, world: world)
         centerY = Self.worldY(latitude: self.center.latitude, world: world)
@@ -49,6 +61,8 @@ public struct MapViewport: Sendable, Equatable {
 
     private let centerX: Double
     private let centerY: Double
+    private let cosBearing: Double
+    private let sinBearing: Double
 
     /// The width of the whole world in points at this zoom.
     public var worldSize: Double { Self.tileSize * exp2(zoom) }
@@ -75,8 +89,10 @@ public struct MapViewport: Sendable, Equatable {
     /// The coordinate at a screen position. The inverse of ``screenPoint(for:)-(Coordinate)``.
     public func coordinate(at point: ScreenPoint) -> Coordinate {
         let world = worldSize
-        let x = centerX + (point.x - width / 2)
-        let y = centerY + (point.y - height / 2)
+        // Undo the turn: from the screen offset to the offset along the (north up) map axes.
+        let ux = point.x - width / 2, uy = point.y - height / 2
+        let x = centerX + ux * cosBearing - uy * sinBearing
+        let y = centerY + ux * sinBearing + uy * cosBearing
         let longitude = x / world * 360 - 180
         let latitude = atan(sinh(.pi * (1 - 2 * y / world))) * 180 / .pi
         return Coordinate(latitude: latitude, longitude: longitude)
@@ -95,10 +111,13 @@ public struct MapViewport: Sendable, Equatable {
         let count = 1 << storageZoom
         let margin = margin.isFinite ? max(margin, 0) : 0
         func index(_ worldPoint: Double) -> Int { Int((worldPoint / world * Double(count)).rounded(.down)) }
-        let minX = max(index(centerX - width / 2 - margin), 0)
-        let maxX = min(index(centerX + width / 2 + margin), count - 1)
-        let minY = max(index(centerY - height / 2 - margin), 0)
-        let maxY = min(index(centerY + height / 2 + margin), count - 1)
+        // The cells that touch the turned view: its bounding box along the map axes.
+        let halfWidth = abs(width / 2 * cosBearing) + abs(height / 2 * sinBearing)
+        let halfHeight = abs(width / 2 * sinBearing) + abs(height / 2 * cosBearing)
+        let minX = max(index(centerX - halfWidth - margin), 0)
+        let maxX = min(index(centerX + halfWidth + margin), count - 1)
+        let minY = max(index(centerY - halfHeight - margin), 0)
+        let maxY = min(index(centerY + halfHeight + margin), count - 1)
         guard minX <= maxX, minY <= maxY else { return [] }
         var result: [TileID] = []
         for y in minY...maxY {
@@ -111,9 +130,9 @@ public struct MapViewport: Sendable, Equatable {
 
     private func screenPoint(longitude: Double, latitude: Double) -> ScreenPoint {
         let world = worldSize
-        return ScreenPoint(
-            x: Self.worldX(longitude: longitude, world: world) - centerX + width / 2,
-            y: Self.worldY(latitude: latitude, world: world) - centerY + height / 2)
+        let dx = Self.worldX(longitude: longitude, world: world) - centerX
+        let dy = Self.worldY(latitude: latitude, world: world) - centerY
+        return ScreenPoint(x: dx * cosBearing + dy * sinBearing + width / 2, y: -dx * sinBearing + dy * cosBearing + height / 2)
     }
 
     private static func worldX(longitude: Double, world: Double) -> Double { (longitude + 180) / 360 * world }

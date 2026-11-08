@@ -38,11 +38,13 @@ public struct RenderRequest: Equatable, Sendable {
     public var attribution: Attribution?
     /// The PNG path.
     public var output: String
+    /// The compass direction at the top of the image, in degrees clockwise from north (0 is north up).
+    public var bearing: Double
 
     /// Creates a request.
     public init(center: Coordinate, zoom: Double, width: Int, height: Int, scale: Double, style: Style, output: String,
         attribution: Attribution? = nil,
-        styleFile: String? = nil
+        styleFile: String? = nil, bearing: Double = 0
     ) {
         self.center = center
         self.zoom = zoom
@@ -53,5 +55,6 @@ public struct RenderRequest: Equatable, Sendable {
         self.output = output
         self.attribution = attribution
         self.styleFile = styleFile
+        self.bearing = bearing
     }
 }
