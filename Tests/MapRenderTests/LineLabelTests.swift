@@ -363,4 +363,44 @@ struct LineLabelTests {
             #expect(with > 100, "the letters are drawn")
         }
     }
+
+    // MARK: Turned map
+
+    /// The line from west to east through the centre of a view with this bearing, as screen points.
+    private func turnedLine(_ viewport: MapViewport) -> [ScreenPoint] {
+        stride(from: 9.517, through: 9.523, by: 0.001).map { viewport.screenPoint(for: Coordinate(latitude: 47.14, longitude: $0)) }
+    }
+
+    @Test("Names stay upright whatever the bearing of the map")
+    func uprightAtEveryBearing() {
+        for bearing in stride(from: 0.0, to: 360, by: 10) {
+            let viewport = MapViewport(center: Coordinate(latitude: 47.14, longitude: 9.52), zoom: 16, width: 400, height: 300, bearing: bearing)
+            let candidate = LineLabelCandidate(
+                objectID: 1, text: "Main street", points: turnedLine(viewport), fontSize: 10, style: style)
+            let labels = LabelPlacer.place([], lines: [candidate], viewWidth: 400, viewHeight: 300, maximumCount: nil, measure: measure)
+            #expect(!labels.isEmpty, "bearing \(bearing)")
+            for glyph in labels.flatMap(\.glyphs) {
+                #expect(abs(glyph.angle) <= Double.pi / 2 + 1e-9, "bearing \(bearing)")
+            }
+        }
+    }
+
+    @Test("The two names of a border stay on their own sides of it whatever the bearing")
+    func bordersKeepTheirSides() throws {
+        for bearing in stride(from: 0.0, to: 360, by: 15) {
+            let viewport = MapViewport(center: Coordinate(latitude: 47.14, longitude: 9.52), zoom: 16, width: 400, height: 300, bearing: bearing)
+            let candidate = LineLabelCandidate(
+                objectID: 1, text: "North\nSouth", points: turnedLine(viewport), fontSize: 10,
+                style: LabelStyle(size: ZoomValue(constant: 10), color: .black, haloWidth: 0, placement: .besideLine))
+            let labels = LabelPlacer.place([], lines: [candidate], viewWidth: 400, viewHeight: 300, maximumCount: nil, measure: measure)
+            let north = try #require(labels.first { $0.text == "North" }, "bearing \(bearing)")
+            let south = try #require(labels.first { $0.text == "South" }, "bearing \(bearing)")
+            func latitude(_ label: PlacedLabel) -> Double {
+                let glyph = label.glyphs[label.glyphs.count / 2]
+                return viewport.coordinate(at: glyph.position).latitude
+            }
+            // The line runs west to east and the left name is on its left, which is the north side.
+            #expect(latitude(north) > 47.14 && latitude(south) < 47.14, "bearing \(bearing)")
+        }
+    }
 }

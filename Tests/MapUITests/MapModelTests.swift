@@ -35,6 +35,14 @@ struct MapModelTests {
         throw MapRenderError.noBands
     }
 
+    @Test func theFrameIsDrawnWithTheRequestedBearing() async throws {
+        let (store, centre) = try file()
+        let model = MapModel(file: store, style: .standard)
+        model.request(viewport: MapViewport(center: centre, zoom: 16, width: 200, height: 100, bearing: 125), scale: 1, interacting: false)
+        let frame = try await waitForFrame(model)
+        #expect(frame.viewport.bearing == 125)
+    }
+
     @Test func drawsAFrameWithAMarginAndKeepsItForASmallPan() async throws {
         let (store, centre) = try file()
         let model = MapModel(file: store, style: .standard)

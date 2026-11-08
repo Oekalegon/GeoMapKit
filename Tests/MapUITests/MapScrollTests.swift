@@ -56,4 +56,20 @@ struct MapScrollTests {
             #expect(jump < 1e-6 || abs(jump - 360) < 1e-6)
         }
     }
+
+    @Test("At any bearing the pointer stays fixed when zooming, and a scroll moves the map with the fingers")
+    func turnedMap() {
+        for bearing in [30.0, 90, 200, 310] {
+            let view = MapViewport(center: Coordinate(latitude: 60, longitude: 10), zoom: 12, width: 800, height: 600, bearing: bearing)
+            let pointer = ScreenPoint(x: 650, y: 120)
+            let before = view.coordinate(at: pointer)
+            let result = MapScroll.zoomed(view, at: pointer, delta: 3, in: range)
+            let after = MapViewport(center: result.center, zoom: result.zoom, width: 800, height: 600, bearing: bearing).coordinate(at: pointer)
+            #expect(abs(after.latitude - before.latitude) < 1e-9 && abs(after.longitude - before.longitude) < 1e-9, "bearing \(bearing)")
+            // The point at the middle of the view moves 100 points to the right on screen when the map is scrolled 100 to the right.
+            let moved = MapViewport(center: MapScroll.panned(view, dx: 100, dy: 0), zoom: 12, width: 800, height: 600, bearing: bearing)
+            let middle = moved.screenPoint(for: view.center)
+            #expect(abs(middle.x - 500) < 1e-6 && abs(middle.y - 300) < 1e-6, "bearing \(bearing)")
+        }
+    }
 }

@@ -13,10 +13,11 @@ public enum RenderArgument {
     ///   - style: `--style standard|watch|file.json`, default `standard`.
     ///   - output: `--output file.png`, required.
     ///   - attribution: `--attribution full|compact|none`; default is the style's own choice.
+    ///   - bearing: `--bearing DEGREES`, the compass direction at the top, 0 (north up, the default) up to 360.
     /// - Throws: ``ToolError`` for a missing or invalid option.
     public static func parse(
         center: String?, zoom: String?, size: String?, scale: String?, style: String?, output: String?,
-        attribution: String? = nil
+        attribution: String? = nil, bearing: String? = nil
     ) throws -> RenderRequest {
         guard let center else { throw ToolError("render needs --center lat,lon") }
         let parts = center.split(separator: ",", omittingEmptySubsequences: false).map { Double($0.trimmingCharacters(in: .whitespaces)) }
@@ -67,9 +68,17 @@ public enum RenderArgument {
             credit = value
         }
 
+        var bearingValue = 0.0
+        if let bearing {
+            guard let value = Double(bearing), value.isFinite, (0...360).contains(value) else {
+                throw ToolError("--bearing expects a number of degrees from 0 to 360")
+            }
+            bearingValue = value
+        }
+
         guard let output, !output.isEmpty else { throw ToolError("render needs --output <file.png>") }
         return RenderRequest(
             center: coordinate, zoom: zoomValue, width: width, height: height, scale: scaleValue, style: chosen, output: output,
-            attribution: credit, styleFile: styleFile)
+            attribution: credit, styleFile: styleFile, bearing: bearingValue)
     }
 }

@@ -24,6 +24,7 @@ struct ViewerView: View {
     @State private var storeName = ""
     @State private var center = Coordinate(latitude: 47.14, longitude: 9.52)
     @State private var zoom = 14.0
+    @State private var bearing = 0.0
     @State private var choice = StyleChoice.standard
     @State private var customStyle: MapStyle?
     @State private var watchSize = false
@@ -53,7 +54,7 @@ struct ViewerView: View {
             Divider()
             ZStack {
                 if let store {
-                    MapView(file: store, style: style, center: $center, zoom: $zoom)
+                    MapView(file: store, style: style, center: $center, zoom: $zoom, bearing: $bearing)
                         .id(storeName)
                         .frame(width: watchSize ? 184 : nil, height: watchSize ? 224 : nil)
                         .border(watchSize ? Color.secondary : .clear)
@@ -123,7 +124,7 @@ struct ViewerView: View {
     private func scriptedPan(_ pan: (x: Double, y: Double)) async {
         try? await Task.sleep(for: .seconds(1.5))
         for _ in 0..<30 {
-            let view = MapViewport(center: center, zoom: zoom, width: 900, height: 700)
+            let view = MapViewport(center: center, zoom: zoom, width: 900, height: 700, bearing: bearing)
             center = view.coordinate(at: ScreenPoint(x: 450 + pan.x / 30, y: 350 + pan.y / 30))
             try? await Task.sleep(for: .milliseconds(30))
         }

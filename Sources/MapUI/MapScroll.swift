@@ -21,7 +21,8 @@ enum MapScroll {
         let zoom = min(max(viewport.zoom + delta * zoomPerUnit, range.lowerBound), range.upperBound)
         guard zoom != viewport.zoom else { return (viewport.center, viewport.zoom) }
         let anchor = viewport.coordinate(at: pointer)
-        let scaled = MapViewport(center: viewport.center, zoom: zoom, width: viewport.width, height: viewport.height)
+        let scaled = MapViewport(
+            center: viewport.center, zoom: zoom, width: viewport.width, height: viewport.height, bearing: viewport.bearing)
         let moved = scaled.screenPoint(for: anchor)
         let center = scaled.coordinate(
             at: ScreenPoint(x: viewport.width / 2 + moved.x - pointer.x, y: viewport.height / 2 + moved.y - pointer.y))

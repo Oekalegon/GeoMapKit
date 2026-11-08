@@ -1,3 +1,4 @@
+import Foundation
 import GeoCore
 import MapRender
 import Testing
@@ -77,6 +78,54 @@ struct MapFramePlanTests {
     @Test func zoomingOutFarUncoversTheViewAndForcesANewFrame() {
         let plan = MapFramePlan(frame: frameViewport(zoom: 15), requested: requested(zoom: 13))
         #expect(!plan.coversView && plan.needsNewFrame(interacting: true))
+    }
+
+    // MARK: Bearing
+
+    private func turned(_ bearing: Double, size: (Double, Double) = (width: 400, height: 300)) -> (frame: MapViewport, plan: (Double) -> MapFramePlan) {
+        let margin = MapFramePlan.margin(forViewWidth: size.0, viewHeight: size.1)
+        let frame = MapViewport(center: centre, zoom: 15, width: size.0 + 2 * margin, height: size.1 + 2 * margin, bearing: bearing)
+        return (frame, { newBearing in
+            MapFramePlan(frame: frame, requested: MapViewport(center: centre, zoom: 15, width: size.0, height: size.1, bearing: newBearing))
+        })
+    }
+
+    @Test func theMarginIsEnoughForTheCircleAroundTheView() {
+        // 400 x 800: the half diagonal is 447, so a frame 894 wide and high needs a margin of 247; the margin is 256 (the cap).
+        let needed = (hypot(400.0, 800.0) / 2 - 200).rounded(.up)
+        #expect(MapFramePlan.margin(forViewWidth: 400, viewHeight: 800) >= needed)
+        for (width, height) in [(200.0, 240.0), (400, 600), (600, 600), (500, 90)] {
+            let circle = hypot(width, height) / 2 - min(width, height) / 2
+            #expect(MapFramePlan.margin(forViewWidth: width, viewHeight: height) >= circle.rounded(.up))
+        }
+    }
+
+    @Test func aFrameIsTurnedByTheDifferenceOfTheBearings() {
+        let (_, plan) = turned(0)
+        #expect(plan(0).rotation == 0)
+        #expect(plan(30).rotation == -30, "the map turned anticlockwise on screen when the bearing goes up")
+        #expect(abs(turned(350).plan(10).rotation - -20) < 1e-9, "the short way round")
+    }
+
+    @Test func aPhoneSizedFrameCoversTheViewAtEveryBearing() {
+        let (_, plan) = turned(0, size: (400, 800))
+        for bearing in stride(from: 0.0, to: 360, by: 5) {
+            #expect(plan(bearing).coversView, "bearing \(bearing)")
+        }
+    }
+
+    @Test func aTurnedFrameOfALargeViewStopsCoveringAndForcesANewFrameDuringTheGesture() {
+        let (_, plan) = turned(0, size: (1400, 1000))
+        #expect(plan(5).coversView && !plan(5).needsNewFrame(interacting: true))
+        #expect(plan(45).needsNewFrame(interacting: true), "the corners of the view are past the frame")
+    }
+
+    @Test func turningRedrawsWhenTheGestureEndsButNotForAHalfDegree() {
+        let (_, plan) = turned(0)
+        #expect(!plan(20).needsNewFrame(interacting: true), "the image is only turned meanwhile")
+        #expect(plan(20).needsNewFrame(interacting: false))
+        #expect(!plan(0.5).needsNewFrame(interacting: false), "below the tolerance")
+        #expect(plan(1.5).needsNewFrame(interacting: false))
     }
 }
 

@@ -176,7 +176,8 @@ public enum ToolRunner {
             }
         }
         let viewport = MapViewport(
-            center: request.center, zoom: request.zoom, width: Double(request.width), height: Double(request.height))
+            center: request.center, zoom: request.zoom, width: Double(request.width), height: Double(request.height),
+            bearing: request.bearing)
 
         let clock = ContinuousClock()
         var started = clock.now

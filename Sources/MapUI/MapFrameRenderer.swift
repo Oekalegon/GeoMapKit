@@ -24,7 +24,11 @@ struct MapFrameRenderer: Sendable {
     func frame(for viewport: MapViewport, scale: Double) throws -> MapFrame {
         let scale = min(max(scale, 1), 3)
         let scene = try MapSceneBuilder(file: file, style: style).scene(for: viewport)
-        let image = try CoreGraphicsRenderer().cgImage(for: scene, style: style, scale: scale)
+        // The credit is not part of the image: the image is larger than the view and turns, so its corner is not the view's.
+        // `MapView` shows the credit itself, in the corner of the view.
+        var drawn = style
+        drawn.attribution = .hidden
+        let image = try CoreGraphicsRenderer().cgImage(for: scene, style: drawn, scale: scale)
         return MapFrame(image: image, viewport: viewport, scale: scale, styleID: styleID)
     }
 }
