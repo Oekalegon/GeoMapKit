@@ -32,11 +32,24 @@ enum TinyPBF {
 
     /// Nodes 1 and 2 are inside the box 47...48 x 9...10; node 3 is far outside.
     /// Way 10 joins nodes 1, 2 and 3 and so crosses the box edge; way 11 is far away.
-    static func make() -> Data {
+    static func make() -> Data { make(latitudes: [475_000_000, 476_000_000, 300_000_000, 100_000_000, 100_100_000],
+        longitudes: [95_000_000, 96_000_000, 50_000_000, 20_000_000, 20_100_000]) }
+
+    /// The same objects and one more way (12) between nodes 1 and 2, so a store built from it has a feature that the other has not.
+    static func makeWithExtraWay() -> Data {
+        make(latitudes: [475_000_000, 476_000_000, 300_000_000, 100_000_000, 100_100_000],
+            longitudes: [95_000_000, 96_000_000, 50_000_000, 20_000_000, 20_100_000], extraWay: true)
+    }
+
+    /// The same objects far from the box 47...48 x 9...10, so a cut of that box finds nothing.
+    static func makeElsewhere() -> Data {
+        make(latitudes: [100_000_000, 100_100_000, 100_200_000, 100_300_000, 100_400_000],
+            longitudes: [200_000_000, 200_100_000, 200_200_000, 200_300_000, 200_400_000])
+    }
+
+    private static func make(latitudes: [Int64], longitudes: [Int64], extraWay: Bool = false) -> Data {
         let header = field(4, bytes: Array("OsmSchema-V0.6".utf8)) + field(4, bytes: Array("DenseNodes".utf8))
         let ids: [Int64] = [1, 2, 3, 4, 5]
-        let latitudes: [Int64] = [475_000_000, 476_000_000, 300_000_000, 100_000_000, 100_100_000]
-        let longitudes: [Int64] = [95_000_000, 96_000_000, 50_000_000, 20_000_000, 20_100_000]
         let dense = field(1, bytes: packed(delta(ids).map(zigZag)))
             + field(8, bytes: packed(delta(latitudes).map(zigZag)))
             + field(9, bytes: packed(delta(longitudes).map(zigZag)))
@@ -47,6 +60,7 @@ enum TinyPBF {
             field(1, varint: id) + field(8, bytes: packed(delta(nodes).map(zigZag)))
         }
         let ways = field(3, bytes: way(10, [1, 2, 3])) + field(3, bytes: way(11, [4, 5]))
+            + (extraWay ? field(3, bytes: way(12, [1, 2])) : [])
         let wayBlock = field(1, bytes: table) + field(2, bytes: ways)
 
         return Data(blob(type: "OSMHeader", payload: header) + blob(type: "OSMData", payload: nodeBlock)

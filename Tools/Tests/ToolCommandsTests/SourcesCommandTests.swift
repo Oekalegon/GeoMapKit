@@ -196,6 +196,27 @@ struct SourcesCommandTests {
         #expect(back == record && back.sources.map(\.regionID) == ["tiny"] && back.sources[0].etag == "\"e\"")
     }
 
+    @Test("The files of the blocks of regions are listed with the number of blocks, and a fetch for them downloads only when confirmed")
+    func byRegion() async throws {
+        let s = try await setup()
+        defer { try? FileManager.default.removeItem(at: s.cache) }
+        let report = try await ToolRunner.sources(regions: ["tiny"], cacheDirectory: s.cache, catalog: s.catalog, downloader: s.network)
+        // The blocks at the east edge of the tiny region reach into the next region with their margin, so both files are needed.
+        #expect(Set(report.plan.items.map(\.region.id)) == ["tiny", "other"] && report.blockCount != nil && report.blockCount! > 1)
+        #expect(report.plan.items.first?.region.id == "tiny", "the file that most blocks need comes first")
+        let text = ReportFormatter.text(for: report)
+        #expect(text.contains("Blocks: \(report.blockCount!)") && !text.contains("outlines of these regions cover"), "no coverage line for regions")
+        #expect(await s.network.downloads.isEmpty)
+        let asked = try await ToolRunner.fetch(regions: ["tiny"], cacheDirectory: s.cache, catalog: s.catalog, downloader: s.network, confirmed: false)
+        #expect(!asked.downloaded && asked.plan.needsDownload)
+        let done = try await ToolRunner.fetch(regions: ["tiny"], cacheDirectory: s.cache, catalog: s.catalog, downloader: s.network, confirmed: true)
+        let downloaded = await s.network.downloads
+        #expect(done.downloaded && Set(downloaded) == [tinyURL, otherURL])
+        await #expect(throws: ToolError.self) {
+            try await ToolRunner.sources(regions: ["narnia"], cacheDirectory: s.cache, catalog: s.catalog, downloader: s.network)
+        }
+    }
+
     @Test("An area that no region covers, and an invalid area, are refused")
     func nothingCovers() async throws {
         let s = try await setup()

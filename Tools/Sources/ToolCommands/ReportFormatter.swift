@@ -71,7 +71,8 @@ public enum ReportFormatter {
     public static func text(for report: SourcesReport) -> String {
         let area = report.area
         var lines = [
-            "Area: south \(area.south), west \(area.west), north \(area.north), east \(area.east) (whole cells)",
+            report.blockCount.map { "Blocks: \($0), in south \(area.south), west \(area.west), north \(area.north), east \(area.east)" }
+                ?? "Area: south \(area.south), west \(area.west), north \(area.north), east \(area.east) (whole cells)",
             "Cache: \(report.cacheDirectory.path)",
             "",
             "Source files (the one that covers most of the area first)",
@@ -88,7 +89,9 @@ public enum ReportFormatter {
             if item.alreadyDownloaded > 0, !report.downloaded { line += " (\(Formatting.bytes(item.alreadyDownloaded)) already there)" }
             lines.append(line)
         }
-        lines.append("  The outlines of these regions cover \(Int((report.plan.coveredShare * 100).rounded())) % of the area.")
+        if report.blockCount == nil {
+            lines.append("  The outlines of these regions cover \(Int((report.plan.coveredShare * 100).rounded())) % of the area.")
+        }
         lines.append("")
         if report.downloaded {
             lines.append("Downloaded in \(report.downloadTime.map(Formatting.seconds) ?? "-").")
@@ -98,6 +101,56 @@ public enum ReportFormatter {
         } else {
             lines.append("Everything is in the cache.")
         }
+        return lines.joined(separator: "\n")
+    }
+
+    /// The text for a comparison of two stores.
+    public static func text(for comparison: StoreComparison) -> String {
+        var lines = [
+            "Cells in both stores: \(Formatting.count(comparison.cellsCompared)), identical: \(Formatting.count(comparison.cellsIdentical)), different: \(Formatting.count(comparison.cellsCompared - comparison.cellsIdentical))",
+            "Cells only in the first store: \(Formatting.count(comparison.cellsOnlyInFirst))"
+                + (comparison.cellsSkippedNearEdge > 0 ? "; left out near its edge: \(Formatting.count(comparison.cellsSkippedNearEdge))" : ""),
+            "Features that differ: \(Formatting.count(comparison.differenceCount))",
+        ]
+        for difference in comparison.differences {
+            lines.append("  cell \(difference.cell.x)/\(difference.cell.y), \(difference.band): only in the \(difference.onlyIn) store: \(difference.feature)")
+        }
+        if comparison.differenceCount > comparison.differences.count {
+            lines.append("  ... and \(comparison.differenceCount - comparison.differences.count) more")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// One line for a block that is done.
+    public static func line(for outcome: BlockOutcome, blockZoom: Int) -> String {
+        let name = "block \(blockZoom)/\(outcome.x)/\(outcome.y)"
+        let regions = outcome.regions.isEmpty ? "" : " (\(outcome.regions.joined(separator: ", ")))"
+        switch outcome.status {
+        case .built(let bytes, let cells, let seconds):
+            return "\(name): built, \(Formatting.bytes(bytes)), \(Formatting.count(cells)) cells, \(String(format: "%.1f", seconds)) s\(regions)"
+        case .upToDate: return "\(name): up to date, left as it is\(regions)"
+        case .empty: return "\(name): nothing to store\(regions)"
+        }
+    }
+
+    /// The text for a finished `build-region` run.
+    public static func text(for report: BlockRunReport, blockZoom: Int) -> String {
+        var built = 0, upToDate = 0, empty = 0
+        var bytes: Int64 = 0
+        for outcome in report.outcomes {
+            switch outcome.status {
+            case .built(let size, _, _): built += 1; bytes += size
+            case .upToDate: upToDate += 1
+            case .empty: empty += 1
+            }
+        }
+        var lines = [
+            "",
+            "Blocks (zoom \(blockZoom)): \(report.outcomes.count) in the area, \(built) built (\(Formatting.bytes(bytes))), \(upToDate) up to date, \(empty) with nothing to store",
+            "Manifest: \(report.manifestURL.path)",
+            "Total: \(Formatting.seconds(report.totalTime)), peak memory footprint \(report.peakFootprint.map(Formatting.bytes) ?? "n/a")",
+        ]
+        for warning in report.warnings { lines.append("warning: \(warning)") }
         return lines.joined(separator: "\n")
     }
 

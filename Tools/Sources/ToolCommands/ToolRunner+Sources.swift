@@ -27,6 +27,59 @@ extension ToolRunner {
         return SourcesReport(area: cutArea, cacheDirectory: manager.cache.directory, plan: plan)
     }
 
+    /// Finds the source files that the blocks of some regions need (see `build-region`), with their sizes. Nothing is downloaded.
+    ///
+    /// The blocks are the tiles of the block grid that meet the regions' outlines, and each needs the files of the regions that
+    /// cover it and its margin, so a country needs the files of its neighbours at its border as well.
+    ///
+    /// - Parameters:
+    ///   - ids: The ids of the regions (for example `sweden`, `ostlandet`).
+    ///   - blockZoom: The zoom of the block grid.
+    ///   - margin: The margin of the cut around a block, in degrees.
+    ///   - cacheDirectory: The cache folder, or `nil` for the default one.
+    ///   - catalog: The list of regions, or `nil` for the Geofabrik index.
+    ///   - downloader: The network, or `nil` for `URLSession`.
+    /// - Returns: The report, with the number of blocks.
+    /// - Throws: ``ToolError`` for an unknown region or an area that is too large, and the errors of the catalog and the network.
+    public static func sources(
+        regions ids: [String], blockZoom: Int = 8, margin: Double = 0.1, cacheDirectory: URL? = nil,
+        catalog: (any RegionCatalog)? = nil, downloader: (any Downloader)? = nil
+    ) async throws -> SourcesReport {
+        let (manager, plan, area, blocks) = try await makeRegionPlan(
+            ids, blockZoom: blockZoom, margin: margin, cacheDirectory: cacheDirectory, catalog: catalog, downloader: downloader)
+        return SourcesReport(area: area, cacheDirectory: manager.cache.directory, plan: plan, blockCount: blocks)
+    }
+
+    /// Downloads the source files that the blocks of some regions need, after the plan has been shown.
+    ///
+    /// - Parameters:
+    ///   - ids: The ids of the regions.
+    ///   - blockZoom: The zoom of the block grid.
+    ///   - margin: The margin of the cut around a block, in degrees.
+    ///   - cacheDirectory: The cache folder, or `nil` for the default one.
+    ///   - catalog: The list of regions, or `nil` for the Geofabrik index.
+    ///   - downloader: The network, or `nil` for `URLSession`.
+    ///   - confirmed: Whether the user said yes. Without it nothing is downloaded.
+    ///   - progress: Called with a region's identifier, the bytes of its file held and its size.
+    /// - Returns: The report; `downloaded` says whether files were fetched.
+    public static func fetch(
+        regions ids: [String], blockZoom: Int = 8, margin: Double = 0.1, cacheDirectory: URL? = nil,
+        catalog: (any RegionCatalog)? = nil, downloader: (any Downloader)? = nil, confirmed: Bool,
+        progress: @Sendable @escaping (String, Int64, Int64?) -> Void = { _, _, _ in }
+    ) async throws -> SourcesReport {
+        let (manager, plan, area, blocks) = try await makeRegionPlan(
+            ids, blockZoom: blockZoom, margin: margin, cacheDirectory: cacheDirectory, catalog: catalog, downloader: downloader)
+        guard confirmed, plan.needsDownload else {
+            return SourcesReport(area: area, cacheDirectory: manager.cache.directory, plan: plan, blockCount: blocks)
+        }
+        let clock = ContinuousClock()
+        let started = clock.now
+        _ = try await manager.fetch(plan, progress: progress)
+        return SourcesReport(
+            area: area, cacheDirectory: manager.cache.directory, plan: plan, downloaded: true, downloadTime: clock.now - started,
+            blockCount: blocks)
+    }
+
     /// Downloads the source files an area needs, after the plan has been shown.
     ///
     /// - Parameters:
@@ -99,6 +152,28 @@ extension ToolRunner {
             records.append(record)
         }
         return CachedSources(files: files, records: records, coveredShare: plan.coveredShare, warnings: warnings)
+    }
+
+    private static func makeRegionPlan(
+        _ ids: [String], blockZoom: Int, margin: Double, cacheDirectory: URL?, catalog: (any RegionCatalog)?, downloader: (any Downloader)?
+    ) async throws -> (SourceManager, DownloadPlan, BoundingBox, Int) {
+        guard (0...13).contains(blockZoom) else { throw ToolError("--block-zoom must be from 0 to 13") }
+        let directory = try cacheDirectory ?? SourceCache.defaultDirectory()
+        let network = downloader ?? URLSessionDownloader(userAgent: userAgent)
+        let index = try await (catalog ?? GeofabrikCatalog(directory: directory, downloader: network)).index()
+        let blocks = try plannedBlocks(area: .regions(ids), blockZoom: blockZoom, margin: margin, in: index)
+        // The files, the one that most blocks need first.
+        var uses: [String: (region: SourceRegion, blocks: Int)] = [:]
+        for block in blocks { for region in block.regions { uses[region.id, default: (region, 0)].blocks += 1 } }
+        guard !uses.isEmpty else { throw ToolError("No source region covers these regions.") }
+        let ordered = uses.values.sorted { ($1.blocks, $0.region.id) < ($0.blocks, $1.region.id) }.map(\.region)
+        let tiles = blocks.map(\.tile)
+        let area = BoundingBox(
+            south: tiles.map(\.southEast.latitude).min() ?? 0, west: tiles.map(\.northWest.longitude).min() ?? 0,
+            north: tiles.map(\.northWest.latitude).max() ?? 0, east: tiles.map(\.southEast.longitude).max() ?? 0)
+        let manager = SourceManager(cache: SourceCache(directory: directory), downloader: network)
+        let plan = try await manager.plan(for: RegionSelection(regions: ordered, coveredShare: 1))
+        return (manager, plan, area, blocks.count)
     }
 
     private static func makePlan(
