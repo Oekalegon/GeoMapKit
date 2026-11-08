@@ -18,7 +18,14 @@ public struct RegionPolygon: Hashable, Sendable {
     public init(outer: [Coordinate], holes: [[Coordinate]] = []) {
         self.outer = outer
         self.holes = holes
+        south = outer.map(\.latitude).min() ?? 0
+        north = outer.map(\.latitude).max() ?? 0
+        west = outer.map(\.longitude).min() ?? 0
+        east = outer.map(\.longitude).max() ?? 0
     }
+
+    /// The box around the outer ring, tested first so a point far from a polygon costs four comparisons.
+    private let south: Double, north: Double, west: Double, east: Double
 
     /// Whether a coordinate lies inside the polygon: inside the outer ring and in no hole. Points on an edge may fall either way.
     ///
@@ -27,7 +34,9 @@ public struct RegionPolygon: Hashable, Sendable {
     ///
     /// - Parameter coordinate: The position to test.
     public func contains(_ coordinate: Coordinate) -> Bool {
-        Self.ring(outer, contains: coordinate) && !holes.contains { Self.ring($0, contains: coordinate) }
+        guard coordinate.latitude >= south, coordinate.latitude <= north, coordinate.longitude >= west, coordinate.longitude <= east
+        else { return false }
+        return Self.ring(outer, contains: coordinate) && !holes.contains { Self.ring($0, contains: coordinate) }
     }
 
     /// The absolute area of the outer ring minus the holes, in square degrees, with longitudes scaled by the cosine of the mean

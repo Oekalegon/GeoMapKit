@@ -55,13 +55,14 @@ public struct RegionIndex: Sendable {
     /// regions on both sides. A region that has a chosen region below it is left out, because its file is the larger one
     /// for the same ground, and so are regions that add less than 1% of the points: a sliver of ground where the simplified
     /// outlines do not meet is no reason to fetch a whole country. The size of a region is the size of its outline, so
-    /// an aggregate such as the Alps, larger than each of its countries, is only chosen where no country covers.
+    /// an aggregate such as the Alps, larger than each of its countries, is only chosen where no country covers. If more
+    /// regions are chosen than `maximumRegions`, the ones that cover most of the area are kept.
     ///
     /// - Parameters:
     ///   - box: The area. It must be valid.
     ///   - samplesPerSide: The points per side of the grid, 2 to 256. The default is 32.
     ///   - maximumRegions: The most regions to return, at least 1.
-    /// - Returns: The regions, the one that covers most first, and the share of the area they cover. Empty, with a share of 0,
+    /// - Returns: The regions, the one that covers most first, and the share of the area the returned regions cover. Empty, with a share of 0,
     ///   for an invalid box or an area no outline meets.
     public func regions(covering box: BoundingBox, samplesPerSide: Int = 32, maximumRegions: Int = 8) -> RegionSelection {
         guard box.isValid else { return RegionSelection(regions: [], coveredShare: 0) }
@@ -89,18 +90,20 @@ public struct RegionIndex: Sendable {
 
         let minimumNew = max(1, Int((Double(points.count) * 0.01).rounded(.up)))
         var done = [Bool](repeating: false, count: points.count)
-        var doneCount = 0
-        var chosen: [(region: SourceRegion, covered: Int)] = []
-        for candidate in candidates where chosen.count < max(maximumRegions, 1) {
+        var chosen: [(region: SourceRegion, covered: [Int])] = []
+        for candidate in candidates {
             if chosen.contains(where: { region($0.region.id, isBelow: candidate.region.id) }) { continue }
             let new = candidate.covered.filter { !done[$0] }
             guard new.count >= minimumNew else { continue }
             for point in new { done[point] = true }
-            doneCount += new.count
-            chosen.append((candidate.region, candidate.covered.count))
+            chosen.append((candidate.region, candidate.covered))
         }
-        // The region that covers most of the area is the preferred source.
-        chosen.sort { ($1.covered, $0.region.id) < ($0.covered, $1.region.id) }
-        return RegionSelection(regions: chosen.map(\.region), coveredShare: Double(doneCount) / Double(points.count))
+        // The region that covers most of the area is the preferred source, and the one kept when there are too many.
+        chosen.sort { ($1.covered.count, $0.region.id) < ($0.covered.count, $1.region.id) }
+        chosen = Array(chosen.prefix(max(maximumRegions, 1)))
+        var covered = [Bool](repeating: false, count: points.count)
+        for entry in chosen { for point in entry.covered { covered[point] = true } }
+        return RegionSelection(
+            regions: chosen.map(\.region), coveredShare: Double(covered.lazy.filter { $0 }.count) / Double(points.count))
     }
 }

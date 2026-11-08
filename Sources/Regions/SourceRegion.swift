@@ -9,11 +9,12 @@ public struct SourceRegion: Hashable, Sendable {
     public let name: String
     /// The identifier of the region this one is part of, or `nil` for a continent.
     public let parentID: String?
-    /// Where the PBF file of the region is published (`http` or `https`).
+    /// Where the PBF file of the region is published (`https`).
     public let pbfURL: URL
     /// The outline of the region. It is simplified: good for deciding which regions an area lies in, not for drawing.
     public let outline: [RegionPolygon]
-    /// The smallest box that contains the outline.
+    /// The smallest box that contains the outline. A region with parts on both sides of the antimeridian (Russia, Fiji) gets a
+    /// box that spans the world; it only filters, and the outline decides.
     public let boundingBox: BoundingBox
     /// The size of the outline for ordering regions, see ``RegionPolygon/approximateArea``.
     public let approximateArea: Double

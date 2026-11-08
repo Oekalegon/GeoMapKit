@@ -6,13 +6,13 @@ extension RegionIndex {
     /// feature has `properties` with `id`, `name`, an optional `parent` and `urls.pbf`, and a polygon or multipolygon outline
     /// of `[longitude, latitude]` points.
     ///
-    /// Regions without a PBF URL are left out: there is nothing to fetch for them. Every URL must be `http` or `https`, so a
-    /// bad index cannot point a download at a local file.
+    /// Regions without a PBF URL are left out: there is nothing to fetch for them. Every URL must be `https`, so a bad index
+    /// cannot point a download at a local file or at a connection that can be altered on the way.
     ///
     /// - Parameter data: The JSON.
     /// - Throws: ``RegionError/invalidIndex(_:)`` for malformed JSON, a region with no or a bad outline (non-finite or
     ///   out-of-range coordinates, a ring of fewer than 3 vertices, a geometry that is no polygon) or a URL that is not
-    ///   `http` or `https`; ``RegionError/duplicateRegion(_:)`` for a repeated ID.
+    ///   `https`; ``RegionError/duplicateRegion(_:)`` for a repeated ID.
     public init(geoJSON data: Data) throws {
         let collection: FeatureCollection
         do {
@@ -25,8 +25,8 @@ extension RegionIndex {
         for feature in collection.features {
             let properties = feature.properties
             guard let address = properties.urls?.pbf else { continue }
-            guard let url = URL(string: address), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else {
-                throw RegionError.invalidIndex("\(properties.id): the PBF address '\(address)' is not an http or https URL")
+            guard let url = URL(string: address), url.scheme?.lowercased() == "https", url.host != nil else {
+                throw RegionError.invalidIndex("\(properties.id): the PBF address '\(address)' is not an https URL")
             }
             let outline = try Self.outline(of: feature, id: properties.id)
             regions.append(

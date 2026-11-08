@@ -88,6 +88,7 @@ struct RegionIndexTests {
         #expect(fails(json([feature("x", west: 0, south: 0, east: 1, north: 1, geometry: line)])), "not a polygon")
         #expect(fails(json([feature("x", pbf: "file:///etc/passwd", west: 0, south: 0, east: 1, north: 1)])), "a file URL")
         #expect(fails(json([feature("x", pbf: "ftp://example.org/x.pbf", west: 0, south: 0, east: 1, north: 1)])))
+        #expect(fails(json([feature("x", pbf: "http://download.example.org/x.osm.pbf", west: 0, south: 0, east: 1, north: 1)])), "https only")
         #expect(fails(json([feature("x", west: 0, south: 0, east: 1, north: 1), feature("x", west: 2, south: 0, east: 3, north: 1)])))
         let far = "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[0,0],[200,0],[200,10],[0,0]]]]}"
         #expect(fails(json([feature("x", west: 0, south: 0, east: 1, north: 1, geometry: far)])), "longitude out of range")
@@ -135,6 +136,37 @@ struct RegionIndexTests {
         let selection = try world().regions(covering: box(8.5, 60, 11.5, 64))
         #expect(ids(selection) == ["ostlandet"])
         #expect(abs(selection.coveredShare - 0.5) < 0.05)
+    }
+
+    @Test("A region that adds under 1% of the area is not chosen, one that adds over 1% is")
+    func sliver() throws {
+        // A box 10 wide: the region `big` covers 0 to 9.95 (0.5% is left over), and a small one covers 9.95 to 10 or 9.8 to 10.
+        func selection(_ sliverWest: Double) throws -> [String] {
+            let index = try RegionIndex(geoJSON: json([
+                feature("big", west: 0, south: 0, east: 9.95, north: 10), feature("sliver", west: sliverWest, south: 0, east: 20, north: 10),
+            ]))
+            return ids(index.regions(covering: box(0, 0, 10, 10), samplesPerSide: 100))
+        }
+        #expect(try selection(9.96) == ["big"], "0.4% of the points")
+        #expect(try selection(9.8) == ["big", "sliver"] || (try selection(9.8)) == ["sliver", "big"], "2% of the points")
+    }
+
+    @Test("The grid is clamped to a sensible size")
+    func samples() throws {
+        let area = box(9, 59, 11, 61)
+        #expect(ids(try world().regions(covering: area, samplesPerSide: 0)) == ["ostlandet"])
+        #expect(ids(try world().regions(covering: area, samplesPerSide: 100_000)) == ["ostlandet"])
+    }
+
+    @Test("When there are too many regions the ones that cover most are kept, and the share is that of the kept ones")
+    func cap() throws {
+        let area = box(10.5, 59, 13, 61)
+        let both = try world().regions(covering: area)
+        let one = try world().regions(covering: area, maximumRegions: 1)
+        #expect(ids(one) == ["ostlandet"], "Ostlandet covers 60% of the box")
+        #expect(one.coveredShare < both.coveredShare && abs(one.coveredShare - 0.6) < 0.05)
+        let swedish = try world().regions(covering: box(11.5, 59, 14, 61), maximumRegions: 1)
+        #expect(ids(swedish) == ["sweden"], "not the smaller Ostlandet")
     }
 
     @Test("The number of regions is limited, and nothing is returned for an invalid area or an area nobody covers")
