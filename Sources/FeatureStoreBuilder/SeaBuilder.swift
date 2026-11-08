@@ -63,7 +63,6 @@ enum SeaBuilder {
 
     /// Builds the sea in a box from prepared coastlines; see ``build(rings:chains:box:)``.
     static func build(lines: Lines, box: CellRect) -> Result {
-        var result = Result()
         var pieces: [[PackedPoint]] = []
         var islands: [[PackedPoint]] = []
         var seaRings: [[PackedPoint]] = []
