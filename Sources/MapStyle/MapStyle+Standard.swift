@@ -33,9 +33,12 @@ extension MapStyle {
             // The outline of a lake, a fjord or a wide river, in the colour of the coastline; the stretches on a coast are left
             // out when the file is built, so that no line runs across a river mouth.
             .waterEdge: ClassStyle(stroke: .line(0x6FA8C8, ZoomValue((8, 0.5), (16, 1.2))), layer: 14),
-            // Piers and breakwaters: a line, or a filled area with an outline, a little darker than the land.
+            // Piers and breakwaters: white like the streets, with a fine grey casing; a filled area is white too.
             .pier: ClassStyle(
-                fill: FillStyle(color: .color(0xE5E0D6)), stroke: .line(0xCFC8BA, ZoomValue((14, 0.8), (18, 3))),
+                fill: FillStyle(color: .color(0xFFFFFF)),
+                stroke: StrokeStyle(
+                    color: .color(0xFFFFFF), width: LineWidth(points: ZoomValue((14, 0.8), (18, 3))),
+                    casing: .init(color: .color(0xBBBBBB), extraPoints: ZoomValue((14, 0), (15, 0.3), (18, 0.8)))),
                 visibleZoom: 14...24, layer: 15),
             // A national border: the boundary line on a wide, solid, transparent band of the same colour.
             .countryBorder: ClassStyle(
