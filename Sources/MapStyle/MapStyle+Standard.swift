@@ -23,11 +23,12 @@ extension MapStyle {
                     color: ZoomValue((14.5, MapColor(hex: 0xBFB5AB, alpha: 0)), (15, MapColor(hex: 0xBFB5AB))),
                     width: LineWidth(points: .constant(0.5))),
                 visibleZoom: 14...24, layer: 14),
-            // The names of the two regions a border separates are written along it.
+            // The names of the two regions a border separates are written small along it, each on the side of its region.
             .boundary: ClassStyle(
                 stroke: .line(0x9E7CB1, ZoomValue((8, 0.8), (16, 1.5)), dash: [6, 3]),
                 label: LabelStyle(
-                    size: .constant(10), color: MapColor(hex: 0x7B5A91), priority: 22, visibleZoom: 9...24),
+                    size: ZoomValue((9, 5.5), (14, 6.5)), color: MapColor(hex: 0x7B5A91), haloWidth: 0, priority: 22,
+                    visibleZoom: 9...24, placement: .besideLine),
                 layer: 20),
             // The border of a national park or a nature reserve: dark green on land, dark blue in the sea.
             .parkBorder: ClassStyle(
@@ -50,7 +51,8 @@ extension MapStyle {
                     color: .color(0x9E7CB1), width: LineWidth(points: ZoomValue((8, 0.8), (16, 1.5))), dash: [6, 3],
                     casing: .init(color: ZoomValue(constant: MapColor(hex: 0x9E7CB1, alpha: 115.0 / 255)), extraPoints: ZoomValue((8, 2), (12, 3), (16, 6)))),
                 label: LabelStyle(
-                    size: ZoomValue((6, 10), (12, 12)), color: MapColor(hex: 0x7B5A91), priority: 24, visibleZoom: 6...24),
+                    size: ZoomValue((6, 5.5), (10, 6.5), (14, 7.5)), color: MapColor(hex: 0x7B5A91), haloWidth: 0, priority: 24,
+                    visibleZoom: 6...24, placement: .besideLine),
                 layer: 20),
             .waterLine: ClassStyle(
                 stroke: .line(0x6FB3DB, ZoomValue((8, 0.6), (12, 1.2), (17, 3))),

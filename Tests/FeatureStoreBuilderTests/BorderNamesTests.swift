@@ -1,5 +1,6 @@
 import FeatureStore
 import Foundation
+import GeoCore
 import Testing
 
 @testable import FeatureStoreBuilder
@@ -66,5 +67,69 @@ struct BorderNamesTests {
         world.relation(50, [(10, "outer", 1)], [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2"), ("name", "Norge")])
         world.relation(51, [(10, "outer", 1)], [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2"), ("name", "Norge")])
         #expect(try names(of: .countryBorder, in: &world) == ["Norge"])
+    }
+
+    // MARK: Sides
+
+    private let level2: [(String, String)] = [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2")]
+
+    /// Two regions that share the border way 10, which runs from west to east: `North` above it on the map and `South` below.
+    /// Both rings run counter-clockwise, as relations in OSM do for some countries (others run clockwise).
+    private func neighbours(_ world: inout SyntheticWorld, wayNodes: [Int64] = [1, 2, 3], north: Bool = true, south: Bool = true) {
+        world.node(1, 0.5, 1.0); world.node(2, 1.5, 1.0); world.node(3, 2.5, 1.0)
+        world.node(4, 2.5, 0.5); world.node(5, 0.5, 0.5)
+        world.node(7, 0.5, 1.5); world.node(8, 2.5, 1.5)
+        world.way(10, wayNodes, level2)
+        world.way(11, [3, 4, 5]); world.way(12, [5, 1])
+        world.way(13, [1, 7, 8]); world.way(14, [8, 3])
+        if north {
+            world.relation(50, [(10, "outer", 1), (11, "outer", 1), (12, "outer", 1)], level2 + [("name", "North")])
+        }
+        if south {
+            world.relation(51, [(10, "outer", 1), (13, "outer", 1), (14, "outer", 1)], level2 + [("name", "South")])
+        }
+    }
+
+    @Test("Each region is named on its side of the border way, left and right of the way's direction")
+    func sides() throws {
+        var world = SyntheticWorld()
+        neighbours(&world)
+        #expect(try names(of: .countryBorder, in: &world) == ["North\nSouth"])
+    }
+
+    @Test("A way stored the other way round swaps the sides")
+    func reversedWay() throws {
+        var world = SyntheticWorld()
+        neighbours(&world, wayNodes: [3, 2, 1])
+        // The rings now do not close at the nodes of way 10 in the order the ways are given, but the nodes are the same.
+        #expect(try names(of: .countryBorder, in: &world) == ["South\nNorth"])
+    }
+
+    @Test("A region whose ring cannot be followed takes the side that is free")
+    func unknownSide() throws {
+        var world = SyntheticWorld()
+        // The southern region is only a name on this way: no ring to follow.
+        neighbours(&world, south: false)
+        world.relation(51, [(10, "outer", 1)], level2 + [("name", "South")])
+        #expect(try names(of: .countryBorder, in: &world) == ["North\nSouth"])
+    }
+
+    @Test("A region on one side only is named on that side alone")
+    func oneSide() throws {
+        var world = SyntheticWorld()
+        neighbours(&world, south: false)
+        #expect(try names(of: .countryBorder, in: &world) == ["North\n"])
+    }
+
+    @Test("A ring clockwise on the map has its region on the right")
+    func clockwise() {
+        func ring(_ points: [(Double, Double)]) -> [Coordinate] { points.map { Coordinate(latitude: $0.0, longitude: $0.1) } }
+        let north = ring([(0, 0), (1, 0), (1, 1), (0, 1)])
+        #expect(BoundarySides.isClockwise(north) == true, "north, east, south, west")
+        #expect(BoundarySides.isClockwise(north.reversed()) == false)
+        #expect(BoundarySides.isClockwise(ring([(0, 0), (1, 1)])) == nil, "no area")
+        #expect(BoundarySides.isClockwise(ring([(0, 0), (1, 1), (2, 2)])) == nil, "a straight line has none")
+        // Across the antimeridian the longitudes jump from 179 to -179.
+        #expect(BoundarySides.isClockwise(ring([(0, 179), (1, 179), (1, -179), (0, -179)])) == true)
     }
 }

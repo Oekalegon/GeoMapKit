@@ -1,5 +1,5 @@
 extension LabelStyle: Codable {
-    private enum Keys: String, CodingKey, CaseIterable { case size, color, haloColor, haloWidth, priority, visibleZoom }
+    private enum Keys: String, CodingKey, CaseIterable { case size, color, haloColor, haloWidth, priority, visibleZoom, placement }
 
     public init(from decoder: Decoder) throws {
         try decoder.requireKnownKeys(Keys.self)
@@ -17,7 +17,8 @@ extension LabelStyle: Codable {
             size: try c.decodeZoomNumber(forKey: .size), color: try c.decode(MapColor.self, forKey: .color),
             haloColor: try c.decodeIfPresent(MapColor.self, forKey: .haloColor) ?? .white,
             haloWidth: try c.decodeNumber(forKey: .haloWidth, default: 2),
-            priority: try c.decodeIfPresent(Int.self, forKey: .priority) ?? 0, visibleZoom: range)
+            priority: try c.decodeIfPresent(Int.self, forKey: .priority) ?? 0, visibleZoom: range,
+            placement: try c.decodeIfPresent(LabelPlacement.self, forKey: .placement) ?? .onLine)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -28,5 +29,6 @@ extension LabelStyle: Codable {
         try c.encode(haloWidth, forKey: .haloWidth)
         try c.encode(priority, forKey: .priority)
         try c.encode([visibleZoom.lowerBound, visibleZoom.upperBound], forKey: .visibleZoom)
+        try c.encode(placement, forKey: .placement)
     }
 }

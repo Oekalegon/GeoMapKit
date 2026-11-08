@@ -1,3 +1,5 @@
+import FeatureStore
+
 /// Chooses where labels go so that none overlaps another label or a point symbol.
 ///
 /// Greedy and deterministic: candidates are tried in order of priority (highest first, then OSM ID), and each takes
@@ -50,12 +52,10 @@ public enum LabelPlacer {
             if let maximumCount, placed.count >= maximumCount { break }
             switch entry.item {
             case .line(let candidate):
-                let size = measure(candidate.text, candidate.fontSize)
-                guard size.width > 0, size.height > 0 else { continue }
-                let offsets = characterOffsets?(candidate.text, candidate.fontSize)
+                let parts = lineParts(of: candidate, characterOffsets: characterOffsets, measure: measure)
                 let remaining = maximumCount.map { $0 - placed.count }
                 placed += placeAlongLine(
-                    candidate, size: size, offsets: offsets, viewWidth: viewWidth, viewHeight: viewHeight, padding: padding,
+                    candidate, parts: parts, viewWidth: viewWidth, viewHeight: viewHeight, padding: padding,
                     remaining: remaining, occupied: &occupied, state: &lineState)
             case .point(let candidate):
                 guard !seen.contains(candidate.objectID) else { continue }

@@ -13,12 +13,15 @@ public struct LabelStyle: Sendable, Equatable {
     /// The zoom range in which this label is shown. It can be narrower than the class's own `visibleZoom`, so a
     /// name appears later than its shape.
     public var visibleZoom: ClosedRange<Double>
+    /// For the name of a line: on the line, or beside it. Names of points and areas ignore it.
+    public var placement: LabelPlacement
 
     /// Creates a label style.
     public init(
         size: ZoomValue<Double>, color: MapColor, haloColor: MapColor = .white, haloWidth: Double = 2,
         priority: Int = 0,
-        visibleZoom: ClosedRange<Double> = 0...24
+        visibleZoom: ClosedRange<Double> = 0...24,
+        placement: LabelPlacement = .onLine
     ) {
         self.size = size
         self.color = color
@@ -26,5 +29,6 @@ public struct LabelStyle: Sendable, Equatable {
         self.haloWidth = haloWidth
         self.priority = priority
         self.visibleZoom = visibleZoom
+        self.placement = placement
     }
 }

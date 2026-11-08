@@ -28,11 +28,112 @@ struct LineLabelTests {
             style: LabelStyle(size: ZoomValue(constant: 10), color: .black, priority: priority))
     }
 
+    /// A line whose name goes beside it, as that of a border does.
+    private func border(_ text: String, _ points: [(Double, Double)]) -> LineLabelCandidate {
+        LineLabelCandidate(
+            objectID: 1, text: text, points: points.map { ScreenPoint(x: $0.0, y: $0.1) }, fontSize: 10,
+            style: LabelStyle(size: ZoomValue(constant: 10), color: .black, haloWidth: 0, placement: .besideLine))
+    }
+
+    /// The distance from the line to the middle of the text beside it: half the font size and 3.5 points of clear space.
+    private let lift = 8.5
+
     private func place(
         _ lines: [LineLabelCandidate], points: [LabelCandidate] = [], maximumCount: Int? = nil, width: Double = 400
     ) -> [PlacedLabel] {
         LabelPlacer.place(
             points, lines: lines, viewWidth: width, viewHeight: 300, maximumCount: maximumCount, measure: measure)
+    }
+
+    // MARK: Beside the line
+
+    @Test("The names of a border go on its two sides: on a line to the east the left name above it, the right one below")
+    func bothSides() throws {
+        let labels = place([border("North\nSouth", [(20, 100), (380, 100)])])
+        let north = try #require(labels.first { $0.text == "North" }), south = try #require(labels.first { $0.text == "South" })
+        #expect(north.glyphs.allSatisfy { abs($0.position.y - (100 - lift)) < 1e-9 && abs($0.angle) < 1e-9 }, "above the line")
+        #expect(south.glyphs.allSatisfy { abs($0.position.y - (100 + lift)) < 1e-9 && abs($0.angle) < 1e-9 }, "below the line")
+        #expect(labels.count == 2)
+        for label in labels {
+            let first = try #require(label.glyphs.first), last = try #require(label.glyphs.last)
+            #expect(abs((first.position.x + last.position.x) / 2 - 200) < 1e-9, "both centred on the same place")
+        }
+    }
+
+    @Test("On a line to the west the left name is below it, so each name stays on the side of its region")
+    func reversedLine() throws {
+        let labels = place([border("North\nSouth", [(380, 100), (20, 100)])])
+        let north = try #require(labels.first { $0.text == "North" }), south = try #require(labels.first { $0.text == "South" })
+        #expect(north.glyphs.allSatisfy { abs($0.position.y - (100 + lift)) < 1e-9 })
+        #expect(south.glyphs.allSatisfy { abs($0.position.y - (100 - lift)) < 1e-9 })
+        #expect(north.glyphs.map(\.position.x) == north.glyphs.map(\.position.x).sorted(), "still read from left to right")
+    }
+
+    @Test("On a vertical line the text reads upwards and the sides are west and east")
+    func verticalSides() throws {
+        // To the north the left of the line is the west.
+        var labels = place([border("West\nEast", [(200, 290), (200, 10)])])
+        var west = try #require(labels.first { $0.text == "West" }), east = try #require(labels.first { $0.text == "East" })
+        #expect(west.glyphs.allSatisfy { abs($0.position.x - (200 - lift)) < 1e-9 && abs($0.angle + .pi / 2) < 1e-9 })
+        #expect(east.glyphs.allSatisfy { abs($0.position.x - (200 + lift)) < 1e-9 })
+        // To the south the left of the line is the east.
+        labels = place([border("West\nEast", [(200, 10), (200, 290)])])
+        west = try #require(labels.first { $0.text == "West" })
+        east = try #require(labels.first { $0.text == "East" })
+        #expect(west.glyphs.allSatisfy { abs($0.position.x - (200 + lift)) < 1e-9 })
+        #expect(east.glyphs.allSatisfy { abs($0.position.x - (200 - lift)) < 1e-9 })
+    }
+
+    @Test("A slanted line has the names on either side, turned with it")
+    func slantedSides() throws {
+        // Rising to the north-east: the left of the line is the north-west.
+        let labels = place([border("Up\nDown", [(20, 250), (300, 50)])])
+        let up = try #require(labels.first { $0.text == "Up" }), down = try #require(labels.first { $0.text == "Down" })
+        let angle = Foundation.atan2(-200.0, 280.0)
+        for label in labels { #expect(label.glyphs.allSatisfy { abs($0.angle - angle) < 1e-9 }) }
+        // The middle of the line is at (160, 150); the names sit a lift away from it, on its two sides.
+        func middle(_ label: PlacedLabel) -> ScreenPoint {
+            ScreenPoint(
+                x: label.glyphs.map(\.position.x).reduce(0, +) / Double(label.glyphs.count),
+                y: label.glyphs.map(\.position.y).reduce(0, +) / Double(label.glyphs.count))
+        }
+        let a = middle(up), b = middle(down)
+        #expect(abs(hypot(a.x - 160, a.y - 150) - lift) < 1e-6 && abs(hypot(b.x - 160, b.y - 150) - lift) < 1e-6)
+        #expect(a.x < b.x && a.y < b.y, "up is the north-west side")
+    }
+
+    @Test("A name with no sides is written above the line, not on it")
+    func unsided() throws {
+        let label = try #require(place([border("Norge – Sverige", [(20, 100), (380, 100)])]).first)
+        #expect(label.text == "Norge – Sverige")
+        #expect(label.glyphs.allSatisfy { abs($0.position.y - (100 - lift)) < 1e-9 })
+    }
+
+    @Test("A border with a region on one side only has one name")
+    func oneSidedName() throws {
+        let labels = place([border("Norge\n", [(20, 100), (380, 100)])])
+        #expect(labels.map(\.text) == ["Norge"])
+        #expect(labels.first?.glyphs.allSatisfy { abs($0.position.y - (100 - lift)) < 1e-9 } == true)
+    }
+
+    @Test("The names of both sides are placed together or not at all")
+    func together() {
+        // 'North' and 'South' need 30 points each; the line is 25 long.
+        #expect(place([border("North\nSouth", [(100, 100), (125, 100)])]).isEmpty)
+        // Two names, so the count limit of one leaves none.
+        #expect(place([border("North\nSouth", [(20, 100), (380, 100)])], maximumCount: 1).isEmpty)
+    }
+
+    @Test("A border does not run over a point label")
+    func beside() {
+        // A symbol with a label just above the middle of the line.
+        let symbol = LabelCandidate(
+            objectID: 9, text: "Hut", anchor: ScreenPoint(x: 200, y: 92), symbolRadius: 30, fontSize: 10,
+            style: LabelStyle(size: ZoomValue(constant: 10), color: .black, priority: 50))
+        let labels = place([border("North\nSouth", [(20, 100), (380, 100)])], points: [symbol])
+        for label in labels where label.text == "North" || label.text == "South" {
+            for glyph in label.glyphs { #expect(hypot(glyph.position.x - 200, glyph.position.y - 92) > 30) }
+        }
     }
 
     // MARK: Placement
@@ -222,6 +323,16 @@ struct LineLabelTests {
         for featureClass in [FeatureClass.roadMajor, .roadMinor, .path, .waterLine, .boundary, .countryBorder] {
             #expect(MapStyle.watch.style(for: featureClass)?.label == nil, "\(featureClass)")
         }
+    }
+
+    @Test("Border names are small, beside the border, and have no halo; street names are on the street")
+    func borderLabelStyle() throws {
+        for featureClass in [FeatureClass.boundary, .countryBorder] {
+            let label = try #require(MapStyle.standard.style(for: featureClass)?.label)
+            #expect(label.placement == .besideLine && label.haloWidth == 0, "\(featureClass)")
+            for zoom in [6.0, 9, 12, 16, 20] { #expect(label.size.value(atZoom: zoom) <= 8, "\(featureClass) at \(zoom)") }
+        }
+        #expect(MapStyle.standard.style(for: .roadMinor)?.label?.placement == .onLine)
     }
 
     // MARK: Drawing
