@@ -7,8 +7,8 @@ import Testing
 
 @Suite("Town index")
 struct TownIndexTests {
-    private func polygon(_ rings: [[(Double, Double)]]) throws -> TownIndex.Polygon {
-        try #require(TownIndex.Polygon(rings: rings.map { $0.map { (x: $0.0, y: $0.1) } }))
+    private func polygon(_ rings: [[(Double, Double)]]) throws -> AreaPolygon {
+        try #require(AreaPolygon(rings: rings.map { $0.map { (x: $0.0, y: $0.1) } }))
     }
 
     @Test("Points in a concave polygon, in its notch, in its hole and outside it")
@@ -21,12 +21,12 @@ struct TownIndexTests {
         // A square with a square hole: even-odd, so the hole is outside.
         let ring = try polygon([[(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)], [(4, 4), (6, 4), (6, 6), (4, 6), (4, 4)]])
         #expect(ring.contains(x: 2, y: 2) && !ring.contains(x: 5, y: 5) && ring.contains(x: 8, y: 5))
-        #expect(TownIndex.Polygon(rings: [[(x: 0, y: 0), (x: 1, y: 1)]]) == nil, "a ring with fewer than four points is not an area")
+        #expect(AreaPolygon(rings: [[(x: 0, y: 0), (x: 1, y: 1)]]) == nil, "a ring with fewer than four points is not an area")
     }
 
     @Test("A polygon larger than the grid limit is still found, small ones too, and a miss is a miss")
     func largePolygons() throws {
-        var layer = TownIndex.Layer()
+        var layer = AreaLayer()
         layer.add(try polygon([[(0, 0), (30_000, 0), (30_000, 30_000), (0, 30_000), (0, 0)]]))      // 90,000 cells: kept in the list
         layer.add(try polygon([[(40_000, 0), (40_050, 0), (40_050, 50), (40_000, 50), (40_000, 0)]]))  // one cell: in the grid
         #expect(layer.contains(x: 15_000, y: 15_000) && layer.contains(x: 29_999, y: 1))

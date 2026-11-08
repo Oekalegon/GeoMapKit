@@ -68,4 +68,12 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     case roadArea = 30
     /// Service roads (`highway=service`): driveways, parking aisles, ways through a yard. Runnable like any street, but drawn finer than the streets. Added in rule table version 11.
     case roadService = 31
+    /// The outline of a lake, a fjord or a wide river: the edge of a `waterArea`, left out where it lies on a coastline. Added in rule table version 13.
+    case waterEdge = 32
+    /// The border of a national park, a nature reserve or another protected area, on land. Added in rule table version 13.
+    case parkBorder = 33
+    /// The part of the border of a protected area that lies in the sea. Added in rule table version 13.
+    case parkBorderSea = 34
+    /// Piers, breakwaters and groynes (`man_made=pier`, `breakwater`, `groyne`). Added in rule table version 13.
+    case pier = 35
 }

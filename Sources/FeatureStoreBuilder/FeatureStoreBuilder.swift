@@ -51,10 +51,14 @@ public struct FeatureStoreBuilder: Sendable {
         var emitter = FeatureEmitter(writer: writer, profile: profile, columns: range?.columns, rows: range?.rows)
         if let range { emitter.report.cellsInArea = range.columns.count * range.rows.count }
 
-        let suppressed = try storeRelations(of: extract, into: &emitter)
-        try storeWays(of: extract, suppressed: suppressed, into: &emitter)
+        var shore = ShoreContext(extract: extract, classifier: classifier)
+        let sea = try range.flatMap { try prepareSea(of: extract, columns: $0.columns, rows: $0.rows, into: &emitter) }
+        shore.sea = sea.map { SeaLookup(rings: $0.whole.rings) }
+
+        let suppressed = try storeRelations(of: extract, shore: &shore, into: &emitter)
+        try storeWays(of: extract, suppressed: suppressed, shore: &shore, into: &emitter)
         try storeNodes(of: extract, into: &emitter)
-        if let range { try storeSea(of: extract, columns: range.columns, rows: range.rows, into: &emitter) }
+        if let range, let sea { try storeSea(sea, columns: range.columns, rows: range.rows, into: &emitter) }
         return BuildResult(data: try emitter.writer.data(), report: emitter.report)
     }
 

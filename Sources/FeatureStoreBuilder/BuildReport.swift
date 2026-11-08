@@ -63,6 +63,12 @@ public struct BuildReport: Sendable, Equatable {
     /// Coastline ends inside the stored area, or coastline ways with a node missing: when this is not zero no sea was
     /// built, because the side the water is on could not be followed to the border of the area.
     public var seaOpenEnds = 0
+    /// Stretches of coastline left out because they run through the water of a river (they close its mouth).
+    public var coastlineStretchesInRivers = 0
+    /// Stretches of a river's centre line left out because they lie in the river's own area.
+    public var waterLineStretchesInWater = 0
+    /// Stretches of the border of protected areas that lie in the sea.
+    public var parkBorderStretchesInSea = 0
     /// The number of stored features per class (each feature counted once, not per band or piece).
     public var featuresByClass: [FeatureClass: Int] = [:]
 

@@ -5,7 +5,9 @@ extension FeatureStoreBuilder {
     /// Stores every relation in the relation table and assembles multipolygons into features.
     ///
     /// - Returns: The IDs of the ways that must not be stored separately.
-    func storeRelations(of extract: OSMExtract, into emitter: inout FeatureEmitter) throws -> Set<Int64> {
+    func storeRelations(
+        of extract: OSMExtract, shore: inout ShoreContext, into emitter: inout FeatureEmitter
+    ) throws -> Set<Int64> {
         var suppressed = Set<Int64>()
         for position in extract.relations.indices {
             if position % 1024 == 0 { try Task.checkCancellation() }
@@ -25,16 +27,20 @@ extension FeatureStoreBuilder {
                 emitter.report.relationsStored += 1
             }
 
-            guard relation.tagValue(forKey: "type") == "multipolygon" else { continue }
-            try assemble(item, extract: extract, suppressed: &suppressed, into: &emitter)
+            // The border of a protected area is often a relation of type `boundary` whose ways carry no tags of their own.
+            let type = relation.tagValue(forKey: "type")
+            guard type == "multipolygon" || (type == "boundary" && isProtectedArea(relation.orderedTags)) else { continue }
+            try assemble(item, extract: extract, suppressed: &suppressed, shore: &shore, into: &emitter)
         }
         return suppressed
     }
 
     private func assemble(
-        _ item: ExtractedRelation, extract: OSMExtract, suppressed: inout Set<Int64>, into emitter: inout FeatureEmitter
+        _ item: ExtractedRelation, extract: OSMExtract, suppressed: inout Set<Int64>, shore: inout ShoreContext,
+        into emitter: inout FeatureEmitter
     ) throws {
         let relation = item.relation
+        let isPark = isProtectedArea(relation.orderedTags)
         var members: [MultipolygonMember] = []
         var outerWays: [Int64] = []
         for member in relation.members where member.type == .way {
@@ -46,7 +52,12 @@ extension FeatureStoreBuilder {
                 continue
             }
             // An untagged member way has no features of its own; its geometry is part of the area.
-            if extract.ways.tags(at: way).isEmpty { suppressed.insert(member.id) }
+            // A way that is itself the border of a protected area is part of the relation's border, and drawn once.
+            if extract.ways.tags(at: way).isEmpty
+                || (isPark && classifier.classify(extract.ways.tags(at: way), shape: .openWay).featureClass == .parkBorder)
+            {
+                suppressed.insert(member.id)
+            }
             let nodeIDs = Array(extract.ways.nodeIDs(at: way))
             let points = nodeIDs.compactMap { extract.nodes.index(ofID: $0).map { Self.packed(extract.nodes.coordinate(at: $0)) } }
             members.append(MultipolygonMember(
@@ -83,13 +94,30 @@ extension FeatureStoreBuilder {
                     classification: shore, objectType: .relation, objectID: relation.id, tags: tags, geometry: .lines(rings)))
                 return
             }
+            if classification.featureClass == .parkBorder {
+                try storeParkBorder(
+                    classification, objectType: .relation, objectID: relation.id, tags: tags, lines: rings, shore: shore,
+                    into: &emitter)
+                return
+            }
             try emitter.emit(FeatureSpec(
                 classification: classification, objectType: .relation, objectID: relation.id, tags: tags,
                 geometry: .rings(rings)))
+            if classification.featureClass == .waterArea {
+                try storeWaterEdge(
+                    of: rings, classification, objectType: .relation, objectID: relation.id, tags: tags, shore: &shore,
+                    into: &emitter)
+            }
         } else {
             emitter.report.multipolygonsIncomplete += 1
             let lines = assembly.outlines.filter { $0.count >= 2 }
             guard !lines.isEmpty else { return }
+            if classification.featureClass == .parkBorder {
+                try storeParkBorder(
+                    classification, objectType: .relation, objectID: relation.id, tags: tags, lines: lines,
+                    extraFlags: [.incomplete], shore: shore, into: &emitter)
+                return
+            }
             // Outline only: a line feature carrying the `incomplete` flag, never filled.
             let outline = Classification(
                 featureClass: classification.featureClass, subclass: classification.subclass, kind: .line,
@@ -98,6 +126,11 @@ extension FeatureStoreBuilder {
                 classification: outline, objectType: .relation, objectID: relation.id, tags: tags,
                 geometry: .lines(lines), extraFlags: [.incomplete]))
         }
+    }
+
+    /// Whether the tags of a relation make it the border of a protected area.
+    private func isProtectedArea(_ tags: [OSMTag]) -> Bool {
+        classifier.classify(ClassifierTagArray(tags), shape: .multipolygon).featureClass == .parkBorder
     }
 
     static func storedType(_ type: OSMMemberType) -> StoredObjectType {
