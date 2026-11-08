@@ -51,9 +51,10 @@ extension FeatureClassifier {
                 [("secondary", 4), ("tertiary", 5), ("motorway_link", 9), ("trunk_link", 10),
                  ("primary_link", 11), ("secondary_link", 12), ("tertiary_link", 13)]),
             make(.roadMinor, .mid, watch: true, [("unclassified", 1)]),
-            // Streets belong in the mid band: a map at zoom 14 without them is a map of the main roads and the paths only.
-            make(.roadMinor, .mid, watch: true, [("residential", 2), ("living_street", 4), ("pedestrian", 5), ("road", 6)]),
-            make(.roadMinor, .detail, watch: true, [("service", 3)]))))
+            // Every street belongs in the mid band, with the paths and tracks: a runner can run them as well as the paths, and
+            // a map at zoom 14 without them is a map of the main roads and the paths only.
+            make(.roadMinor, .mid, watch: true,
+                [("residential", 2), ("service", 3), ("living_street", 4), ("pedestrian", 5), ("road", 6)]))))
         rules.append(ClassifierRule("railway", merged(
             make(.railway, .overview, watch: true, [("rail", 1), ("light_rail", 2), ("narrow_gauge", 3), ("funicular", 4)]),
             make(.railway, .detail, watch: true, [("tram", 5)]),

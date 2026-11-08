@@ -48,7 +48,7 @@ struct FeatureClassifierTests {
         Case(tags: ["highway": "unclassified"], featureClass: .roadMinor, band: .mid, watch: true),
         Case(tags: ["highway": "residential"], featureClass: .roadMinor, band: .mid, watch: true),
         Case(tags: ["highway": "living_street"], featureClass: .roadMinor, band: .mid, watch: true),
-        Case(tags: ["highway": "service"], featureClass: .roadMinor, band: .detail, watch: true),
+        Case(tags: ["highway": "service"], featureClass: .roadMinor, band: .mid, watch: true),
         Case(tags: ["highway": "pedestrian"], featureClass: .roadMinor, band: .mid, watch: true),
         Case(tags: ["railway": "rail"], featureClass: .railway, band: .overview, watch: true),
         Case(tags: ["railway": "funicular"], featureClass: .railway, band: .overview, watch: true),

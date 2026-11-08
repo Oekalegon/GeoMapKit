@@ -361,7 +361,7 @@ struct FeatureStoreBuilderTests {
         #expect(result.report.seaOpenEnds > 0 && result.report.seaPolygons == 0 && result.report.featuresByClass[.sea] == nil)
     }
 
-    @Test("Residential streets and buildings are in the mid band, service roads and tags only in the detail band, the Watch copy has the street but no house")
+    @Test("Every street and the buildings are in the mid band, the Watch copy has the streets but no house")
     func streetsAndBuildingsInTheMidBand() throws {
         var world = SyntheticWorld()
         world.node(1, 0.3, 1.5); world.node(2, 2.7, 1.5)
@@ -381,14 +381,14 @@ struct FeatureStoreBuilderTests {
         let file = try FeatureStoreFile(data: full.data)
         let mid = try ids(file, .mid), detail = try ids(file, .detail), overview = try ids(file, .overview)
         #expect(mid.contains(100) && mid.contains(200), "the street and the house are in the mid band")
-        #expect(!mid.contains(101) && detail.contains(101), "a service road is in the detail band only")
+        #expect(mid.contains(101) && detail.contains(101), "a service road is in the mid band with the paths")
         #expect(detail.contains(201) && !mid.contains(201), "a shed is in the detail band; the mid band could not keep it")
         #expect(full.report.ringsTooSmallForMid >= 1)
         #expect(!overview.contains(100) && !overview.contains(200), "nothing of the two in the overview band")
         let watch = try FeatureStoreBuilder(profile: .watch).build(from: extract)
         let watchFile = try FeatureStoreFile(data: watch.data)
         let watchMid = try ids(watchFile, .mid)
-        #expect(watchMid.contains(100), "the Watch copy has the street in its mid band")
+        #expect(watchMid.contains(100) && watchMid.contains(101), "the Watch copy has the streets in its mid band")
         let watchDetail = try ids(watchFile, .detail)
         #expect(!watchMid.contains(200) && !watchDetail.contains(200), "and no house")
     }
