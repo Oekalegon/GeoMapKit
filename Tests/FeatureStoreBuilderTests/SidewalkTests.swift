@@ -127,7 +127,4 @@ struct SidewalkTests {
         for id: Int64 in [603, 606, 607, 608, 609] { #expect(try classID(of: id, in: file) == FeatureClass.path.rawValue, "way \(id)") }
         #expect(result.report.footwaysInTown == 4 && result.report.footwaysBesideRoads == 0)
     }
-
-    @Test("The rule table version is 9")
-    func version() { #expect(FeatureClassifier.version == 9) }
 }

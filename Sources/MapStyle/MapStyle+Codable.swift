@@ -27,6 +27,8 @@ extension MapStyle: Codable {
         // Style files written before `countryBorder` existed draw national borders with the boundary style, as they did
         // when those borders were still classed as boundaries; without this they would lose them.
         if classes[.countryBorder] == nil, let boundary = classes[.boundary] { classes[.countryBorder] = boundary }
+        // Service roads were part of `roadMinor` before `roadService` existed; a style file from then draws them as streets.
+        if classes[.roadService] == nil, let street = classes[.roadMinor] { classes[.roadService] = street }
         self.init(
             name: try c.decode(String.self, forKey: .name), background: try c.decode(MapColor.self, forKey: .background),
             classes: classes, attribution: try c.decodeIfPresent(AttributionDisplay.self, forKey: .attribution) ?? .full,

@@ -27,7 +27,7 @@ struct InspectCommandTests {
         // The tiny file has one way, which crosses several cells; it has no tags, so it is `other`.
         #expect(report.objectsByClass.first { $0.name == "other" }?.objects == 1)
         #expect(report.objectsByClass.reduce(0) { $0 + $1.objects } == 1)
-        #expect(report.objectsByClass.count == 31, "every class is listed, also the empty ones")
+        #expect(report.objectsByClass.count == 32, "every class is listed, also the empty ones")
         #expect(report.inspectedClass == nil && report.topTags.isEmpty)
     }
 

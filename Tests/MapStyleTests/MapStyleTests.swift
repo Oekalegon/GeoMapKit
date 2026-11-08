@@ -96,6 +96,28 @@ struct MapStyleTests {
         #expect(MapStyle.watch.style(for: .railway)?.stroke?.dash.isEmpty == true)
     }
 
+    @Test func atZoomElevenAVillageDiffersFromTheFieldsAroundIt() throws {
+        let classes = MapStyle.standard.visibleClasses(atZoom: 11)
+        #expect(classes.contains(.landuseUrban) && classes.contains(.landcover) && classes.contains(.forest))
+        func colour(_ featureClass: FeatureClass) throws -> MapColor {
+            try #require(MapStyle.standard.style(for: featureClass)?.fill?.color.value(atZoom: 11))
+        }
+        #expect(try colour(.landuseUrban) != colour(.landcover))
+        #expect(try colour(.landuseUrban) != MapStyle.standard.background && colour(.landcover) != MapStyle.standard.background)
+    }
+
+    @Test func serviceRoadsAreFinerThanStreetsAndShowWithThem() throws {
+        let service = try #require(MapStyle.standard.style(for: .roadService))
+        let street = try #require(MapStyle.standard.style(for: .roadMinor))
+        #expect(service.visibleZoom == street.visibleZoom, "they show wherever the streets and the paths show")
+        #expect(service.layer == street.layer && service.casingLayer == street.casingLayer, "so crossings join")
+        let serviceWidth = try #require(service.stroke?.width.points.value(atZoom: 16))
+        let streetWidth = try #require(street.stroke?.width.points.value(atZoom: 16))
+        #expect(serviceWidth < streetWidth)
+        #expect(service.stroke?.width.ground?.defaultLanes == 1 && street.stroke?.width.ground?.defaultLanes == 2)
+        #expect(MapStyle.watch.style(for: .roadService) != nil, "the Watch copy has them in its mid band")
+    }
+
     @Test func aRoadAreaIsFilledAndDrawnUnderTheRoads() throws {
         let area = try #require(MapStyle.standard.style(for: .roadArea))
         #expect(area.fill != nil, "a surface, filled")
@@ -116,7 +138,7 @@ struct MapStyleTests {
 
     @Test func watchStyleDrawsOnlyTheWatchProfile() {
         let watchClasses: Set<FeatureClass> = [
-            .peak, .place, .poiAnchor, .path, .track, .roadMajor, .roadMinor, .railway, .waterLine, .waterArea,
+            .peak, .place, .poiAnchor, .path, .track, .roadMajor, .roadMinor, .roadService, .railway, .waterLine, .waterArea,
             .forest, .landcover, .powerLine, .aerialway, .piste, .sea,
         ]
         #expect(Set(MapStyle.watch.classes.keys) == watchClasses)
@@ -133,6 +155,16 @@ struct MapStyleTests {
             #expect(style.stroke?.dash.isEmpty ?? true, "\(featureClass)")
             if featureClass != .place { #expect(style.label == nil, "\(featureClass)") }
         }
+    }
+
+    @Test func buildingsShowFromZoomFourteenAsAFillAndGetTheirOutlineByFifteen() throws {
+        let building = try #require(MapStyle.standard.style(for: .building))
+        #expect(building.visibleZoom.lowerBound == 14 && building.fill != nil)
+        let outline = try #require(building.stroke?.color)
+        #expect(outline.value(atZoom: 14).alpha == 0, "no outline at zoom 14")
+        #expect(outline.value(atZoom: 15).alpha == 1, "the full outline at zoom 15")
+        #expect(outline.value(atZoom: 14.75).alpha > 0 && outline.value(atZoom: 14.75).alpha < 1)
+        #expect(MapStyle.standard.visibleClasses(atZoom: 14).contains(.building))
     }
 
     @Test func visibleClassesFollowZoomAndLayerOrder() {
@@ -175,8 +207,8 @@ struct MapStyleTests {
 
     @Test func noClassShowsBelowTheBandThatHoldsItsGeometry() {
         // Lowest bands from the rule table: detail starts at zoom 15, mid at zoom 12.
-        let detailOnly: [FeatureClass] = [.building, .poi, .poiAnchor, .tree, .barrier, .transportStop, .roadPoint]
-        let midOrHigher: [FeatureClass] = [.peak, .path, .track, .landcover, .landuseUrban, .piste, .powerLine, .aerialway]
+        let detailOnly: [FeatureClass] = [.poi, .poiAnchor, .tree, .barrier, .transportStop, .roadPoint]
+        let midOrHigher: [FeatureClass] = [.peak, .path, .track, .piste, .powerLine, .aerialway, .building]
         for style in [MapStyle.standard, MapStyle.watch] {
             for featureClass in detailOnly {
                 if let lower = style.style(for: featureClass)?.visibleZoom.lowerBound {

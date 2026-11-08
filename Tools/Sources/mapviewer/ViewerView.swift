@@ -162,7 +162,7 @@ struct ViewerView: View {
             message = nil
             let built = file.classifierVersion, current = Int(FeatureClassifier.version)
             outdatedNote = built < current
-                ? "Built with rule table \(built), current is \(current): rebuild to get the sea, sidewalks and road areas."
+                ? "Built with rule table \(built), current is \(current): rebuild to get the newest map classes and bands."
                 : nil
         } catch {
             store = nil

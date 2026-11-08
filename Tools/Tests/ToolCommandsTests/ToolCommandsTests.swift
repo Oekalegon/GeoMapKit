@@ -295,6 +295,10 @@ struct BuildCommandTests {
         built.coastlineWays = 12; built.seaPolygons = 2; built.seaIslands = 5
         #expect(text(built).contains("12 coastline ways, 2 sea polygons, 5 islands"))
         #expect(!text(built).contains("no sea was drawn"))
+        built.ringsTooSmallForMid = 16_239; built.footwaysBesideRoads = 3_710; built.footwaysInTown = 6_973
+        built.townAreas = 11_664; built.greenAreas = 24_093
+        #expect(text(built).contains("rings too small for the mid band: 16,239"))
+        #expect(text(built).contains("3,710 taken for sidewalks, 6,973 more in built-up areas (from 11,664 built-up and 24,093 green areas)"))
         var broken = BuildReport()
         broken.coastlineWays = 3; broken.seaOpenEnds = 2
         #expect(text(broken).contains("warning: no sea was drawn. 2 coastline end(s)"))

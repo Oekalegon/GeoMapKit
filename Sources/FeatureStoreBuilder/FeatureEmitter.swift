@@ -85,7 +85,11 @@ struct FeatureEmitter {
             for ring in rings {
                 let simplified: [PackedPoint]?
                 if let tolerance { simplified = GeometrySimplifier.simplify(ring: ring, tolerance: tolerance) } else { simplified = ring }
-                guard let simplified else { continue }
+                guard let simplified else {
+                    // Too small for this band (a shed at the 5 m of the mid band): counted, so the loss is visible.
+                    if band == .mid { report.ringsTooSmallForMid += 1 }
+                    continue
+                }
                 for (cell, piece) in CellSplitter.split(ring: simplified, zoom: zoom) {
                     guard isWritten(cell) else {
                         if band == .detail { report.piecesOutsideCells += 1 }

@@ -217,4 +217,30 @@ struct MapSceneStructureTests {
         #expect(try !line(6).flatStart && !line(6).flatEnd, "a fork is not a side road")
         #expect(try !line(7).flatEnd && !line(8).flatStart, "a plain bend is unchanged")
     }
+
+    @Test("A zoom 14 scene from the mid band has the streets, the service roads, the paths and the buildings")
+    func zoomFourteenHasTownAndPaths() throws {
+        var writer = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 47.0, west: 9.4, north: 47.3, east: 9.7), attribution: "© OpenStreetMap contributors, ODbL")
+        let cell = try #require(TileID.containing(Coordinate(latitude: 47.1, longitude: 9.5), zoom: 13))
+        let west = Int32((cell.northWest.longitude * 1e7).rounded())
+        func point(_ x: Int32, _ y: Int32) -> PackedPoint { PackedPoint(longitude: west + x, latitude: latitude + y) }
+        func line(_ id: Int64, _ featureClass: FeatureClass, _ points: [PackedPoint]) throws {
+            try writer.add(
+                StoredFeature(classID: featureClass.rawValue, subclass: 2, kind: .line, objectType: .way, objectID: id, parts: [GeometryPart(points: points)]),
+                band: .mid, cell: cell)
+        }
+        try line(1, .roadMinor, [point(2_000, 0), point(10_000, 0)])
+        try line(2, .roadService, [point(2_000, 500), point(10_000, 500)])
+        try line(3, .path, [point(2_000, 1_000), point(10_000, 1_000)])
+        let house = GeometryPart(points: [point(4_000, 2_000), point(5_000, 2_000), point(5_000, 2_500), point(4_000, 2_500), point(4_000, 2_000)])
+        try writer.add(
+            StoredFeature(classID: FeatureClass.building.rawValue, kind: .area, objectType: .way, objectID: 4, parts: [house]), band: .mid, cell: cell)
+        let file = try FeatureStoreFile(data: try writer.data())
+        let centre = Coordinate(latitude: Double(latitude) / 1e7 + 0.0005, longitude: Double(west + 6_000) / 1e7)
+        let scene = try MapSceneBuilder(file: file, style: .standard).scene(for: MapViewport(center: centre, zoom: 14, width: 600, height: 400))
+        #expect(scene.band == .mid)
+        let classes = Set(scene.steps.filter { !($0.lines.isEmpty && $0.areas.isEmpty) }.map(\.step.featureClass))
+        #expect(classes.isSuperset(of: [.roadMinor, .roadService, .path, .building]), "found \(classes)")
+    }
 }
