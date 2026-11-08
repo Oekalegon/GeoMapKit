@@ -47,6 +47,20 @@ struct ToolRunnerTests {
         #expect(report.area == box)
     }
 
+    @Test("a cut over several files reads them as one: names and sizes add up, a duplicate object is taken once")
+    func cutSeveralFiles() throws {
+        let first = try writeFile(), second = try writeFile()
+        defer { try? FileManager.default.removeItem(at: first); try? FileManager.default.removeItem(at: second) }
+        let box = BoundingBox(south: 47, west: 9, north: 48, east: 10)
+        let one = try ToolRunner.cut(urls: [first], area: box)
+        let two = try ToolRunner.cut(urls: [first, second], area: box)
+        #expect(two.fileName == "\(first.lastPathComponent), \(second.lastPathComponent)")
+        #expect(two.fileSize == 2 * one.fileSize)
+        #expect(two.summary.ways == one.summary.ways && two.summary.nodes == one.summary.nodes)
+        #expect(throws: ToolError.self) { try ToolRunner.cut(urls: [], area: box) }
+        #expect(throws: ToolError.self) { try ToolRunner.cut(urls: [first, URL(fileURLWithPath: "/nonexistent/x.osm.pbf")], area: box) }
+    }
+
     @Test("a missing file is a ToolError")
     func missingFile() {
         let url = URL(fileURLWithPath: "/nonexistent/geomapkit-missing.osm.pbf")

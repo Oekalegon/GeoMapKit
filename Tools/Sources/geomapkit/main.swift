@@ -10,12 +10,15 @@ GeoMapKit tools
   geomapkit scan <file.osm.pbf>
       Decode the whole file once and print counts, time and memory.
 
-  geomapkit cut <file.osm.pbf> (--bbox south,west,north,east | --center lat,lon --radius-km R)
+  geomapkit cut <file.osm.pbf>... (--bbox south,west,north,east | --center lat,lon --radius-km R)
                 [--limit N]
       Cut an area out of the file and print the time per pass, memory and
       what the extract contains. --limit sets the relation member limit.
+      Give several files for an area over a border (for example Norway and
+      Sweden): they are read as one, and an object in more than one file is
+      taken from the first, so list them in order of preference.
 
-  geomapkit build <file.osm.pbf> (--bbox south,west,north,east | --center lat,lon --radius-km R)
+  geomapkit build <file.osm.pbf>... (--bbox south,west,north,east | --center lat,lon --radius-km R)
                   --output <file.gmk> [--profile full|watch] [--limit N]
       Cut an area, build a feature store file from it, write it atomically,
       verify it, and print times, sizes and what was stored. The default
@@ -58,7 +61,7 @@ do {
         print(ReportFormatter.text(for: try ToolRunner.scan(url: URL(fileURLWithPath: path))))
     case "cut":
         let parsed = try CommandLineArguments(rest, knownOptions: ["bbox", "center", "radius-km", "limit"])
-        guard let path = parsed.positional.first else { throw ToolError("cut needs a file") }
+        guard !parsed.positional.isEmpty else { throw ToolError("cut needs a file") }
         let area = try AreaArgument.parse(
             bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"),
             radiusKilometres: parsed.value(for: "radius-km")
@@ -68,10 +71,10 @@ do {
             guard let value = Int(limit) else { throw ToolError("--limit expects a whole number") }
             options.relationMemberLimit = value
         }
-        print(ReportFormatter.text(for: try ToolRunner.cut(url: URL(fileURLWithPath: path), area: area, options: options)))
+        print(ReportFormatter.text(for: try ToolRunner.cut(urls: parsed.positional.map { URL(fileURLWithPath: $0) }, area: area, options: options)))
     case "build":
         let parsed = try CommandLineArguments(rest, knownOptions: ["bbox", "center", "radius-km", "limit", "output", "profile"])
-        guard let path = parsed.positional.first else { throw ToolError("build needs a file") }
+        guard !parsed.positional.isEmpty else { throw ToolError("build needs a file") }
         guard let output = parsed.value(for: "output"), !output.isEmpty else { throw ToolError("build needs --output <file.gmk>") }
         let area = try AreaArgument.parse(
             bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"),
@@ -84,7 +87,8 @@ do {
             options.relationMemberLimit = value
         }
         let report = try ToolRunner.build(
-            url: URL(fileURLWithPath: path), area: area, output: URL(fileURLWithPath: output), profile: profile, options: options)
+            urls: parsed.positional.map { URL(fileURLWithPath: $0) }, area: area, output: URL(fileURLWithPath: output),
+            profile: profile, options: options)
         print(ReportFormatter.text(for: report))
     case "render":
         let parsed = try CommandLineArguments(rest, knownOptions: ["center", "zoom", "output", "size", "scale", "style", "attribution", "bearing"])

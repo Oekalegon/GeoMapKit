@@ -29,6 +29,13 @@ import GeoCore
 /// too. Osmium's bounding-box extract behaves the same way. See "Areas that span
 /// cells or the extract" in `docs/design/architecture.md`.
 ///
+/// **Several files.** An area that crosses a source boundary (Norway and Sweden) needs the files of both
+/// countries. `cut(_:to:progress:)` with an array takes several readers and runs every pass over all of them, so the result is
+/// the same as a cut of one file that held the union of the objects: an object found in more than one file is taken
+/// once, from the first file that has it (the caller orders the files), and a relation or way that one file only holds in
+/// part is completed from the others. Two objects with the same ID inside one file are still an error. For the data to
+/// agree, download the files on the same day.
+///
 /// A cut is blocking and can take a while on a large file. It checks for task
 /// cancellation between blocks, so run it inside a `Task` to be able to cancel it.
 /// It runs on the phone or the Mac, never on the Watch, which receives cut data.
@@ -93,8 +100,28 @@ public struct AreaCutter: Sendable {
     public func cut(
         _ reader: PBFReader, to box: BoundingBox, progress: ((Pass) -> Void)? = nil
     ) throws -> OSMExtract {
+        try cut([reader], to: box, progress: progress)
+    }
+
+    /// Cuts an area out of several files, as if they were one.
+    ///
+    /// Every pass runs over all the files in the order given. An object that several files hold is taken from the first one;
+    /// the header, and so the writing program and replication data, is the first file's.
+    ///
+    /// - Parameters:
+    ///   - readers: The PBF files, in order of preference. At least one.
+    ///   - box: The area. It must be valid and must not cross the antimeridian.
+    ///   - progress: Called when each stage starts (once per stage, not per file), on the calling thread.
+    /// - Returns: The extract.
+    /// - Throws: ``AreaCutterError/noInput`` for an empty list, ``AreaCutterError/invalidBoundingBox`` for an invalid box,
+    ///   ``AreaCutterError/duplicateID(kind:id:)`` if an object ID repeats within one file, a ``PBFError`` if a file is
+    ///   malformed, or `CancellationError` if the surrounding task was cancelled.
+    public func cut(
+        _ readers: [PBFReader], to box: BoundingBox, progress: ((Pass) -> Void)? = nil
+    ) throws -> OSMExtract {
         guard box.isValid else { throw AreaCutterError.invalidBoundingBox }
-        let header = try reader.header()
+        guard let firstReader = readers.first else { throw AreaCutterError.noInput }
+        let header = try firstReader.header()
         let memberLimit = max(0, options.relationMemberLimit)
         var interner = StringInterner()
 
@@ -103,14 +130,23 @@ public struct AreaCutter: Sendable {
         var records: [NodeRecord] = []
         var nodeTagKeys: [UInt32] = []
         var nodeTagValues: [UInt32] = []
-        try reader.forEachBlock(kinds: .nodes) { block in
-            try Task.checkCancellation()
-            for node in block.nodes where box.contains(node.coordinate) {
-                records.append(try Self.record(
-                    for: node, tagKeys: &nodeTagKeys, tagValues: &nodeTagValues, interner: &interner
-                ))
+        var insideIDs = Set<Int64>()
+        for (index, reader) in readers.enumerated() {
+            // What the files before this one hold is not taken again; the same ID twice in this file is caught below.
+            let earlier = insideIDs
+            let start = records.count
+            try reader.forEachBlock(kinds: .nodes) { block in
+                try Task.checkCancellation()
+                for node in block.nodes where box.contains(node.coordinate) {
+                    if index > 0, earlier.contains(node.id) { continue }
+                    records.append(try Self.record(
+                        for: node, tagKeys: &nodeTagKeys, tagValues: &nodeTagValues, interner: &interner
+                    ))
+                }
             }
+            if index < readers.count - 1 { for record in records[start...] { insideIDs.insert(record.id) } }
         }
+        insideIDs = []
         var inside = NodeTable(sorting: consume records)
         if let duplicate = inside.firstDuplicateID {
             throw AreaCutterError.duplicateID(kind: "node", id: duplicate)
@@ -120,13 +156,17 @@ public struct AreaCutter: Sendable {
         progress?(.ways)
         var keptWayIDs = Set<Int64>()
         var ways = WayAccumulator()
-        try reader.forEachBlock(kinds: .ways) { block in
-            try Task.checkCancellation()
-            for way in block.ways where way.nodeIDs.contains(where: inside.contains) {
-                guard keptWayIDs.insert(way.id).inserted else {
-                    throw AreaCutterError.duplicateID(kind: "way", id: way.id)
+        for (index, reader) in readers.enumerated() {
+            let earlier = index > 0 ? keptWayIDs : []
+            try reader.forEachBlock(kinds: .ways) { block in
+                try Task.checkCancellation()
+                for way in block.ways where way.nodeIDs.contains(where: inside.contains) {
+                    if earlier.contains(way.id) { continue }
+                    guard keptWayIDs.insert(way.id).inserted else {
+                        throw AreaCutterError.duplicateID(kind: "way", id: way.id)
+                    }
+                    try ways.append(way, interner: &interner)
                 }
-                try ways.append(way, interner: &interner)
             }
         }
 
@@ -134,22 +174,29 @@ public struct AreaCutter: Sendable {
         progress?(.relations)
         var selected: [Int64: OSMRelation] = [:]
         var pending: [OSMRelation] = []
-        try reader.forEachBlock(kinds: .relations) { block in
-            try Task.checkCancellation()
-            for relation in block.relations {
-                let touches = relation.members.contains { member in
-                    switch member.type {
-                    case .node: inside.contains(member.id)
-                    case .way: keptWayIDs.contains(member.id)
-                    case .relation: false
+        var pendingIDs = Set<Int64>()
+        for (index, reader) in readers.enumerated() {
+            let earlierSelected = index > 0 ? Set(selected.keys) : []
+            let earlierPending = index > 0 ? pendingIDs : []
+            try reader.forEachBlock(kinds: .relations) { block in
+                try Task.checkCancellation()
+                for relation in block.relations {
+                    if earlierSelected.contains(relation.id) { continue }
+                    let touches = relation.members.contains { member in
+                        switch member.type {
+                        case .node: inside.contains(member.id)
+                        case .way: keptWayIDs.contains(member.id)
+                        case .relation: false
+                        }
                     }
-                }
-                if touches {
-                    guard selected.updateValue(relation, forKey: relation.id) == nil else {
-                        throw AreaCutterError.duplicateID(kind: "relation", id: relation.id)
+                    if touches {
+                        guard selected.updateValue(relation, forKey: relation.id) == nil else {
+                            throw AreaCutterError.duplicateID(kind: "relation", id: relation.id)
+                        }
+                    } else if !earlierPending.contains(relation.id), relation.members.contains(where: { $0.type == .relation }) {
+                        pending.append(relation)
+                        pendingIDs.insert(relation.id)
                     }
-                } else if relation.members.contains(where: { $0.type == .relation }) {
-                    pending.append(relation)
                 }
             }
         }
@@ -159,6 +206,9 @@ public struct AreaCutter: Sendable {
             added = false
             var stillPending: [OSMRelation] = []
             for relation in pending {
+                if selected[relation.id] != nil {
+                    continue  // another file's copy of it was selected because it touches the area
+                }
                 if relation.members.contains(where: { $0.type == .relation && selected[$0.id] != nil }) {
                     selected[relation.id] = relation
                     added = true
@@ -183,14 +233,20 @@ public struct AreaCutter: Sendable {
         // Pass 4: the member ways that were not already kept.
         if !wantedWayIDs.isEmpty {
             progress?(.memberWays)
-            try reader.forEachBlock(kinds: .ways) { block in
-                try Task.checkCancellation()
-                for way in block.ways where wantedWayIDs.contains(way.id) {
-                    guard keptWayIDs.insert(way.id).inserted else {
-                        throw AreaCutterError.duplicateID(kind: "way", id: way.id)
+            for (index, reader) in readers.enumerated() {
+                let earlier = index > 0 ? keptWayIDs : []
+                try reader.forEachBlock(kinds: .ways) { block in
+                    try Task.checkCancellation()
+                    for way in block.ways where wantedWayIDs.contains(way.id) {
+                        if earlier.contains(way.id) { continue }
+                        guard keptWayIDs.insert(way.id).inserted else {
+                            throw AreaCutterError.duplicateID(kind: "way", id: way.id)
+                        }
+                        try ways.append(way, interner: &interner)
                     }
-                    try ways.append(way, interner: &interner)
                 }
+                // The remaining files need not be read once every wanted way has been found.
+                if wantedWayIDs.allSatisfy(keptWayIDs.contains) { break }
             }
         }
 
@@ -205,16 +261,21 @@ public struct AreaCutter: Sendable {
             progress?(.outsideNodes)
             let wantedSet = Set(wanted.ids)
             var found = Set<Int64>()
-            try reader.forEachBlock(kinds: .nodes) { block in
-                try Task.checkCancellation()
-                for node in block.nodes where wantedSet.contains(node.id) {
-                    guard found.insert(node.id).inserted else {
-                        throw AreaCutterError.duplicateID(kind: "node", id: node.id)
+            for (index, reader) in readers.enumerated() {
+                let earlier = index > 0 ? found : []
+                try reader.forEachBlock(kinds: .nodes) { block in
+                    try Task.checkCancellation()
+                    for node in block.nodes where wantedSet.contains(node.id) {
+                        if earlier.contains(node.id) { continue }
+                        guard found.insert(node.id).inserted else {
+                            throw AreaCutterError.duplicateID(kind: "node", id: node.id)
+                        }
+                        outside.append(try Self.record(
+                            for: node, tagKeys: &nodeTagKeys, tagValues: &nodeTagValues, interner: &interner
+                        ))
                     }
-                    outside.append(try Self.record(
-                        for: node, tagKeys: &nodeTagKeys, tagValues: &nodeTagValues, interner: &interner
-                    ))
                 }
+                if found.count == wantedSet.count { break }
             }
             foundOutside = found.count
         }
