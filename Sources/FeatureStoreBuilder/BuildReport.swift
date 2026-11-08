@@ -48,6 +48,14 @@ public struct BuildReport: Sendable, Equatable {
     public var greenAreas = 0
     /// Coastline ways found in the extract.
     public var coastlineWays = 0
+    /// Coastline ways left out because a node is missing from the extract.
+    public var coastlineWaysSkipped = 0
+    /// Gaps in the coastlines closed with a straight line (where the extract stops at a country border, or a way is broken).
+    public var seaGapsClosed = 0
+    /// Loose coastline ends at a country border that were carried straight on to the edge of the area.
+    public var seaEndsExtended = 0
+    /// The longest of those gaps, in metres.
+    public var seaLongestGap = 0.0
     /// Sea polygons built from the coastlines.
     public var seaPolygons = 0
     /// Islands cut out of the sea.

@@ -411,4 +411,34 @@ struct FeatureStoreBuilderTests {
         let watch = try FeatureStoreFile(data: try FeatureStoreBuilder(profile: .watch).build(from: extract).data)
         #expect(try ids(watch, .mid).isSuperset(of: [11, 12, 13]), "the Watch copy has them in its mid band")
     }
+
+    @Test("A coastline that leaves the extract at a country border still gets its sea; one that just stops does not")
+    func coastlineAtTheBorder() throws {
+        func build(withBorder: Bool) throws -> BuildReport {
+            var world = SyntheticWorld()
+            world.node(1, -0.3, 1.5); world.node(2, 0.8, 1.45); world.node(3, 1.5, 1.4)
+            world.way(10, [1, 2, 3], [("natural", "coastline")])
+            if withBorder {
+                world.node(4, 1.52, 1.3); world.node(5, 1.52, 1.6)
+                world.way(20, [4, 5], [("boundary", "administrative"), ("admin_level", "2")])
+            }
+            return try FeatureStoreBuilder().build(from: try world.extract()).report
+        }
+        let withBorder = try build(withBorder: true)
+        #expect(withBorder.seaEndsExtended == 1 && withBorder.seaPolygons == 1 && withBorder.seaOpenEnds == 0)
+        let without = try build(withBorder: false)
+        #expect(without.seaEndsExtended == 0 && without.seaPolygons == 0 && without.seaOpenEnds > 0)
+    }
+
+    @Test("A way left out for a missing node does not stop the sea of the rest of the area")
+    func skippedWayFarAway() throws {
+        var world = SyntheticWorld()
+        world.node(1, -0.3, 1.5); world.node(2, 3.3, 1.5)
+        world.way(10, [1, 2], [("natural", "coastline")])
+        // A coastline way with a node that is not in the file, near the corner of the cut box.
+        world.node(3, 3.4, 3.4); world.node(4, 3.45, 3.45)
+        world.way(11, [3, 999, 4], [("natural", "coastline")])
+        let result = try FeatureStoreBuilder().build(from: try world.extract())
+        #expect(result.report.coastlineWaysSkipped == 1 && result.report.seaPolygons == 1 && result.report.seaOpenEnds == 0)
+    }
 }
