@@ -9,6 +9,9 @@ import GeoCore
 public struct StoreManifest: Codable, Equatable, Sendable {
     /// The version of this manifest format.
     public static let currentVersion = 1
+    /// The profiles a block set can be built with.
+    static let profiles: Set<String> = ["full", "watch"]
+
     /// The largest manifest that is read, in bytes. A manifest of 100,000 blocks is under 40 MB; this bound only keeps a wrong file
     /// from being read whole.
     public static let maximumSize = 64 * 1024 * 1024
@@ -133,11 +136,19 @@ public struct StoreManifest: Codable, Equatable, Sendable {
         guard (0...TileID.maximumZoom).contains(storageZoom), (0...storageZoom).contains(blockZoom) else {
             throw StoreSetError.invalidManifest("the block zoom \(blockZoom) must be from 0 to the storage zoom \(storageZoom), which must be from 0 to \(TileID.maximumZoom)")
         }
-        guard !bands.isEmpty, bands.allSatisfy({ ZoomBand(rawValue: UInt8(clamping: $0)) != nil && $0 >= 0 }) else {
+        guard !bands.isEmpty, bands.allSatisfy({ $0 >= 0 && ZoomBand(rawValue: UInt8(clamping: $0)) != nil }) else {
             throw StoreSetError.invalidManifest("the bands are empty or unknown")
+        }
+        // The bands of a block file are compared as a list, in ascending order.
+        guard zip(bands, bands.dropFirst()).allSatisfy({ $0 < $1 }) else {
+            throw StoreSetError.invalidManifest("the bands must be listed once each, from the lowest to the highest")
+        }
+        guard Self.profiles.contains(profile) else {
+            throw StoreSetError.invalidManifest("the profile '\(profile)' is not one of \(Self.profiles.sorted().joined(separator: ", "))")
         }
         let side = 1 << blockZoom
         var seen = Set<Int>()
+        var files = Set<String>()
         for block in blocks {
             guard (0..<side).contains(block.x), (0..<side).contains(block.y) else {
                 throw StoreSetError.invalidManifest("the block \(block.x)/\(block.y) is outside the grid of zoom \(blockZoom)")
@@ -148,6 +159,9 @@ public struct StoreManifest: Codable, Equatable, Sendable {
             guard block.bytes >= 0 else { throw StoreSetError.invalidManifest("the block \(block.x)/\(block.y) has a negative size") }
             guard Self.isInsideFolder(block.file) else {
                 throw StoreSetError.invalidManifest("the file '\(block.file)' of block \(block.x)/\(block.y) is not a path inside the folder")
+            }
+            guard files.insert(block.file).inserted else {
+                throw StoreSetError.invalidManifest("the file '\(block.file)' is used by more than one block")
             }
         }
     }

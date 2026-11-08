@@ -6,7 +6,7 @@ import GeoCore
 ///
 /// The files are memory-mapped, so an open block costs address space, not memory, but the number of open files is kept in bounds:
 /// at most ``maximumOpenBlocks`` stay open, the one least recently used is closed first. A block is checked against the manifest
-/// when it is opened (storage zoom, format version, rule table, bands), so a block from another build is an error and not a
+/// when it is opened (storage zoom, format version, rule table, bands and size), so a block from another build is an error and not a
 /// map that is wrong in places. The Watch never opens a manifest; it receives one cut store file.
 public struct StoreSet: CellSource {
     /// The manifest.
@@ -111,6 +111,11 @@ public struct StoreSet: CellSource {
         }
         guard file.bands.map({ Int($0.rawValue) }) == manifest.bands else {
             throw StoreSetError.blockMismatch(file: block.file, reason: "the bands differ from the manifest")
+        }
+        // The manifest says which build each block is from; a file of another size is another build, or a half-written one.
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize.map(Int64.init) ?? -1
+        guard size == block.bytes else {
+            throw StoreSetError.blockMismatch(file: block.file, reason: "the file has \(size) bytes, the manifest says \(block.bytes)")
         }
         cache.store(file, for: key)
         return file

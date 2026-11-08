@@ -65,6 +65,11 @@ struct StoreSetTests {
             attribution: "© OpenStreetMap contributors, ODbL", blocks: blocks)
     }
 
+    /// The size of a file in the folder, as the manifest records it.
+    private func bytes(of file: String, in folder: URL) -> Int64 {
+        Int64((try? FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent(file).path)[.size] as? Int) ?? 0)
+    }
+
     private func block(_ x: Int, _ y: Int, file: String, bytes: Int64 = 100) -> StoreManifest.Block {
         StoreManifest.Block(
             x: x, y: y, file: file, bytes: bytes, builtAt: Date(timeIntervalSince1970: 1_800_000_000),
@@ -104,6 +109,10 @@ struct StoreSetTests {
         #expect(try refused { $0.storageZoom = 31 })
         #expect(try refused { $0.bands = [] })
         #expect(try refused { $0.bands = [7] })
+        #expect(try refused { $0.bands = [2, 1] }, "not ascending")
+        #expect(try refused { $0.bands = [1, 1, 2] }, "a band twice")
+        #expect(try refused { $0.profile = "huge" })
+        #expect(try refused({ $0.blocks.append(StoreManifest.Block(x: 5, y: 3, file: "blocks/a.gmk", bytes: 1, builtAt: Date())) }), "one file for two blocks")
         #expect(try refused { $0.blocks.append($0.blocks[0]) }, "a block twice")
         #expect(try refused { $0.blocks[0].x = 256 }, "outside the grid")
         #expect(try refused { $0.blocks[0].y = -1 })
@@ -203,7 +212,7 @@ struct StoreSetTests {
         try writeBlock("zoom12.gmk", cells: [TileID(zoom: 12, x: 4 * 16 + 1, y: 3 * 16 + 2)!], in: folder, zoom: 12)
         try Data("not a store".utf8).write(to: folder.appendingPathComponent("garbage.gmk"))
         func open(_ file: String) throws -> FeatureStoreFile? {
-            try StoreSet(manifest: try manifest([block(4, 3, file: file)]), directory: folder).file(containing: cell)
+            try StoreSet(manifest: try manifest([block(4, 3, file: file, bytes: bytes(of: file, in: folder))]), directory: folder).file(containing: cell)
         }
         #expect(throws: StoreSetError.self) { try open("old.gmk") }
         #expect(throws: StoreSetError.self) { try open("zoom12.gmk") }
@@ -211,9 +220,18 @@ struct StoreSetTests {
         #expect(throws: StoreSetError.blockMissing("gone.gmk")) { try open("gone.gmk") }
         // Bands that the manifest does not list.
         try writeBlock("fine.gmk", cells: [cell], in: folder)
-        let wrongBands = try StoreSet(manifest: try manifest([block(4, 3, file: "fine.gmk")], bands: [.detail]), directory: folder)
+        let fine = bytes(of: "fine.gmk", in: folder)
+        let wrongBands = try StoreSet(manifest: try manifest([block(4, 3, file: "fine.gmk", bytes: fine)], bands: [.detail]), directory: folder)
         #expect(throws: StoreSetError.self) { try wrongBands.file(containing: cell) }
-        #expect(try StoreSet(manifest: try manifest([block(4, 3, file: "fine.gmk")]), directory: folder).file(containing: cell) != nil)
+        #expect(try StoreSet(manifest: try manifest([block(4, 3, file: "fine.gmk", bytes: fine)]), directory: folder).file(containing: cell) != nil)
+        // A file of another size than the manifest records: another build, or one that was not written to the end.
+        let wrongSize = try StoreSet(manifest: try manifest([block(4, 3, file: "fine.gmk", bytes: fine + 1)]), directory: folder)
+        do {
+            _ = try wrongSize.file(containing: cell)
+            Issue.record("a block of the wrong size was opened")
+        } catch let error as StoreSetError {
+            #expect("\(error)".contains("the manifest says \(fine + 1)"))
+        }
     }
 
     @Test("A link inside the folder that leads out of it is not followed")
@@ -224,8 +242,39 @@ struct StoreSetTests {
         try writeBlock("real.gmk", cells: [cell], in: outside)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("linked.gmk"), withDestinationURL: outside.appendingPathComponent("real.gmk"))
-        let set = try StoreSet(manifest: try manifest([block(4, 3, file: "linked.gmk")]), directory: folder)
+        let set = try StoreSet(
+            manifest: try manifest([block(4, 3, file: "linked.gmk", bytes: bytes(of: "real.gmk", in: outside))]), directory: folder)
         #expect(throws: StoreSetError.self) { try set.file(containing: cell) }
+    }
+
+    @Test("Many threads asking for cells of many blocks at once get the right files, and the limit holds")
+    func threads() async throws {
+        let folder = directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var blocks: [StoreManifest.Block] = []
+        var cells: [TileID] = []
+        for x in 0..<8 {
+            let cell = TileID(zoom: 13, x: 32 * x + 1, y: 40)!
+            cells.append(cell)
+            let size = try writeBlock("t\(x).gmk", cells: [cell], in: folder)
+            blocks.append(block(x, 1, file: "t\(x).gmk", bytes: size))
+        }
+        let set = try StoreSet(manifest: try manifest(blocks), directory: folder, maximumOpenBlocks: 2)
+        let allCells = cells
+        let wrong = await withTaskGroup(of: Int.self) { group in
+            for round in 0..<200 {
+                group.addTask {
+                    let cell = allCells[round % allCells.count]
+                    guard let file = try? set.file(containing: cell), let features = try? file.features(in: cell, band: .detail),
+                        features.contains(where: { $0.objectID == Int64(cell.x * 1_000 + cell.y) })
+                    else { return 1 }
+                    return 0
+                }
+            }
+            return await group.reduce(0, +)
+        }
+        #expect(wrong == 0)
+        #expect(set.openBlockCount <= 2)
     }
 
     @Test("One file is a source too: it gives itself for the cells it has")
