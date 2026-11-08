@@ -33,6 +33,9 @@ public struct BuildReport: Sendable, Equatable {
     public var missingMembers = 0
     /// Features not written because the profile excludes their class.
     public var featuresSkippedByProfile = 0
+    /// Rings (buildings, small areas) that simplification for the mid band reduced to less than a polygon, and so are
+    /// missing from that band (they are still in the detail band).
+    public var ringsTooSmallForMid = 0
     /// Pieces (detail band) that fall in cells outside the written area, and were dropped.
     public var piecesOutsideCells = 0
     /// Footways that were classed as pavement because they run beside a road, without a sidewalk tag of their own counted.

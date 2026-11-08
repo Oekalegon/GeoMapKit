@@ -62,7 +62,7 @@ public enum ReportFormatter {
         ]
         if let built = report.outdatedRuleTable, let current = report.currentRuleTable {
             lines.append("")
-            lines.append("note: the store was built with rule table \(built), this tool builds with \(current). Classes added since (for example the sea, sidewalks and road areas) are missing; rebuild the store to get them.")
+            lines.append("note: the store was built with rule table \(built), this tool builds with \(current). Classes and bands added since (the sea, sidewalks, road areas, streets and buildings at zoom 14) may be missing; rebuild the store to get them.")
         }
         return lines.joined(separator: "\n")
     }
@@ -122,6 +122,7 @@ public enum ReportFormatter {
             "  footways beside roads: \(Formatting.count(counters.footwaysBesideRoads)) taken for sidewalks, \(Formatting.count(counters.footwaysInTown)) more in built-up areas (from \(Formatting.count(counters.townAreas)) built-up and \(Formatting.count(counters.greenAreas)) green areas)",
             "  sea:              \(Formatting.count(counters.coastlineWays)) coastline ways, \(Formatting.count(counters.seaPolygons)) sea polygons, \(Formatting.count(counters.seaIslands)) islands",
             "  pieces outside the cells: \(Formatting.count(counters.piecesOutsideCells))",
+            "  rings too small for the mid band: \(Formatting.count(counters.ringsTooSmallForMid))",
             "  features skipped by the profile: \(Formatting.count(counters.featuresSkippedByProfile))",
         ]
         lines += extentWarning(for: report)
