@@ -44,6 +44,22 @@ GeoMapKit tools
       missing or out of date. Files that were checked within 30 days are not
       asked about again. An interrupted download continues where it stopped.
 
+  geomapkit build-region (--region id[,id...] | area as above) --output <folder> [--block-zoom 8] [--jobs N] [--margin 0.1]
+                         [--cache DIR] [--profile full|watch]
+      Build a big area (for example a country) as blocks: one store file for
+      each tile of a grid (zoom 8: about 78 km), and a manifest.json that lists
+      them. Each block is cut with a margin from the source files in the cache
+      (nothing is downloaded; see fetch) and built on its own, up to --jobs at
+      once, each using about 0.75 GB. The manifest is updated after each block,
+      and a block that is already built from the same source files is left as it
+      is, so a run that was stopped can be run again. --region takes the ids of
+      the region index (sweden, ostlandet); the blocks that meet them are built.
+
+  geomapkit compare <first> <second> [--limit N]
+      Compare two stores (a .gmk file or a manifest.json) in the cells both
+      hold, and list the features that differ: a check that blocks give the
+      same map as one file.
+
   geomapkit render <file.gmk> --center lat,lon --zoom Z --output <file.png> [--bearing DEGREES]
                    [--size WxH] [--scale S] [--style standard|watch|file.json]
                    [--attribution full|compact|none]
@@ -89,6 +105,52 @@ do {
             options.relationMemberLimit = value
         }
         print(ReportFormatter.text(for: try ToolRunner.cut(urls: parsed.positional.map { URL(fileURLWithPath: $0) }, area: area, options: options)))
+    case "build-region":
+        let parsed = try CommandLineArguments(
+            rest, knownOptions: ["region", "bbox", "center", "radius-km", "output", "block-zoom", "jobs", "margin", "cache", "profile"])
+        guard parsed.positional.isEmpty else { throw ToolError("build-region takes an area, not files") }
+        guard let output = parsed.value(for: "output"), !output.isEmpty else { throw ToolError("build-region needs --output <folder>") }
+        let area: BlockRequest.Area
+        if let regions = parsed.value(for: "region") {
+            guard parsed.value(for: "bbox") == nil, parsed.value(for: "center") == nil else {
+                throw ToolError("Use --region or an area (--bbox, --center), not both")
+            }
+            area = .regions(regions.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+        } else {
+            area = .box(try AreaArgument.parse(
+                bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"), radiusKilometres: parsed.value(for: "radius-km")))
+        }
+        func whole(_ name: String, _ fallback: Int, in range: ClosedRange<Int>) throws -> Int {
+            guard let text = parsed.value(for: name) else { return fallback }
+            guard let value = Int(text), range.contains(value) else { throw ToolError("--\(name) expects a whole number from \(range.lowerBound) to \(range.upperBound)") }
+            return value
+        }
+        var margin = 0.1
+        if let text = parsed.value(for: "margin") {
+            guard let value = Double(text), (0...2).contains(value) else { throw ToolError("--margin expects degrees from 0 to 2") }
+            margin = value
+        }
+        let defaultJobs = max(1, min(ProcessInfo.processInfo.activeProcessorCount / 2, 4))
+        let request = BlockRequest(
+            area: area, output: URL(fileURLWithPath: output), blockZoom: try whole("block-zoom", 8, in: 0...13),
+            jobs: try whole("jobs", defaultJobs, in: 1...64), margin: margin,
+            profile: try ProfileArgument.parse(parsed.value(for: "profile")) == .watch ? .watch : .full,
+            cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) })
+        let report = try await ToolRunner.buildRegion(request) { outcome in
+            print(ReportFormatter.line(for: outcome, blockZoom: request.blockZoom))
+            fflush(stdout)
+        }
+        print(ReportFormatter.text(for: report, blockZoom: request.blockZoom))
+    case "compare":
+        let parsed = try CommandLineArguments(rest, knownOptions: ["limit"])
+        guard parsed.positional.count == 2 else { throw ToolError("compare needs two stores") }
+        var limit = 20
+        if let text = parsed.value(for: "limit") {
+            guard let value = Int(text), value >= 0 else { throw ToolError("--limit expects a whole number") }
+            limit = value
+        }
+        print(ReportFormatter.text(for: try ToolRunner.compareStores(
+            URL(fileURLWithPath: parsed.positional[0]), URL(fileURLWithPath: parsed.positional[1]), limit: limit)))
     case "sources", "fetch":
         let parsed = try CommandLineArguments(rest, knownOptions: ["bbox", "center", "radius-km", "cache"], knownFlags: ["yes"])
         guard parsed.positional.isEmpty else { throw ToolError("\(command) takes an area, not files") }

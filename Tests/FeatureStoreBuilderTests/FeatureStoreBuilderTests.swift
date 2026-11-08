@@ -442,4 +442,49 @@ struct FeatureStoreBuilderTests {
         let result = try FeatureStoreBuilder().build(from: try world.extract())
         #expect(result.report.coastlineWaysSkipped == 1 && result.report.seaPolygons == 1 && result.report.seaOpenEnds == 0)
     }
+
+    // MARK: A part of the extract
+
+    /// A feature without the numbers that belong to its file: its names and tags as text.
+    private struct Plain: Hashable {
+        var classID: UInt8, subclass: UInt8, kind: FeatureKind, type: StoredObjectType, id: Int64, flags: FeatureFlags, offset: UInt32
+        var name: String?, tags: [[String]], parts: [GeometryPart]
+    }
+
+    private func plain(_ feature: StoredFeature, _ file: FeatureStoreFile) -> Plain {
+        Plain(
+            classID: feature.classID, subclass: feature.subclass, kind: feature.kind, type: feature.objectType, id: feature.objectID,
+            flags: feature.flags, offset: feature.offsetAlongLine, name: feature.nameID.flatMap { file.string(at: $0) },
+            tags: feature.tags.map { [file.string(at: $0.key) ?? "", file.string(at: $0.value) ?? ""] }, parts: feature.parts)
+    }
+
+    @Test("Building a part of the extract gives the cells of that part as the whole build has them, and no others")
+    func partOfTheExtract() throws {
+        var world = SyntheticWorld.standard()
+        let extract = try world.extract()
+        let builder = FeatureStoreBuilder()
+        let whole = try FeatureStoreFile(data: try builder.build(from: extract).data)
+        // The two western columns of the block: the cells with x below the centre column.
+        let centre = world.block.centre
+        let west = TileID(zoom: 13, x: centre.x - 1, y: centre.y - 1)!, east = TileID(zoom: 13, x: centre.x, y: centre.y + 1)!
+        let part = BoundingBox(south: east.southEast.latitude, west: west.northWest.longitude, north: west.northWest.latitude, east: east.southEast.longitude)
+        let partial = try FeatureStoreFile(data: try builder.build(from: extract, writing: part).data)
+        try partial.verify()
+
+        let wanted = Set(try whole.cells().filter { (centre.x - 1...centre.x).contains($0.x) })
+        #expect(!wanted.isEmpty)
+        #expect(Set(try partial.cells()) == wanted, "the cells of the part, and nothing outside it")
+        for cell in wanted {
+            for band in ZoomBand.allCases {
+                let a = Set(try whole.features(in: cell, band: band).map { plain($0, whole) })
+                let b = Set(try partial.features(in: cell, band: band).map { plain($0, partial) })
+                #expect(a == b, "cell \(cell.x)/\(cell.y), band \(band)")
+            }
+        }
+        // A part outside the extract has no cells, and the whole extract as the part is the same as building it.
+        let nowhere = BoundingBox(south: 0, west: 0, north: 1, east: 1)
+        #expect(try FeatureStoreFile(data: try builder.build(from: extract, writing: nowhere).data).cellCount == 0)
+        let same = try FeatureStoreFile(data: try builder.build(from: extract, writing: extract.boundingBox).data)
+        #expect(try same.cells() == whole.cells())
+    }
 }

@@ -27,6 +27,8 @@ public struct FeatureStoreBuilder: Sendable {
 
     let classifier = FeatureClassifier()
     static let zoom = 13
+    /// The zoom of the cells the builder writes.
+    public static let storageZoom = zoom
 
     /// Creates a builder.
     ///
@@ -44,9 +46,28 @@ public struct FeatureStoreBuilder: Sendable {
     /// - Returns: The file data and a report.
     /// - Throws: `CancellationError` if the task is cancelled, or `FeatureStoreError` if a value does not fit the format.
     public func build(from extract: OSMExtract) throws -> BuildResult {
-        let range = Self.writtenCells(in: extract.boundingBox)
+        try build(from: extract, writing: extract.boundingBox)
+    }
+
+    /// Builds the file for the cells of one part of the extract.
+    ///
+    /// For a big area that is stored as blocks: each block is cut with a margin, so that the objects near its edge are whole, and
+    /// built for its own cells only. The cells are the ones that lie fully inside `area` and inside the extract's box; the rest
+    /// of the extract is used (for the sea, for roads, for the joining of areas) but nothing of it is written.
+    ///
+    /// - Parameters:
+    ///   - extract: The cut area, larger than `area` by a margin.
+    ///   - area: The part to write. Its edges should be cell borders (see ``cellAlignedBox(covering:)``).
+    /// - Returns: The file data, with the cells inside `area`, and a report.
+    /// - Throws: `CancellationError` if the task is cancelled, or `FeatureStoreError` if a value does not fit the format.
+    public func build(from extract: OSMExtract, writing area: BoundingBox) throws -> BuildResult {
+        let inside = extract.boundingBox
+        let part = BoundingBox(
+            south: max(area.south, inside.south), west: max(area.west, inside.west), north: min(area.north, inside.north),
+            east: min(area.east, inside.east))
+        let range = part.south <= part.north && part.west <= part.east ? Self.writtenCells(in: part) : nil
         let writer = FeatureStoreWriter(
-            storageZoom: Self.zoom, boundingBox: range.map(Self.boundingBox(of:)) ?? extract.boundingBox,
+            storageZoom: Self.zoom, boundingBox: range.map(Self.boundingBox(of:)) ?? part,
             attribution: Self.attribution, sourceDate: sourceDate, classifierVersion: FeatureClassifier.version)
         var emitter = FeatureEmitter(writer: writer, profile: profile, columns: range?.columns, rows: range?.rows)
         if let range { emitter.report.cellsInArea = range.columns.count * range.rows.count }

@@ -81,6 +81,17 @@ public struct StoreSet: CellSource {
         return box
     }
 
+    /// All cells of all blocks, in the order of the manifest. It opens every block file in turn, so it is slow for a large set;
+    /// meant for checks and tools, not for drawing.
+    public func cells() throws -> [TileID] {
+        let side = 1 << manifest.blockZoom
+        var result: [TileID] = []
+        for block in manifest.blocks {
+            result += try openBlock(block, key: block.y * side + block.x).cells()
+        }
+        return result
+    }
+
     /// The number of block files that are open now (for tests and measurements).
     public var openBlockCount: Int { cache.count }
 
