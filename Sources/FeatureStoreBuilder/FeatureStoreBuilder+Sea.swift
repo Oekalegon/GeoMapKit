@@ -12,24 +12,37 @@ extension FeatureStoreBuilder {
         of extract: OSMExtract, columns: ClosedRange<Int>, rows: ClosedRange<Int>, into emitter: inout FeatureEmitter
     ) throws {
         var ways: [CoastlineJoiner.Way] = []
-        var broken = false
+        var skipped = 0
         for position in extract.ways.indices {
             if position % 4096 == 0 { try Task.checkCancellation() }
             guard extract.ways.tags(at: position).value(forKey: "natural") == "coastline" else { continue }
             let (runs, gaps) = Self.runs(ofWayAt: position, in: extract)
-            // A coastline with a node missing is cut in two, so the side the water is on cannot be followed across it.
-            if gaps > 0 || runs.count != 1 { broken = true; continue }
+            // A coastline with a node missing is cut in two; the way is left out and the gap it leaves is closed below, if it can be.
+            if gaps > 0 || runs.count != 1 { skipped += 1; continue }
             ways.append(CoastlineJoiner.Way(
                 id: extract.ways.ids[position], nodeIDs: Array(extract.ways.nodeIDs(at: position)), points: runs[0]))
         }
         emitter.report.coastlineWays = ways.count
+        emitter.report.coastlineWaysSkipped = skipped
         // A coastline that could not be used at all must still be reported: the build has no sea, and the user should know why.
-        if ways.isEmpty && broken { emitter.report.seaOpenEnds = 1 }
+        if ways.isEmpty && skipped > 0 { emitter.report.seaOpenEnds = 1 }
         guard !ways.isEmpty, let block = CellRect(columns: columns, rows: rows, zoom: Self.zoom) else { return }
-        let joined = CoastlineJoiner.join(ways)
+        let joinedWays = CoastlineJoiner.join(ways)
+        // Coastlines that end inside the area (the extract stops at a country border) are joined with straight lines.
+        var borders: [[PackedPoint]] = []
+        for position in extract.ways.indices {
+            let tags = extract.ways.tags(at: position)
+            guard tags.value(forKey: "boundary") == "administrative", tags.value(forKey: "admin_level") == "2" else { continue }
+            borders.append(contentsOf: Self.runs(ofWayAt: position, in: extract).runs)
+        }
+        let closing = CoastlineGaps.close(chains: joinedWays.chains, rings: joinedWays.rings, block: block, borders: borders)
+        let joined = CoastlineJoiner.Result(rings: closing.rings, chains: closing.chains)
+        emitter.report.seaGapsClosed = closing.gaps.count
+        emitter.report.seaEndsExtended = closing.extended
+        emitter.report.seaLongestGap = closing.gaps.max() ?? 0
         let whole = SeaBuilder.build(rings: joined.rings, chains: joined.chains, box: block)
-        emitter.report.seaOpenEnds = whole.openEnds + (broken ? 1 : 0)
-        guard !broken, !whole.rings.isEmpty else { return }
+        emitter.report.seaOpenEnds = whole.openEnds
+        guard !whole.rings.isEmpty else { return }
         emitter.report.seaPolygons = whole.seaPolygons
         emitter.report.seaIslands = whole.islands
         emitter.report.featuresByClass[.sea] = 1
