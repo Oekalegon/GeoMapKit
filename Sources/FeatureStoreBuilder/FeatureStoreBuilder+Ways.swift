@@ -27,6 +27,18 @@ extension FeatureStoreBuilder {
             let isClosed = gaps == 0 && nodeIDs.count >= 4 && nodeIDs.first == nodeIDs.last
             let tags = extract.ways.tags(at: position)
             var classification = classifier.classify(tags, shape: isClosed ? .closedWay : .openWay)
+            // The limit of the territorial waters is no border, but the agreed line between two countries in the sea is one,
+            // although it carries the same tag (the Norway to Sweden line in the Iddefjord and the Skagerrak): it is a member of
+            // the relations of both countries, a limit is a member of one.
+            if classification.featureClass == .other, tags.value(forKey: "boundary") == "administrative",
+                tags.value(forKey: "admin_level") == "2", classifier.isSeaLimit(tags)
+            {
+                if borders == nil { borders = BorderNames(extract: extract, classifier: classifier) }
+                if (borders?.countryRelationCount(ofWay: id) ?? 0) >= 2 {
+                    let plain = tags.orderedTags.filter { $0.key != "border_type" }
+                    classification = classifier.classify(ClassifierTagArray(plain), shape: isClosed ? .closedWay : .openWay)
+                }
+            }
             // A footway beside a road is a sidewalk, tagged or not.
             if Self.mayBeASidewalk(tags, classification) {
                 if roads == nil { roads = RoadIndex(extract: extract, classifier: classifier) }

@@ -31,6 +31,12 @@ struct BorderNames {
         }
     }
 
+    /// How many national border relations (level 2) have the way as a member. A way that two countries share is a border
+    /// between them; the limit of the territorial waters of one country belongs to its relation alone.
+    func countryRelationCount(ofWay id: Int64) -> Int {
+        claimsByWay[.countryBorder]?[id]?.count ?? 0
+    }
+
     /// The name of a border way: the regions it separates, each on its side.
     ///
     /// The result is a ``SidedName`` in text form: the names of the regions on the left of the way, looking along its stored

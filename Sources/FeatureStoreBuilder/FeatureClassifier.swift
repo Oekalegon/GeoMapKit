@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 15
+    public static let version: UInt16 = 16
 
     /// Creates a classifier.
     public init() {}
@@ -110,6 +110,12 @@ public struct FeatureClassifier: Sendable {
 
     /// The classes that are lines of the movement network; as areas they become `roadArea`.
     private static let roadClasses: Set<FeatureClass> = [.roadMajor, .roadMinor, .roadService, .path, .track, .pavement]
+
+    /// Whether a boundary is tagged as the limit of an area of sea (`border_type` territorial, economic zone, contiguous zone).
+    /// Such a way is no national border, unless it is the agreed line between two countries; the builder decides that.
+    func isSeaLimit(_ tags: some ClassifierTags) -> Bool {
+        Self.seaLimits.contains(tags.value(forKey: "border_type") ?? "")
+    }
 
     /// The `border_type` values of a boundary that is the limit of an area of sea, not the border between two countries.
     private static let seaLimits: Set<String> = ["territorial", "eez", "exclusive_economic_zone", "contiguous", "contiguous_zone"]

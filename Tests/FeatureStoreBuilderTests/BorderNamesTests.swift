@@ -132,4 +132,20 @@ struct BorderNamesTests {
         // Across the antimeridian the longitudes jump from 179 to -179.
         #expect(BoundarySides.isClockwise(ring([(0, 179), (1, 179), (1, -179), (0, -179)])) == true)
     }
+
+    @Test("The limit of the territorial waters is no border, unless two countries share it")
+    func seaLimit() throws {
+        let limit = level2 + [("maritime", "yes"), ("border_type", "territorial")]
+        var shared = SyntheticWorld()
+        shared.node(1, 0.5, 1.0); shared.node(2, 1.5, 1.0)
+        shared.way(10, [1, 2], limit)
+        shared.relation(50, [(10, "outer", 1)], level2 + [("name", "Norge")])
+        shared.relation(51, [(10, "outer", 1)], level2 + [("name", "Sverige")])
+        #expect(try names(of: .countryBorder, in: &shared) == ["Norge – Sverige"], "the line between two countries is drawn")
+        var alone = SyntheticWorld()
+        alone.node(1, 0.5, 1.0); alone.node(2, 1.5, 1.0)
+        alone.way(10, [1, 2], limit)
+        alone.relation(50, [(10, "outer", 1)], level2 + [("name", "Norge")])
+        #expect(try names(of: .countryBorder, in: &alone) == [], "the limit of one country's waters is not")
+    }
 }
