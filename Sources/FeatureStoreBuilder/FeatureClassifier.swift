@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 12
+    public static let version: UInt16 = 13
 
     /// Creates a classifier.
     public init() {}
@@ -72,6 +72,9 @@ public struct FeatureClassifier: Sendable {
         }
         // The shore of an island is a closed line even when the way also carries an area key such as `place`.
         if outcome.featureClass == .coastline, shape != .node { kind = .line }
+        // The border of a protected area is a line to stroke, never a surface (it has no fill, and the builder splits it where it
+        // goes from land into the sea).
+        if outcome.featureClass == .parkBorder, shape != .node { kind = .line }
         // A road or path that is an area (a yard, a pedestrian square, a parking aisle drawn as a polygon) is not a line to
         // stroke at the width of a road: it is a surface to fill.
         if kind == .area, Self.roadClasses.contains(outcome.featureClass) {

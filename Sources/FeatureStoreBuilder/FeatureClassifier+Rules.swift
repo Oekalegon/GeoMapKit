@@ -88,8 +88,12 @@ extension FeatureClassifier {
         rules.append(ClassifierRule("natural", make(.forest, .overview, watch: true, [("wood", 1)])))
         rules.append(ClassifierRule("landuse", make(.forest, .overview, watch: true, [("forest", 2)])))
         rules.append(ClassifierRule("natural", make(.tree, .detail, watch: false, [("tree", 1), ("tree_row", 2)])))
-        rules.append(ClassifierRule("boundary", make(.boundary, .overview, watch: false,
-            [("administrative", 1), ("protected_area", 2), ("national_park", 3)])))
+        // Protected areas are a class of their own (rule table version 13), so that the style can draw them in green, and in blue
+        // where they lie in the sea; the national and state borders stay `boundary` and `countryBorder`.
+        rules.append(ClassifierRule("boundary", merged(
+            make(.boundary, .overview, watch: false, [("administrative", 1)]),
+            make(.parkBorder, .overview, watch: false, [("protected_area", 2), ("national_park", 3)]))))
+        rules.append(ClassifierRule("leisure", make(.parkBorder, .overview, watch: false, [("nature_reserve", 4)])))
 
         // Land cover and land use.
         // The large kinds of land cover are in the overview band, so that at zoom 11 a village (urban land use) differs from the
@@ -131,6 +135,8 @@ extension FeatureClassifier {
             [("level_crossing", 14), ("crossing", 15), ("tram_level_crossing", 16), ("tram_crossing", 17), ("switch", 18),
              ("signal", 19), ("buffer_stop", 20)])))
         rules.append(ClassifierRule("traffic_calming", any: one(.roadPoint, .detail, watch: false, sub: 21)))
+        // Piers and the like: a runner on a quay sees them, and a marina without them is a patch of empty water.
+        rules.append(ClassifierRule("man_made", make(.pier, .mid, watch: false, [("pier", 1), ("breakwater", 2), ("groyne", 3)])))
         for (index, key) in ["amenity", "shop", "tourism", "historic", "leisure", "man_made", "emergency"].enumerated() {
             rules.append(ClassifierRule(key, any: one(.poi, .detail, watch: false, sub: UInt8(index + 1))))
         }

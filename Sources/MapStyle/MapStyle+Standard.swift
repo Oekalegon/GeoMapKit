@@ -25,6 +25,21 @@ extension MapStyle {
                 visibleZoom: 14...24, layer: 14),
             .boundary: ClassStyle(
                 stroke: .line(0x9E7CB1, ZoomValue((8, 0.8), (16, 1.5)), dash: [6, 3]), layer: 20),
+            // The border of a national park or a nature reserve: dark green on land, dark blue in the sea.
+            .parkBorder: ClassStyle(
+                stroke: .line(0x2E6B34, ZoomValue((8, 0.8), (16, 1.5)), dash: [6, 3]), layer: 20),
+            .parkBorderSea: ClassStyle(
+                stroke: .line(0x2A5C9A, ZoomValue((8, 0.8), (16, 1.5)), dash: [6, 3]), layer: 20),
+            // The outline of a lake, a fjord or a wide river, in the colour of the coastline; the stretches on a coast are left
+            // out when the file is built, so that no line runs across a river mouth.
+            .waterEdge: ClassStyle(stroke: .line(0x6FA8C8, ZoomValue((8, 0.5), (16, 1.2))), layer: 14),
+            // Piers and breakwaters: white like the streets, with a fine grey casing; a filled area is white too.
+            .pier: ClassStyle(
+                fill: FillStyle(color: .color(0xFFFFFF)),
+                stroke: StrokeStyle(
+                    color: .color(0xFFFFFF), width: LineWidth(points: ZoomValue((14, 0.8), (18, 3))),
+                    casing: .init(color: .color(0xBBBBBB), extraPoints: ZoomValue((14, 0), (15, 0.3), (18, 0.8)))),
+                visibleZoom: 14...24, layer: 15),
             // A national border: the boundary line on a wide, solid, transparent band of the same colour.
             .countryBorder: ClassStyle(
                 stroke: StrokeStyle(

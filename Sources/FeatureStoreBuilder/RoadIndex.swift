@@ -36,7 +36,7 @@ struct RoadIndex {
     ///   - extract: The extract.
     ///   - classifier: The classifier that says which ways are roads.
     init(extract: OSMExtract, classifier: FeatureClassifier) {
-        projection = LocalMetres()
+        projection = LocalMetres(around: extract.boundingBox)
         for position in extract.ways.indices {
             let tags = extract.ways.tags(at: position)
             guard tags.value(forKey: "highway") != nil, tags.value(forKey: "highway") != "pedestrian" else { continue }

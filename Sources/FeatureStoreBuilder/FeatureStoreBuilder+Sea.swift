@@ -3,14 +3,13 @@ import GeoCore
 import OSMPBF
 
 extension FeatureStoreBuilder {
-    /// Builds the sea from the coastlines in the extract and stores it as one area feature of class `sea`.
+    /// Joins the coastlines in the extract and builds the sea of the whole stored area.
     ///
-    /// The sea covers the written cells only, and is built cell by cell for every band (``SeaBuilder``), from coastlines
-    /// simplified for that band. It has the object ID 0 (it is not an OSM object). Nothing is stored if the coastlines
-    /// cannot be closed.
-    func storeSea(
+    /// This comes before the ways are stored, because the ways need to know where the sea is (the border of a protected area is
+    /// another colour in it). Nothing is built if the coastlines cannot be closed.
+    func prepareSea(
         of extract: OSMExtract, columns: ClosedRange<Int>, rows: ClosedRange<Int>, into emitter: inout FeatureEmitter
-    ) throws {
+    ) throws -> PreparedSea? {
         var ways: [CoastlineJoiner.Way] = []
         var skipped = 0
         for position in extract.ways.indices {
@@ -26,7 +25,7 @@ extension FeatureStoreBuilder {
         emitter.report.coastlineWaysSkipped = skipped
         // A coastline that could not be used at all must still be reported: the build has no sea, and the user should know why.
         if ways.isEmpty && skipped > 0 { emitter.report.seaOpenEnds = 1 }
-        guard !ways.isEmpty, let block = CellRect(columns: columns, rows: rows, zoom: Self.zoom) else { return }
+        guard !ways.isEmpty, let block = CellRect(columns: columns, rows: rows, zoom: Self.zoom) else { return nil }
         let joinedWays = CoastlineJoiner.join(ways)
         // Coastlines that end inside the area (the extract stops at a country border) are joined with straight lines.
         var borders: [[PackedPoint]] = []
@@ -42,9 +41,20 @@ extension FeatureStoreBuilder {
         emitter.report.seaLongestGap = closing.gaps.max() ?? 0
         let whole = SeaBuilder.build(rings: joined.rings, chains: joined.chains, box: block)
         emitter.report.seaOpenEnds = whole.openEnds
-        guard !whole.rings.isEmpty else { return }
+        guard !whole.rings.isEmpty else { return nil }
         emitter.report.seaPolygons = whole.seaPolygons
         emitter.report.seaIslands = whole.islands
+        return PreparedSea(joined: joined, whole: whole, block: block)
+    }
+
+    /// Stores the sea as one area feature of class `sea`.
+    ///
+    /// The sea covers the written cells only, and is built cell by cell for every band (``SeaBuilder``), from coastlines
+    /// simplified for that band. It has the object ID 0 (it is not an OSM object).
+    func storeSea(
+        _ prepared: PreparedSea, columns: ClosedRange<Int>, rows: ClosedRange<Int>, into emitter: inout FeatureEmitter
+    ) throws {
+        let joined = prepared.joined, whole = prepared.whole, block = prepared.block
         emitter.report.featuresByClass[.sea] = 1
 
         for band in ZoomBand.allCases {

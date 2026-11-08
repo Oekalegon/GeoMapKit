@@ -128,7 +128,8 @@ struct FeatureStoreBuilderTests {
     @Test("A multipolygon with a hole is one area feature per cell, the hole is a second ring, and the area adds up")
     func multipolygonWithHole() throws {
         let (file, result, world, extract) = try built()
-        let lake = pieces(try features(file), type: .relation, id: 300)
+        // The outline of the lake is stored with it, as lines of class `waterEdge`; the area itself is what is counted here.
+        let lake = pieces(try features(file), type: .relation, id: 300).filter { $0.feature.classID == FeatureClass.waterArea.rawValue }
         #expect(lake.count == 3 && lake.allSatisfy { $0.feature.kind == .area && $0.feature.classID == FeatureClass.waterArea.rawValue })
         let middle = try #require(lake.first { $0.cell.x == world.block.centre.x })
         #expect(middle.feature.parts.count == 2)

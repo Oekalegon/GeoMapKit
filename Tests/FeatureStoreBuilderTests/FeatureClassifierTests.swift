@@ -68,8 +68,11 @@ struct FeatureClassifierTests {
         Case(tags: ["boundary": "administrative", "admin_level": "4"], featureClass: .boundary, band: .overview, watch: false),
         Case(tags: ["boundary": "administrative", "admin_level": "7"], featureClass: .other, band: .detail, watch: false),
         Case(tags: ["boundary": "administrative", "admin_level": "2"], featureClass: .countryBorder, band: .overview, watch: false),
-        Case(tags: ["boundary": "protected_area"], featureClass: .boundary, band: .overview, watch: false),
-        Case(tags: ["boundary": "national_park"], featureClass: .boundary, band: .overview, watch: false),
+        Case(tags: ["boundary": "protected_area"], featureClass: .parkBorder, band: .overview, watch: false),
+        Case(tags: ["boundary": "national_park"], featureClass: .parkBorder, band: .overview, watch: false),
+        Case(tags: ["leisure": "nature_reserve"], featureClass: .parkBorder, band: .overview, watch: false),
+        Case(tags: ["man_made": "pier"], featureClass: .pier, band: .mid, watch: false),
+        Case(tags: ["man_made": "breakwater"], featureClass: .pier, band: .mid, watch: false),
         Case(tags: ["natural": "scrub"], featureClass: .landcover, band: .overview, watch: true),
         Case(tags: ["natural": "scree"], featureClass: .landcover, band: .overview, watch: true),
         Case(tags: ["natural": "glacier"], featureClass: .landcover, band: .overview, watch: true),
@@ -157,8 +160,9 @@ struct FeatureClassifierTests {
 
     @Test("Every class is reachable, and class IDs are unique")
     func allClassesCovered() {
-        // `sea` is made by the builder from the coastlines; no tags give it.
-        let produced = Set(Self.table.map(\.featureClass)).union([.sea, .roadArea])
+        // `sea` is made by the builder from the coastlines; no tags give it. The outline of a water area, and the sea part of a
+        // park border, are made by the builder from the geometry, and `roadArea` from a road that is an area.
+        let produced = Set(Self.table.map(\.featureClass)).union([.sea, .roadArea, .waterEdge, .parkBorderSea])
         #expect(produced == Set(FeatureClass.allCases))
         #expect(Set(FeatureClass.allCases.map(\.rawValue)).count == FeatureClass.allCases.count)
     }
@@ -179,9 +183,22 @@ struct FeatureClassifierTests {
         #expect(classify(["building": "no"]).featureClass == .other)
     }
 
-    @Test("A boundary protected area that is also a nature reserve is a boundary")
-    func boundaryBeforeLandcover() {
-        #expect(classify(["boundary": "protected_area", "leisure": "nature_reserve"], .multipolygon).featureClass == .boundary)
+    @Test("A protected area, also when it is a nature reserve, is a park border: a line, never a surface")
+    func parkBorder() {
+        #expect(classify(["boundary": "protected_area", "leisure": "nature_reserve"], .multipolygon).featureClass == .parkBorder)
+        #expect(classify(["boundary": "national_park"], .closedWay).featureClass == .parkBorder)
+        #expect(classify(["leisure": "nature_reserve"], .closedWay).featureClass == .parkBorder)
+        #expect(classify(["boundary": "protected_area"], .closedWay).kind == .line)
+        #expect(classify(["boundary": "protected_area"], .multipolygon).kind == .line)
+        #expect(classify(["boundary": "administrative", "admin_level": "4"]).featureClass == .boundary)
+    }
+
+    @Test("A pier, a breakwater and a groyne are piers")
+    func pier() {
+        #expect(classify(["man_made": "pier"]).featureClass == .pier)
+        #expect(classify(["man_made": "breakwater"]).featureClass == .pier)
+        #expect(classify(["man_made": "pier", "floating": "yes"], .closedWay).kind == .area)
+        #expect(classify(["man_made": "tower"], .node).featureClass == .poi)
     }
 
     @Test("Track grade goes into the subclass")
@@ -225,7 +242,8 @@ struct FeatureClassifierTests {
         #expect(classify(["barrier": "fence"], .closedWay).kind == .line)
         #expect(classify(["railway": "rail"], .closedWay).kind == .line)
         #expect(classify(["boundary": "administrative"], .closedWay).kind == .line)
-        #expect(classify(["boundary": "protected_area"], .closedWay).kind == .area)
+        #expect(classify(["boundary": "protected_area"], .closedWay).kind == .line, "the border of a park is a line")
+        #expect(classify(["boundary": "protected_area"], .closedWay).featureClass == .parkBorder)
         #expect(classify(["waterway": "riverbank"], .closedWay).kind == .area)
         #expect(classify([:], .closedWay).kind == .line)
     }
@@ -279,8 +297,8 @@ struct FeatureClassifierTests {
             #expect(classify(["boundary": "administrative", "admin_level": level], .openWay).featureClass == .other, "level \(level)")
         }
         #expect(classify(["boundary": "administrative"], .openWay).featureClass == .other, "no level")
-        // Protected areas and national parks stay boundaries, whatever else they say.
-        #expect(classify(["boundary": "protected_area", "admin_level": "2"], .openWay).featureClass == .boundary)
+        // Protected areas and national parks are park borders, whatever else they say.
+        #expect(classify(["boundary": "protected_area", "admin_level": "2"], .openWay).featureClass == .parkBorder)
         // A border in the sea between two countries is a national border (the Idefjord between Norway and Sweden)...
         let fjord = classify(["boundary": "administrative", "admin_level": "2", "maritime": "yes"], .openWay)
         #expect(fjord.featureClass == .countryBorder)
@@ -342,12 +360,12 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
-    @Test("The rule table version is 12, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 13, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 12)
+        #expect(FeatureClassifier.version == 13)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
-        #expect(FeatureClass.allCases.count == 32)
+        #expect(FeatureClass.allCases.count == 36)
     }
 }

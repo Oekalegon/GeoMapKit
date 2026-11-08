@@ -3,7 +3,9 @@ import OSMPBF
 
 extension FeatureStoreBuilder {
     /// Stores every way as a line or area feature, except those a multipolygon already holds.
-    func storeWays(of extract: OSMExtract, suppressed: Set<Int64>, into emitter: inout FeatureEmitter) throws {
+    func storeWays(
+        of extract: OSMExtract, suppressed: Set<Int64>, shore: inout ShoreContext, into emitter: inout FeatureEmitter
+    ) throws {
         // Built when the first footway needs it: an extract without footways never pays for it.
         var roads: RoadIndex?
         var town: TownIndex?
@@ -14,7 +16,7 @@ extension FeatureStoreBuilder {
                 emitter.report.waysSuppressed += 1
                 continue
             }
-            let (runs, gaps) = Self.runs(ofWayAt: position, in: extract)
+            var (runs, gaps) = Self.runs(ofWayAt: position, in: extract)
             if gaps > 0 { emitter.report.waysWithMissingNodes += 1 }
             guard !runs.isEmpty else {
                 emitter.report.waysWithoutGeometry += 1
@@ -46,10 +48,35 @@ extension FeatureStoreBuilder {
                     }
                 }
             }
+            switch classification.featureClass {
+            case .parkBorder:
+                try storeParkBorder(
+                    classification, objectType: .way, objectID: id, tags: tags.orderedTags, lines: runs, shore: shore, into: &emitter)
+                emitter.report.waysStored += 1
+                continue
+            case .coastline:
+                // The coastline that closes the mouth of a river runs through the water of the river: it is not a shore.
+                let result = shore.coastline(runs)
+                emitter.report.coastlineStretchesInRivers += result.dropped
+                runs = result.kept
+            case .waterLine where classification.kind == .line && (1...5).contains(SubclassBits.value(of: classification.subclass)):
+                // The centre line of a river is not drawn through the river's own area.
+                let result = shore.waterLine(runs)
+                emitter.report.waterLineStretchesInWater += result.dropped
+                runs = result.kept
+            default:
+                break
+            }
+            guard !runs.isEmpty else { continue }
             let geometry: FeatureSpec.Geometry = classification.kind == .area ? .rings([runs[0]]) : .lines(runs)
             try emitter.emit(FeatureSpec(
                 classification: classification, objectType: .way, objectID: id, tags: tags.orderedTags, geometry: geometry))
             emitter.report.waysStored += 1
+            if classification.featureClass == .waterArea, classification.kind == .area, isClosed {
+                try storeWaterEdge(
+                    of: [runs[0]], classification, objectType: .way, objectID: id, tags: tags.orderedTags, shore: &shore,
+                    into: &emitter)
+            }
         }
     }
 
