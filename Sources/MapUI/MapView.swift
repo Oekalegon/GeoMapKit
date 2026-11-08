@@ -145,7 +145,7 @@ public struct MapView: View {
             }
             .onEnded { _ in
                 dragStart = nil
-                interacting = pinchStart != nil || rotationStart != nil
+                updateInteracting()
             }
     }
 
@@ -172,7 +172,7 @@ public struct MapView: View {
         scrollEnd?.cancel()
         scrollEnd = Task {
             try? await Task.sleep(for: .milliseconds(200))
-            if !Task.isCancelled { interacting = dragStart != nil || pinchStart != nil }
+            if !Task.isCancelled { updateInteracting() }
         }
     }
     #endif
@@ -188,7 +188,7 @@ public struct MapView: View {
             }
             .onEnded { _ in
                 pinchStart = nil
-                interacting = dragStart != nil || rotationStart != nil
+                updateInteracting()
             }
     }
 
@@ -204,7 +204,7 @@ public struct MapView: View {
             }
             .onEnded { _ in
                 rotationStart = nil
-                interacting = dragStart != nil || pinchStart != nil
+                updateInteracting()
             }
     }
 
@@ -226,6 +226,11 @@ public struct MapView: View {
         }
     }
     #endif
+
+    /// Sets `interacting` from the gestures that are still going on, so that the end of one gesture does not end the others.
+    private func updateInteracting() {
+        interacting = dragStart != nil || pinchStart != nil || rotationStart != nil
+    }
 
     /// A bearing wrapped into 0..<360.
     static func wrapped(_ bearing: Double) -> Double {
