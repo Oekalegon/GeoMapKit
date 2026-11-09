@@ -39,7 +39,7 @@ struct TownIndex {
         if isPlatform { return .town }
         guard classification.kind == .area else { return .none }
         switch classification.featureClass {
-        case .landuseUrban, .roadArea: return .town
+        case .landuseUrban, .militaryArea, .roadArea: return .town
         case .landcover, .forest: return .green
         default:
             return tags.value(forKey: "amenity") == "parking" || tags.value(forKey: "place") == "square" ? .town : .none

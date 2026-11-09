@@ -95,4 +95,16 @@ struct TownIndexTests {
         #expect(try classID(of: 611, in: file) == FeatureClass.pavement.rawValue)
         #expect(try classID(of: 612, in: file) == FeatureClass.path.rawValue, "the hole is outside the area")
     }
+
+    @Test("Military land is its own class, and still counts as built-up for the footway rule")
+    func militaryLand() throws {
+        var world = SyntheticWorld()
+        world.way(540, world.rectangle(first: 540, 0.3, 0.3, 2.7, 2.7), [("landuse", "military")])
+        walk(&world, 621, (0.5, 1.0), (2.5, 1.0))
+        let result = try FeatureStoreBuilder().build(from: try world.extract())
+        let file = try FeatureStoreFile(data: result.data)
+        #expect(try classID(of: 540, in: file) == FeatureClass.militaryArea.rawValue)
+        #expect(try classID(of: 621, in: file) == FeatureClass.pavement.rawValue, "in built-up land, as before rule table 17")
+        #expect(result.report.townAreas == 1)
+    }
 }

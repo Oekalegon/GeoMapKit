@@ -30,6 +30,8 @@ extension MapStyle: Codable {
         // Protected areas were `boundary` before `parkBorder` existed, and the sea part of their border has the colour of the land part.
         if classes[.parkBorder] == nil, let boundary = classes[.boundary] { classes[.parkBorder] = boundary }
         if classes[.parkBorderSea] == nil, let park = classes[.parkBorder] { classes[.parkBorderSea] = park }
+        // Military land was part of `landuseUrban` before `militaryArea` existed (rule table 17); a style file from then draws it that way.
+        if classes[.militaryArea] == nil, let urban = classes[.landuseUrban] { classes[.militaryArea] = urban }
         // Service roads were part of `roadMinor` before `roadService` existed; a style file from then draws them as streets.
         if classes[.roadService] == nil, let street = classes[.roadMinor] { classes[.roadService] = street }
         self.init(

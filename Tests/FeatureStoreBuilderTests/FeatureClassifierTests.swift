@@ -99,7 +99,7 @@ struct FeatureClassifierTests {
         Case(tags: ["leisure": "park"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["leisure": "pitch"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["landuse": "residential"], featureClass: .landuseUrban, band: .overview, watch: false),
-        Case(tags: ["landuse": "military"], featureClass: .landuseUrban, band: .overview, watch: false),
+        Case(tags: ["landuse": "military"], featureClass: .militaryArea, band: .overview, watch: false),
         Case(tags: ["building": "yes"], featureClass: .building, band: .mid, watch: false),
         Case(tags: ["building": "house"], featureClass: .building, band: .mid, watch: false),
         Case(tags: ["building:part": "yes"], featureClass: .building, band: .detail, watch: false),
@@ -360,12 +360,12 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
-    @Test("The rule table version is 16, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 17, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 16)
+        #expect(FeatureClassifier.version == 17)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
-        #expect(FeatureClass.allCases.count == 36)
+        #expect(FeatureClass.allCases.count == 37)
     }
 }
