@@ -18,6 +18,8 @@ final class MapLibrary {
     private(set) var maps: [MapItem] = []
     /// The styles of the user, by name.
     private(set) var styles: [StyleItem] = []
+    /// A style the library screen asks the map screen to open in the style editor (the map screen has the map to preview it on).
+    var styleToEdit: String?
     /// Counts every change of the lists or of a choice of style, so that a view that reads it is drawn again.
     private(set) var revision = 0
     /// The map that is shown, as the id of its item.
@@ -281,6 +283,12 @@ final class MapLibrary {
         try style.jsonData().write(to: target, options: .atomic)
         reload()
         return styles.first { $0.id == target.lastPathComponent } ?? StyleItem(id: target.lastPathComponent, name: name, date: .now)
+    }
+
+    /// Writes a style to the file of an item of the library (the style editor saves with it). The map that uses the style is drawn again.
+    func saveStyle(_ style: MapStyle, to item: StyleItem) throws {
+        do { try style.jsonData().write(to: url(of: item), options: .atomic) } catch { throw LibraryError.failed(item.name, error.localizedDescription) }
+        reload()
     }
 
     // MARK: Opening
