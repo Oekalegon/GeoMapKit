@@ -39,6 +39,8 @@ public struct MapSceneBuilder: Sendable {
     ///
     /// - Throws: ``MapRenderError/noBands`` if the file holds no band, or a `FeatureStoreError` if a cell is damaged.
     public func scene(for viewport: MapViewport) throws -> MapScene {
+        // A set with coarse levels hands out the level that serves this zoom; the cells below are read from it.
+        let source = self.source.source(atZoom: viewport.zoom)
         guard let band = ZoomBand.band(forZoom: viewport.zoom, available: source.bands) else { throw MapRenderError.noBands }
         let classIDs = style.visibleClassIDs(atZoom: viewport.zoom)
         let visible = ScreenBounds(width: viewport.width, height: viewport.height, margin: Self.cullingMargin)

@@ -340,4 +340,36 @@ struct LevelBuilderTests {
         #expect(left.points == right.points && left.points.count == 2, "the corners on the border are the same in both blocks")
         #expect(left.artificial && right.artificial, "the edge along the border of the blocks is marked artificial on both sides")
     }
+
+    @Test func aRingWhosePiecesMissEachOtherAlongTheBorderIsStillOneRing() throws {
+        // The two pieces of a rectangle across the border between two blocks, but the east piece is 0.02 degree further north
+        // along the border: two blocks that simplified a coastline that runs along the border differently. The ends do not meet; each
+        // is on the same line of the border as the start it should join.
+        let west = TileID(zoom: 13, x: 32 * 4 + 31, y: 32 * 74 + 5)!, east = TileID(zoom: 13, x: 32 * 5, y: 32 * 74 + 5)!
+        let w = CellRect(tile: west)
+        let border = w.east
+        let lat = w.north / 2 + w.south / 2
+        let halfWidth: Int32 = 120_000, halfHeight: Int32 = 80_000, shift: Int32 = 200_000
+        var source = writer()
+        func area(_ points: [PackedPoint], artificial: Range<Int>, in cell: TileID) throws {
+            try source.add(
+                StoredFeature(
+                    classID: FeatureClass.waterArea.rawValue, kind: .area, objectType: .way, objectID: 32,
+                    parts: [GeometryPart(points: points, artificialEdges: [artificial])]),
+                band: .overview, cell: cell)
+        }
+        let nw = pt(border - halfWidth, lat + halfHeight), ne = pt(border, lat + halfHeight)
+        let se = pt(border, lat - halfHeight), sw = pt(border - halfWidth, lat - halfHeight)
+        try area([nw, ne, se, sw, nw], artificial: 1..<2, in: west)
+        let nw2 = pt(border, lat + halfHeight + shift), ne2 = pt(border + halfWidth, lat + halfHeight + shift)
+        let se2 = pt(border + halfWidth, lat - halfHeight + shift), sw2 = pt(border, lat - halfHeight + shift)
+        try area([nw2, ne2, se2, sw2, nw2], artificial: 3..<4, in: east)
+        let file = try FeatureStoreFile(data: try source.data())
+        let spec = try LevelSpec(topZoom: 8, classes: [FeatureClass.waterArea.rawValue])
+        let result = try #require(try LevelBuilder.build(from: file, spec: spec, tile: TileID(zoom: 8, x: 4, y: 74)!, margin: 4))
+        #expect(result.report.openAreaChains == 0, "the ends were joined along the border")
+        let built = try FeatureStoreFile(data: result.data)
+        let features = try built.cells().flatMap { try built.features(in: $0, band: .overview) }
+        #expect(!features.isEmpty && features.allSatisfy { !$0.flags.contains(.incomplete) })
+    }
 }

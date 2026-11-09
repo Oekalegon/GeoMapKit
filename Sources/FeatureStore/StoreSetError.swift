@@ -8,6 +8,8 @@ public enum StoreSetError: Error, Equatable, Sendable {
     case blockMissing(String)
     /// A block file does not agree with the manifest (storage zoom, format, rule table or bands) or is not a store file.
     case blockMismatch(file: String, reason: String)
+    /// A level block was made from blocks that have changed since; the levels have to be built again.
+    case levelOutOfDate(file: String)
 }
 
 extension StoreSetError: CustomStringConvertible {
@@ -17,6 +19,7 @@ extension StoreSetError: CustomStringConvertible {
         case .unsupportedManifestVersion(let version): "The manifest has version \(version), which this reader does not support."
         case .blockMissing(let file): "The block file \(file) named in the manifest is missing."
         case .blockMismatch(let file, let reason): "The block file \(file) does not match the manifest: \(reason)"
+        case .levelOutOfDate(let file): "The level file \(file) was made from blocks that have changed since: run 'geomapkit build-levels' again."
         }
     }
 }

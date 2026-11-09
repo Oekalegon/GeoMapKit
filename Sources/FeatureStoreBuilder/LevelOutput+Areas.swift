@@ -8,7 +8,7 @@ extension LevelOutput {
         let blockRect = CellRect(tile: tile)
         for key in collected.rings.keys.sorted() {
             guard let rings = collected.rings[key], var attributes = collected.attributes[key] else { continue }
-            let dissolved = LevelDissolve.rings(of: rings, present: collected.present, region: region)
+            let dissolved = LevelDissolve.rings(of: rings, present: collected.present, region: region, snapRadians: 2 * spec.tolerance)
             report.openAreaChains += dissolved.open
             if dissolved.open > 0 { attributes.incomplete = true }
             var partsByCell: [TileID: [GeometryPart]] = [:]
