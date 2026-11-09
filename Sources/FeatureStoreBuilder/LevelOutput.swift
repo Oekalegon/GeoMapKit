@@ -17,6 +17,9 @@ struct LevelOutput {
     var report: LevelReport
     /// The water areas (object type and ID) that were left out as thin or small: their outlines (`waterEdge`) go with them.
     var droppedWater: Set<LevelWaterKey> = []
+    /// The rings of the water areas that were kept, one list of rings (even-odd) for each feature: a river name that does not lie in one
+    /// of them is written as the river line, because its area is not drawn at this level.
+    var keptWater: [[[PackedPoint]]] = []
 
     init(writer: FeatureStoreWriter, spec: LevelSpec, tile: TileID, block: LevelRegion, report: LevelReport) {
         self.writer = writer
@@ -75,6 +78,28 @@ struct LevelOutput {
             area += abs(twice) / 2
         }
         return (perimeter > 0 ? 2 * area / perimeter : 0, area)
+    }
+
+    /// Whether a point lies in the water of a kept water area (inside an odd number of the rings of one feature).
+    func isInKeptWater(_ point: PackedPoint) -> Bool {
+        let x = Double(point.longitude), y = Double(point.latitude)
+        for rings in keptWater {
+            var inside = false
+            for ring in rings where ring.count >= 4 {
+                var j = ring.count - 1
+                for i in 0..<ring.count {
+                    let a = ring[i], b = ring[j]
+                    if (Double(a.latitude) > y) != (Double(b.latitude) > y),
+                        x < (Double(b.longitude) - Double(a.longitude)) * (y - Double(a.latitude)) / (Double(b.latitude) - Double(a.latitude)) + Double(a.longitude)
+                    {
+                        inside.toggle()
+                    }
+                    j = i
+                }
+            }
+            if inside { return true }
+        }
+        return false
     }
 
     mutating func writePoints(_ collected: LevelCollection) throws {

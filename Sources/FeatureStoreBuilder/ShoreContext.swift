@@ -29,6 +29,7 @@ struct ShoreContext {
     private let projection: LocalMetres
     private var coastGrid: SegmentGrid?
     private var waterLayer: AreaLayer?
+    private var largeWaterLayer: AreaLayer?
     /// The sea of the stored area, or `nil` if there is none.
     var sea: SeaLookup?
 
@@ -56,6 +57,19 @@ struct ShoreContext {
         }
         for area in areas { layer.add(area.polygon) }
         waterLayer = layer
+        return layer
+    }
+
+    /// The water areas that are in the overview band (not thin, not small, see `WaterSize`): where a river runs in one of these its
+    /// centre line is not drawn, because the area is. A river in a thin area keeps its line, since the area is not drawn at low zoom.
+    private mutating func largeWater() -> AreaLayer {
+        if let largeWaterLayer { return largeWaterLayer }
+        var layer = AreaLayer()
+        let areas = AreaPolygons.collect(extract: extract, classifier: classifier) { classification, _ -> Bool? in
+            classification.featureClass == .waterArea && classification.kind == .area ? true : nil
+        }
+        for area in areas where !WaterSize.isSmall(area.polygon) { layer.add(area.polygon) }
+        largeWaterLayer = layer
         return layer
     }
 
@@ -91,7 +105,7 @@ struct ShoreContext {
 
     /// A river or stream split into the stretches outside the water areas and the stretches inside them.
     mutating func waterLineStretches(_ lines: [[PackedPoint]]) -> (kept: [[PackedPoint]], inWater: [[PackedPoint]]) {
-        let water = water()
+        let water = largeWater()
         guard !water.polygons.isEmpty else { return (lines, []) }
         var kept: [[PackedPoint]] = [], inWater: [[PackedPoint]] = []
         for line in lines {

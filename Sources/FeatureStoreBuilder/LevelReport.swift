@@ -12,6 +12,8 @@ public struct LevelReport: Sendable, Equatable, CustomStringConvertible {
     public var cellsWritten = 0
     /// Line chains and area rings dropped for being smaller than three pixels.
     public var droppedAsSmall = 0
+    /// River courses whose water area was left out of the level, written as river lines.
+    public var riverNamesAsLines = 0
     /// Area chains that did not close and were closed with a straight line; they are written as an incomplete feature (outline only).
     public var openAreaChains = 0
     /// Lines whose pieces were joined into one.

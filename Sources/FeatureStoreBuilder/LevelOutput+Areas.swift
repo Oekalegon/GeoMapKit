@@ -47,6 +47,8 @@ extension LevelOutput {
                 }
             }
 
+            if key.classID == FeatureClass.waterArea.rawValue { keptWater.append(dissolved.rings) }
+
             // The rings that closed are filled; a chain that did not close is written on its own, closed with a straight line and
             // marked incomplete, so that it is drawn as an outline and the rest of the feature (the sea of the block) keeps its fill.
             let closed = parts(of: dissolved.rings)

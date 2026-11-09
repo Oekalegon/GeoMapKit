@@ -114,6 +114,23 @@ struct ShoreTests {
         #expect(report.featuresByClass[.waterLine] == 2, "the two rivers are kept where they are outside the lake")
     }
 
+    @Test("A river in a water area that is too thin for the overview band keeps its line there, and the area is not in the overview band")
+    func riverInAThinArea() throws {
+        var world = SyntheticWorld()
+        world.way(100, world.rectangle(first: 10, 0.5, 0.74982, 2.5, 0.75018), [("natural", "water")])   // 2 degrees long, 40 m wide
+        world.node(20, 0.2, 0.75); world.node(21, 2.8, 0.75)
+        world.way(101, [20, 21], [("waterway", "river"), ("name", "Testelva")])
+        let (file, report) = try build(&world)
+        #expect(report.riverNameStretches == 0 && report.waterLineStretchesInWater == 0, "the river is not cut: its area is not drawn at low zoom")
+        #expect(report.featuresByClass[.waterLine] == 1 && report.featuresByClass[.riverName] == nil)
+        var overview = Set<UInt8>()
+        for cell in try file.cells() {
+            for feature in try file.features(in: cell, band: .overview) { overview.insert(feature.classID) }
+        }
+        #expect(overview.contains(FeatureClass.waterLine.rawValue))
+        #expect(!overview.contains(FeatureClass.waterArea.rawValue) && !overview.contains(FeatureClass.waterEdge.rawValue))
+    }
+
     @Test("A lake gets an outline of its own, and a river inside it no centre line")
     func lakeOutlineAndRiver() throws {
         var world = SyntheticWorld()

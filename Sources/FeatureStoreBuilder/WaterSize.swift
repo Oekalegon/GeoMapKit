@@ -39,6 +39,21 @@ enum WaterSize {
         return area < minimumArea || 2 * area / perimeter < minimumWidth
     }
 
+    /// Whether a polygon (rings in metres) is too thin or too small for the overview band: the same rule as ``isSmall(_:)``.
+    static func isSmall(_ polygon: AreaPolygon) -> Bool {
+        var area = 0.0, perimeter = 0.0
+        for ring in polygon.rings where ring.xs.count >= 4 {
+            var twice = 0.0
+            for index in 0..<(ring.xs.count - 1) {
+                twice += ring.xs[index] * ring.ys[index + 1] - ring.xs[index + 1] * ring.ys[index]
+                perimeter += hypot(ring.xs[index + 1] - ring.xs[index], ring.ys[index + 1] - ring.ys[index])
+            }
+            area += abs(twice) / 2
+        }
+        guard perimeter > 0 else { return true }
+        return area < minimumArea || 2 * area / perimeter < minimumWidth
+    }
+
     /// The classification with its band raised to mid when the area is small and was in the overview band.
     static func adjusted(_ classification: Classification, rings: [[PackedPoint]]) -> Classification {
         guard classification.featureClass == .waterArea, classification.kind == .area, classification.minimumBand == .overview,
