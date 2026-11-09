@@ -1,0 +1,727 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		07F35E0A3709BD4FF498D49F /* GeoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 65A59E064EE58A780B02BCE9 /* GeoCore */; };
+		0B09CECCE8460504B948F53E /* MapLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = C51DD37C6F29B4540A456C6D /* MapLibrary.swift */; };
+		17FEE7FD6BC9B39D889067C2 /* GeoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9CD0091E55ACE0D613480C7F /* GeoCore */; };
+		2A91EDB3673B6D9EC5F405D7 /* GeoMapKitDemoWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E89DC2E9C7554002D6FA685 /* GeoMapKitDemoWatchApp.swift */; };
+		3531C206C0CAEEA973CDE9ED /* FeatureStore in Frameworks */ = {isa = PBXBuildFile; productRef = D6BE4F640EE5A9B38E0F542B /* FeatureStore */; };
+		3B68326DBBD82C9C41DE7C31 /* LibraryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FFD9548FE43CBA881787881 /* LibraryScreen.swift */; };
+		3BCC7A29B994531CBDF911D5 /* MapStyle in Frameworks */ = {isa = PBXBuildFile; productRef = E12ADCF435FC6B0E4B5563EA /* MapStyle */; };
+		433C851C48EE67859E273EF8 /* StyleItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0877FCC5C94C2B18FE723F6 /* StyleItem.swift */; };
+		6D605B0C07EFF24E308961AF /* GeoMapKitDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE501F300C05598F1FAEAE6F /* GeoMapKitDemoApp.swift */; };
+		78D91FF1AF93E3C7F24621B9 /* MapStyle in Frameworks */ = {isa = PBXBuildFile; productRef = 80D20406935A43FD2536AD87 /* MapStyle */; };
+		87273FBCFB0251E47A28C352 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7CF620ECD41F7940D7989E7 /* MapScreen.swift */; };
+		8741B596F37508760E23A626 /* MapRender in Frameworks */ = {isa = PBXBuildFile; productRef = C80BEA4F5B271F1071527A88 /* MapRender */; };
+		90A0C62CC732AF45B7DE4195 /* GeoMapKitDemoWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = FC772F2A0A656DE857078DBA /* GeoMapKitDemoWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		9B2C1A7B1F9BC0CCD2C7CCF2 /* LocationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC96EBAD0446EB5544EDF17 /* LocationModel.swift */; };
+		A66F326A8E1BE9EB5A468C30 /* FeatureStore in Frameworks */ = {isa = PBXBuildFile; productRef = 7C77F6286B23BEAAEDAA580F /* FeatureStore */; };
+		A6994B8FE18CEE7146CEEAF4 /* MapRender in Frameworks */ = {isa = PBXBuildFile; productRef = F91386561EA8E9CEDAC55B3E /* MapRender */; };
+		B50CE7842E124FBC86216B01 /* LibraryError.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8220DA27892D399860B2117 /* LibraryError.swift */; };
+		C298B639BBAD2B1F11FA02D4 /* MapItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2675E11624EF30CE5A2559B /* MapItem.swift */; };
+		C6C571D83069753D240EF63D /* MapUI in Frameworks */ = {isa = PBXBuildFile; productRef = 14E277F6BAD6AC73F44E2257 /* MapUI */; };
+		CF6A4E94EC0632AEFBED8EB6 /* FeatureStore in Frameworks */ = {isa = PBXBuildFile; productRef = 5FA8C82DE1561CE950C399ED /* FeatureStore */; };
+		D0F0202DEC448DFA9B8726C8 /* OpenedMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4249091C362AF5FE7833BB27 /* OpenedMap.swift */; };
+		D80DDE180F4A3F498D9501EE /* MapLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9DEF99A4525C0DA69EF181A /* MapLibraryTests.swift */; };
+		E7C9741CC0D2E1D311AF2CCF /* MapStyle in Frameworks */ = {isa = PBXBuildFile; productRef = 7C446EAE971EC2141C16F7B5 /* MapStyle */; };
+		EC169372EC0711B5F89AC60F /* MapUI in Frameworks */ = {isa = PBXBuildFile; productRef = 90CB96104EE268F89DDFCA75 /* MapUI */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		553A413DE5763F96691F79F5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E584A0151562E8602EB1162D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1BAE9EA0B77FA710C8F18B00;
+			remoteInfo = GeoMapKitDemoWatch;
+		};
+		F3757AE62D05A8A0E1C1A4DE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E584A0151562E8602EB1162D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 187BD190E4B011D2C4ABAD2E;
+			remoteInfo = GeoMapKitDemo;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		12445692065AC91FF481C93F /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				90A0C62CC732AF45B7DE4195 /* GeoMapKitDemoWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		339E86705CDB9ABB95D780D2 /* GeoMapKitDemo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GeoMapKitDemo.entitlements; sourceTree = "<group>"; };
+		3DC96EBAD0446EB5544EDF17 /* LocationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationModel.swift; sourceTree = "<group>"; };
+		4249091C362AF5FE7833BB27 /* OpenedMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenedMap.swift; sourceTree = "<group>"; };
+		50347C48A94B8640D4AE223F /* lucid-meitner-bac674 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "lucid-meitner-bac674"; path = ..; sourceTree = SOURCE_ROOT; };
+		53C7DDEBE7037DC87D87A21E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		6FFD9548FE43CBA881787881 /* LibraryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryScreen.swift; sourceTree = "<group>"; };
+		91CAE03E8B77900B93FACDC2 /* GeoMapKitDemoTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = GeoMapKitDemoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9E89DC2E9C7554002D6FA685 /* GeoMapKitDemoWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoMapKitDemoWatchApp.swift; sourceTree = "<group>"; };
+		B8220DA27892D399860B2117 /* LibraryError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryError.swift; sourceTree = "<group>"; };
+		C51DD37C6F29B4540A456C6D /* MapLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLibrary.swift; sourceTree = "<group>"; };
+		C72E0826805E352309595EDF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		C9DEF99A4525C0DA69EF181A /* MapLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLibraryTests.swift; sourceTree = "<group>"; };
+		D2675E11624EF30CE5A2559B /* MapItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapItem.swift; sourceTree = "<group>"; };
+		D7CF620ECD41F7940D7989E7 /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
+		EC97AB61E841599637C86F07 /* GeoMapKitDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GeoMapKitDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EE501F300C05598F1FAEAE6F /* GeoMapKitDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoMapKitDemoApp.swift; sourceTree = "<group>"; };
+		F0877FCC5C94C2B18FE723F6 /* StyleItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleItem.swift; sourceTree = "<group>"; };
+		FC772F2A0A656DE857078DBA /* GeoMapKitDemoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GeoMapKitDemoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		"TEMP_8CA669EC-4467-486B-9606-832667D6B659" /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		75F23BD3177FA085DF729F58 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				17FEE7FD6BC9B39D889067C2 /* GeoCore in Frameworks */,
+				CF6A4E94EC0632AEFBED8EB6 /* FeatureStore in Frameworks */,
+				E7C9741CC0D2E1D311AF2CCF /* MapStyle in Frameworks */,
+				A6994B8FE18CEE7146CEEAF4 /* MapRender in Frameworks */,
+				EC169372EC0711B5F89AC60F /* MapUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		89FFA7F25F746E6B60285732 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3BCC7A29B994531CBDF911D5 /* MapStyle in Frameworks */,
+				3531C206C0CAEEA973CDE9ED /* FeatureStore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DA4F88A782A4C8A07505A9A2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				07F35E0A3709BD4FF498D49F /* GeoCore in Frameworks */,
+				A66F326A8E1BE9EB5A468C30 /* FeatureStore in Frameworks */,
+				78D91FF1AF93E3C7F24621B9 /* MapStyle in Frameworks */,
+				8741B596F37508760E23A626 /* MapRender in Frameworks */,
+				C6C571D83069753D240EF63D /* MapUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2B9BB2D2EB22E0003CE09C3B /* GeoMapKitDemoTests */ = {
+			isa = PBXGroup;
+			children = (
+				C9DEF99A4525C0DA69EF181A /* MapLibraryTests.swift */,
+			);
+			path = GeoMapKitDemoTests;
+			sourceTree = "<group>";
+		};
+		4F64AC96A97A742078D34FB2 = {
+			isa = PBXGroup;
+			children = (
+				ADADA9FD7C087F251E987178 /* GeoMapKitDemo */,
+				2B9BB2D2EB22E0003CE09C3B /* GeoMapKitDemoTests */,
+				F0CE6476B4FD8690A511717A /* GeoMapKitDemoWatch */,
+				849C0FD3B5B677A6FB4F3F02 /* Packages */,
+				E2792CF5702EF0191063BBBA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		75EA7279E62E48FFD50DF4DD /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				B8220DA27892D399860B2117 /* LibraryError.swift */,
+				D2675E11624EF30CE5A2559B /* MapItem.swift */,
+				C51DD37C6F29B4540A456C6D /* MapLibrary.swift */,
+				4249091C362AF5FE7833BB27 /* OpenedMap.swift */,
+				F0877FCC5C94C2B18FE723F6 /* StyleItem.swift */,
+			);
+			path = Library;
+			sourceTree = "<group>";
+		};
+		849C0FD3B5B677A6FB4F3F02 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				50347C48A94B8640D4AE223F /* lucid-meitner-bac674 */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		9314651C7A039B7B4FCA6CC0 /* Screens */ = {
+			isa = PBXGroup;
+			children = (
+				6FFD9548FE43CBA881787881 /* LibraryScreen.swift */,
+				D7CF620ECD41F7940D7989E7 /* MapScreen.swift */,
+			);
+			path = Screens;
+			sourceTree = "<group>";
+		};
+		ADADA9FD7C087F251E987178 /* GeoMapKitDemo */ = {
+			isa = PBXGroup;
+			children = (
+				339E86705CDB9ABB95D780D2 /* GeoMapKitDemo.entitlements */,
+				EE501F300C05598F1FAEAE6F /* GeoMapKitDemoApp.swift */,
+				C72E0826805E352309595EDF /* Info.plist */,
+				3DC96EBAD0446EB5544EDF17 /* LocationModel.swift */,
+				75EA7279E62E48FFD50DF4DD /* Library */,
+				9314651C7A039B7B4FCA6CC0 /* Screens */,
+			);
+			path = GeoMapKitDemo;
+			sourceTree = "<group>";
+		};
+		E2792CF5702EF0191063BBBA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				EC97AB61E841599637C86F07 /* GeoMapKitDemo.app */,
+				91CAE03E8B77900B93FACDC2 /* GeoMapKitDemoTests.xctest */,
+				FC772F2A0A656DE857078DBA /* GeoMapKitDemoWatch.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F0CE6476B4FD8690A511717A /* GeoMapKitDemoWatch */ = {
+			isa = PBXGroup;
+			children = (
+				9E89DC2E9C7554002D6FA685 /* GeoMapKitDemoWatchApp.swift */,
+				53C7DDEBE7037DC87D87A21E /* Info.plist */,
+			);
+			path = GeoMapKitDemoWatch;
+			sourceTree = "<group>";
+		};
+		"TEMP_41F983DC-5DD2-4104-A34A-4C11F4D427A6" /* Apps */ = {
+			isa = PBXGroup;
+			children = (
+				"TEMP_8CA669EC-4467-486B-9606-832667D6B659" /* Config.xcconfig */,
+			);
+			path = Apps;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		187BD190E4B011D2C4ABAD2E /* GeoMapKitDemo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BFF5AAB8CC89082D174CF8D7 /* Build configuration list for PBXNativeTarget "GeoMapKitDemo" */;
+			buildPhases = (
+				F17CD428BC9E5596EE6628B1 /* Sources */,
+				DA4F88A782A4C8A07505A9A2 /* Frameworks */,
+				12445692065AC91FF481C93F /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				12F5F915509501946A8A82E2 /* PBXTargetDependency */,
+			);
+			name = GeoMapKitDemo;
+			packageProductDependencies = (
+				65A59E064EE58A780B02BCE9 /* GeoCore */,
+				7C77F6286B23BEAAEDAA580F /* FeatureStore */,
+				80D20406935A43FD2536AD87 /* MapStyle */,
+				C80BEA4F5B271F1071527A88 /* MapRender */,
+				14E277F6BAD6AC73F44E2257 /* MapUI */,
+			);
+			productName = GeoMapKitDemo;
+			productReference = EC97AB61E841599637C86F07 /* GeoMapKitDemo.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1BAE9EA0B77FA710C8F18B00 /* GeoMapKitDemoWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 56D57549EE673E4D566B980B /* Build configuration list for PBXNativeTarget "GeoMapKitDemoWatch" */;
+			buildPhases = (
+				4B616D206BE5AB33541553C9 /* Sources */,
+				75F23BD3177FA085DF729F58 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GeoMapKitDemoWatch;
+			packageProductDependencies = (
+				9CD0091E55ACE0D613480C7F /* GeoCore */,
+				5FA8C82DE1561CE950C399ED /* FeatureStore */,
+				7C446EAE971EC2141C16F7B5 /* MapStyle */,
+				F91386561EA8E9CEDAC55B3E /* MapRender */,
+				90CB96104EE268F89DDFCA75 /* MapUI */,
+			);
+			productName = GeoMapKitDemoWatch;
+			productReference = FC772F2A0A656DE857078DBA /* GeoMapKitDemoWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5FEC1D0DD0C1DECF5FDF8430 /* GeoMapKitDemoTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0112D9FDE3C8F07B0278BF7C /* Build configuration list for PBXNativeTarget "GeoMapKitDemoTests" */;
+			buildPhases = (
+				65EA226B552C67F2AFBBB637 /* Sources */,
+				89FFA7F25F746E6B60285732 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E325FEC9636DA4D2B7B87C01 /* PBXTargetDependency */,
+			);
+			name = GeoMapKitDemoTests;
+			packageProductDependencies = (
+				E12ADCF435FC6B0E4B5563EA /* MapStyle */,
+				D6BE4F640EE5A9B38E0F542B /* FeatureStore */,
+			);
+			productName = GeoMapKitDemoTests;
+			productReference = 91CAE03E8B77900B93FACDC2 /* GeoMapKitDemoTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E584A0151562E8602EB1162D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					187BD190E4B011D2C4ABAD2E = {
+						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
+					};
+					1BAE9EA0B77FA710C8F18B00 = {
+						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
+					};
+					5FEC1D0DD0C1DECF5FDF8430 = {
+						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
+					};
+				};
+			};
+			buildConfigurationList = C7B41B13ADC8484E3AC6DDCB /* Build configuration list for PBXProject "GeoMapKitDemo" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 4F64AC96A97A742078D34FB2;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B567E856C71A1C87F6CF952F /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E2792CF5702EF0191063BBBA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				187BD190E4B011D2C4ABAD2E /* GeoMapKitDemo */,
+				1BAE9EA0B77FA710C8F18B00 /* GeoMapKitDemoWatch */,
+				5FEC1D0DD0C1DECF5FDF8430 /* GeoMapKitDemoTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4B616D206BE5AB33541553C9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A91EDB3673B6D9EC5F405D7 /* GeoMapKitDemoWatchApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		65EA226B552C67F2AFBBB637 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D80DDE180F4A3F498D9501EE /* MapLibraryTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F17CD428BC9E5596EE6628B1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6D605B0C07EFF24E308961AF /* GeoMapKitDemoApp.swift in Sources */,
+				B50CE7842E124FBC86216B01 /* LibraryError.swift in Sources */,
+				3B68326DBBD82C9C41DE7C31 /* LibraryScreen.swift in Sources */,
+				9B2C1A7B1F9BC0CCD2C7CCF2 /* LocationModel.swift in Sources */,
+				C298B639BBAD2B1F11FA02D4 /* MapItem.swift in Sources */,
+				0B09CECCE8460504B948F53E /* MapLibrary.swift in Sources */,
+				87273FBCFB0251E47A28C352 /* MapScreen.swift in Sources */,
+				D0F0202DEC448DFA9B8726C8 /* OpenedMap.swift in Sources */,
+				433C851C48EE67859E273EF8 /* StyleItem.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		12F5F915509501946A8A82E2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 1BAE9EA0B77FA710C8F18B00 /* GeoMapKitDemoWatch */;
+			targetProxy = 553A413DE5763F96691F79F5 /* PBXContainerItemProxy */;
+		};
+		E325FEC9636DA4D2B7B87C01 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 187BD190E4B011D2C4ABAD2E /* GeoMapKitDemo */;
+			targetProxy = F3757AE62D05A8A0E1C1A4DE /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0C57FD2BEC93A196E8F51A78 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"BUNDLE_LOADER[sdk=macosx*]" = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_PREFIX).GeoMapKitDemoTests";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GeoMapKitDemo.app/GeoMapKitDemo";
+				"TEST_HOST[sdk=macosx*]" = "$(BUILT_PRODUCTS_DIR)/GeoMapKitDemo.app/Contents/MacOS/GeoMapKitDemo";
+			};
+			name = Release;
+		};
+		2367CAACC1F4878723C6A876 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GeoMapKitDemoWatch/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_PREFIX).GeoMapKitDemo.watchkitapp";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Debug;
+		};
+		5DF4722E14652915E69CD33D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = GeoMapKitDemo/GeoMapKitDemo.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GeoMapKitDemo/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_PREFIX).GeoMapKitDemo";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		730310DE9F6C2F2910DE7385 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GeoMapKitDemoWatch/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_PREFIX).GeoMapKitDemo.watchkitapp";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Release;
+		};
+		9ECEEFDF7794BFBD8F5EF174 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = GeoMapKitDemo/GeoMapKitDemo.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GeoMapKitDemo/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_PREFIX).GeoMapKitDemo";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		BDCADAD5C2E4D45BC51AFB17 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = "TEMP_8CA669EC-4467-486B-9606-832667D6B659" /* Config.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		E8DADC79AC588C4379677925 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = "TEMP_8CA669EC-4467-486B-9606-832667D6B659" /* Config.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
+		F443493FA62CA4366DAF4F36 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"BUNDLE_LOADER[sdk=macosx*]" = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_PREFIX).GeoMapKitDemoTests";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GeoMapKitDemo.app/GeoMapKitDemo";
+				"TEST_HOST[sdk=macosx*]" = "$(BUILT_PRODUCTS_DIR)/GeoMapKitDemo.app/Contents/MacOS/GeoMapKitDemo";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0112D9FDE3C8F07B0278BF7C /* Build configuration list for PBXNativeTarget "GeoMapKitDemoTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F443493FA62CA4366DAF4F36 /* Debug */,
+				0C57FD2BEC93A196E8F51A78 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		56D57549EE673E4D566B980B /* Build configuration list for PBXNativeTarget "GeoMapKitDemoWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2367CAACC1F4878723C6A876 /* Debug */,
+				730310DE9F6C2F2910DE7385 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BFF5AAB8CC89082D174CF8D7 /* Build configuration list for PBXNativeTarget "GeoMapKitDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5DF4722E14652915E69CD33D /* Debug */,
+				9ECEEFDF7794BFBD8F5EF174 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C7B41B13ADC8484E3AC6DDCB /* Build configuration list for PBXProject "GeoMapKitDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BDCADAD5C2E4D45BC51AFB17 /* Debug */,
+				E8DADC79AC588C4379677925 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		B567E856C71A1C87F6CF952F /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		14E277F6BAD6AC73F44E2257 /* MapUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MapUI;
+		};
+		5FA8C82DE1561CE950C399ED /* FeatureStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FeatureStore;
+		};
+		65A59E064EE58A780B02BCE9 /* GeoCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GeoCore;
+		};
+		7C446EAE971EC2141C16F7B5 /* MapStyle */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MapStyle;
+		};
+		7C77F6286B23BEAAEDAA580F /* FeatureStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FeatureStore;
+		};
+		80D20406935A43FD2536AD87 /* MapStyle */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MapStyle;
+		};
+		90CB96104EE268F89DDFCA75 /* MapUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MapUI;
+		};
+		9CD0091E55ACE0D613480C7F /* GeoCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GeoCore;
+		};
+		C80BEA4F5B271F1071527A88 /* MapRender */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MapRender;
+		};
+		D6BE4F640EE5A9B38E0F542B /* FeatureStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FeatureStore;
+		};
+		E12ADCF435FC6B0E4B5563EA /* MapStyle */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MapStyle;
+		};
+		F91386561EA8E9CEDAC55B3E /* MapRender */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MapRender;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E584A0151562E8602EB1162D /* Project object */;
+}

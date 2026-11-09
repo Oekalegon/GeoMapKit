@@ -1,0 +1,5 @@
+// Settings that belong to you and not to the project: the team that signs the apps and the prefix of their bundle identifiers.
+// The simulators and "My Mac" run without a team; a device needs one.
+
+DEVELOPMENT_TEAM =
+APP_BUNDLE_PREFIX = org.oekalegon
