@@ -14,6 +14,7 @@ struct MapScreen: View {
     @State private var style: MapStyle = .standard
     @State private var message: String?
     @State private var showLibrary = false
+    @State private var cutting = false
     @State private var editor: EditorSession?
     @State private var location = LocationModel()
     /// The user pressed "centre on me" before there was a position: the first one that comes is where the map goes.
@@ -90,6 +91,7 @@ struct MapScreen: View {
         ToolbarItem(placement: .primaryAction) {
             Button { showLibrary = true } label: { Label("Library", systemImage: "books.vertical") }
         }
+        ToolbarItem(placement: .primaryAction) { watchMenu }
         ToolbarItem(placement: .primaryAction) { styleMenu }
         ToolbarItem(placement: .primaryAction) {
             Button(action: centreOnMe) { Label("Centre on me", systemImage: location.denied ? "location.slash" : "location") }
@@ -101,6 +103,18 @@ struct MapScreen: View {
             Button { zoom = min(zoom + 1, MapView.zoomRange.upperBound) } label: { Label("Zoom in", systemImage: "plus") }
         }
         #endif
+    }
+
+    /// A copy of the map around the middle of the view for the Watch, added to the library.
+    private var watchMenu: some View {
+        Menu {
+            ForEach([3, 6, 12], id: \.self) { kilometres in
+                Button("\(kilometres) km square") { cutForWatch(kilometres: Double(kilometres)) }
+            }
+        } label: {
+            Label("Cut for the Watch", systemImage: "applewatch")
+        }
+        .disabled(opened == nil || cutting)
     }
 
     private var styleMenu: some View {
@@ -167,6 +181,32 @@ struct MapScreen: View {
         } catch {
             opened = nil
             message = "Cannot open \(item.name): \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: Watch copy
+
+    private func cutForWatch(kilometres: Double) {
+        guard let opened, !cutting else { return }
+        cutting = true
+        let name = library.maps.first { $0.id == library.selectedMapID }?.name ?? "Map"
+        let middle = center
+        let source = opened.source
+        Task {
+            defer { cutting = false }
+            do {
+                let result = try await Task.detached { try WatchCut.cut(source: source, named: name, around: middle, kilometres: kilometres) }.value
+                let added = library.add([result.url])
+                // The file is copied into the library (or linked): the temporary folder is not needed any more.
+                try? FileManager.default.removeItem(at: result.url.deletingLastPathComponent())
+                if let error = added.errors.first {
+                    message = error.localizedDescription
+                } else {
+                    message = "Cut \(result.report.cellsWritten) cells, \(result.report.fileBytes / 1_000) kB, and opened it from the library."
+                }
+            } catch {
+                message = WatchCut.sentence(for: error)
+            }
         }
     }
 
