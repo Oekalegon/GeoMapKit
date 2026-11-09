@@ -62,7 +62,10 @@ enum CellCodec {
             var body = ByteWriter()
             for feature in group.features {
                 try encodeFeature(
-                    feature, includeTags: band == .detail, originLongitude: originLongitude,
+                    // The tags of a feature are written as given in every band. The builder gives all tags in the detail band and none
+                    // in the others, except the value tag of a `landUse` feature (rule table 19), so that a style can select by it. Every
+                    // feature has a tag count, so the layout is the same and the format version does not change.
+                    feature, includeTags: true, originLongitude: originLongitude,
                     originLatitude: originLatitude, stringCount: stringCount, into: &body)
             }
             writer.writeUInt8(group.classID)

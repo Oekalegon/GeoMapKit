@@ -37,9 +37,18 @@ struct FeatureEmitter {
         if profile == .full {
             tags = spec.tags.map { StoredTag(key: writer.intern($0.key), value: writer.intern($0.value)) }
         }
+        // A `landUse` feature keeps the value of its tag in every band (a style selects by it); other classes have their tags in the
+        // detail band only.
+        var valueTags: [StoredTag] = []
+        if classification.featureClass == .landUse {
+            let tagArray = ClassifierTagArray(spec.tags)
+            for key in ["landuse", "natural"] {
+                if let value = tagArray.value(forKey: key) { valueTags.append(StoredTag(key: writer.intern(key), value: writer.intern(value))) }
+            }
+        }
         for band in ZoomBand.allCases where band >= classification.minimumBand {
             if profile == .watch && band == .overview { continue }
-            try emit(spec, band: band, nameID: nameID, tags: band == .detail ? tags : [])
+            try emit(spec, band: band, nameID: nameID, tags: band == .detail ? tags : valueTags)
         }
     }
 

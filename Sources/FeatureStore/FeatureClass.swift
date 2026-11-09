@@ -87,4 +87,9 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     case wetland = 39
     /// Sand and beaches (`natural=sand`, `natural=beach`): light yellow in the standard style. Was part of `landcover` until rule table version 18.
     case sand = 40
+    /// Land use and surface kinds that no other class takes: every `landuse` value the rules do not know (landfill, animal_keeping,
+    /// plant_nursery, religious, aquaculture, winter_sports and so on) and `natural` dune, moor, tundra and bog. The standard style does
+    /// not draw it; a style can. Unlike an unclassified object it is stored from the mid band, with the value of the tag in every band, so
+    /// that a style can select by it. Added in rule table version 19.
+    case landUse = 41
 }

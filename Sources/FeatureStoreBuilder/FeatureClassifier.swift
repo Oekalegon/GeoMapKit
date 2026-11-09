@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 18
+    public static let version: UInt16 = 19
 
     /// Creates a classifier.
     public init() {}
@@ -117,7 +117,7 @@ public struct FeatureClassifier: Sendable {
     }
 
     /// The classes that are lines of the movement network; as areas they become `roadArea`.
-    private static let surfaceClasses: Set<FeatureClass> = [.landcover, .glacier, .bareGround, .wetland, .sand]
+    private static let surfaceClasses: Set<FeatureClass> = [.landcover, .glacier, .bareGround, .wetland, .sand, .landUse]
     private static let roadClasses: Set<FeatureClass> = [.roadMajor, .roadMinor, .roadService, .path, .track, .pavement]
 
     /// Whether a boundary is tagged as the limit of an area of sea (`border_type` territorial, economic zone, contiguous zone).

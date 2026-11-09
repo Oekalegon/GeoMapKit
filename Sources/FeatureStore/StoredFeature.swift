@@ -16,7 +16,8 @@ public struct StoredFeature: Hashable, Sendable {
     public var offsetAlongLine: UInt32
     /// String ID of the `name` value, for labels in every band.
     public var nameID: UInt32?
-    /// All tags, as string IDs. Stored in the detail band only; empty in the others.
+    /// The tags, as string IDs, written as given in every band. The builder gives all tags in the detail band and none in the others,
+    /// except for a `landUse` feature, which carries the value of its `landuse` or `natural` tag in every band.
     public var tags: [StoredTag]
     public var parts: [GeometryPart]
 
