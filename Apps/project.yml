@@ -31,6 +31,7 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - GeoMapKitDemo
+      - Shared
     dependencies:
       - package: GeoMapKit
         product: GeoCore
@@ -80,12 +81,13 @@ targets:
             CFBundleTypeRole: Viewer
             LSItemContentTypes: [org.oekalegon.geomapkit.store]
 
-  # The Watch app: a placeholder in this step; the map and the transfer from the phone come in a later one.
+  # The Watch app: the maps the iPhone sent (WatchConnectivity file transfer) and a map of each.
   GeoMapKitDemoWatch:
     type: application
     platform: watchOS
     sources:
       - GeoMapKitDemoWatch
+      - Shared
     dependencies:
       - package: GeoMapKit
         product: GeoCore
