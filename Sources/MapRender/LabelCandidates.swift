@@ -1,4 +1,5 @@
 import FeatureStore
+import Foundation
 import MapStyle
 
 /// Collects the named features of a scene that have a label style.
@@ -23,6 +24,18 @@ enum LabelCandidates {
         return candidates
     }
 
+    /// The population taken for a place that has no `population` tag, by its rank: the `place` subclasses are 1 city, 2 town and 3 village
+    /// (see the rule table), and the rest (hamlets and the like) are smaller still.
+    static func assumedPopulation(of subclass: UInt8) -> Int {
+        let city: UInt8 = 1, town: UInt8 = 2, village: UInt8 = 3
+        switch subclass {
+        case city: return 200_000
+        case town: return 20_000
+        case village: return 2_000
+        default: return 500
+        }
+    }
+
     static func collect(from scene: MapScene, style: MapStyle) -> [LabelCandidate] {
         let zoom = scene.viewport.zoom
         // The part of the viewport that is seen: a frame is drawn with a margin, and a name in the margin is never seen.
@@ -32,11 +45,35 @@ enum LabelCandidates {
             guard let classStyle = style.style(for: step.step.featureClass), let label = classStyle.label else { continue }
             let size = label.size.value(atZoom: zoom)
             guard size > 0, label.visibleZoom.contains(zoom) else { continue }
-            for point in step.points {
+            // The larger places first (the lower subclass, then the greater population); a place within the thinning radius of one that
+            // has its name gets none.
+            let radius = label.thinningRadius.value(atZoom: zoom)
+            // The largest place in view (the names of the sizes are relative to it).
+            let largest = label.populationScale == nil ? 0 : step.points.reduce(0) { best, point in
+                ScreenBounds(of: [point.position])?.intersects(view) == true
+                    ? max(best, point.population ?? Self.assumedPopulation(of: point.subclass)) : best
+            }
+            var named: [ScenePoint] = []
+            let ranked = radius > 0
+                ? step.points.sorted {
+                    ($0.subclass, -($0.population ?? 0), $0.objectID) < ($1.subclass, -($1.population ?? 0), $1.objectID)
+                }
+                : step.points
+            for point in ranked {
                 guard let name = point.name, !name.isEmpty else { continue }
-                let radius = classStyle.point?.radius.value(atZoom: zoom) ?? 0
+                if radius > 0 {
+                    let near = named.contains { hypot($0.position.x - point.position.x, $0.position.y - point.position.y) < radius }
+                    if near { continue }
+                    named.append(point)
+                }
+                let symbolRadius = classStyle.point?.radius.value(atZoom: zoom) ?? 0
+                var pointSize = size
+                if let scale = label.populationScale {
+                    pointSize *= scale.scale(
+                        population: point.population ?? Self.assumedPopulation(of: point.subclass), largest: largest, atZoom: zoom)
+                }
                 candidates.append(LabelCandidate(
-                    objectID: point.objectID, text: name, anchor: point.position, symbolRadius: radius, fontSize: size, style: label))
+                    objectID: point.objectID, text: name, anchor: point.position, symbolRadius: symbolRadius, fontSize: pointSize, style: label))
             }
             // One label per area, for the area as a whole: the pieces that the cells cut it into are taken together. The name goes at the
             // point of the part in view that is farthest from the real shore (the edges that the clip made along the cell borders are no

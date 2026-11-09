@@ -12,6 +12,11 @@ extension LevelOutput {
     mutating func writeLines(_ collected: LevelCollection) throws {
         for key in collected.lines.keys.sorted() {
             guard let pieces = collected.lines[key], let attributes = collected.attributes[key] else { continue }
+            // The outline of a water area that was left out (see `writeAreas`) goes with it.
+            if key.classID == FeatureClass.waterEdge.rawValue, droppedWater.contains(LevelWaterKey(type: key.type, id: key.id)) {
+                report.droppedAsSmall += 1
+                continue
+            }
             var starts: [PackedPoint: [Int]] = [:]
             for (index, piece) in pieces.enumerated() where piece.continuesBefore {
                 starts[piece.points[0], default: []].append(index)
@@ -40,7 +45,19 @@ extension LevelOutput {
             var chains: [[PackedPoint]] = []
             for index in pieces.indices where !hasPredecessor[index] && !visited[index] { chains.append(chain(from: index)) }
             for index in pieces.indices where !visited[index] { chains.append(chain(from: index)) }  // a closed loop of pieces
-            for line in chains where line.count >= 2 {
+            // A river name is the course of a river in its own water area (which is drawn instead of a line). Where that area is kept at
+            // this level the stretch stays a river name, and only if the level has the class; where the area was left out as too thin the
+            // river is written as a line, so that it does not vanish.
+            var tagged: [(key: LevelKey, line: [PackedPoint])] = chains.map { (key, $0) }
+            if key.classID == FeatureClass.riverName.rawValue {
+                let asLine = LevelKey(classID: FeatureClass.waterLine.rawValue, type: key.type, id: key.id)
+                tagged = chains.compactMap { line in
+                    if isInKeptWater(line[line.count / 2]) { return spec.classes.contains(key.classID) ? (key, line) : nil }
+                    report.riverNamesAsLines += 1
+                    return (asLine, line)
+                }
+            }
+            for (key, line) in tagged where line.count >= 2 {
                 guard extent(line) >= spec.minimumExtent else { report.droppedAsSmall += 1; continue }
                 for (blockCell, inBlockPiece) in CellSplitter.split(line: line, zoom: tile.zoom) where blockCell == tile {
                     let simplified = GeometrySimplifier.simplify(line: inBlockPiece.points, tolerance: spec.tolerance)

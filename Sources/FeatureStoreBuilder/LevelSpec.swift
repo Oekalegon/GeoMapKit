@@ -20,6 +20,11 @@ public struct LevelSpec: Sendable, Equatable {
     var tolerance: Double { 0.5 * pixel }
     /// A feature whose bounding box is smaller than three pixels is left out.
     var minimumExtent: Double { 3 * pixel }
+    /// A water area whose mean width (2 × area ÷ perimeter) is under half a pixel is a canal or a ditch, a line and not a surface: it is
+    /// left out, with its outline. The bounding box is no test for this, because a ditch is kilometres long.
+    var minimumWaterWidth: Double { 0.5 * pixel }
+    /// A water area smaller than 8 square pixels (a pond, not a lake) is left out, with its outline.
+    var minimumWaterArea: Double { 8 * pixel * pixel }
 
     /// - Parameters:
     ///   - topZoom: The highest zoom the level serves (1 to 10).

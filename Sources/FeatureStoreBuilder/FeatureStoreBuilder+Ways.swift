@@ -90,6 +90,9 @@ extension FeatureStoreBuilder {
                 break
             }
             guard !runs.isEmpty else { continue }
+            if classification.featureClass == .waterArea, classification.kind == .area {
+                classification = WaterSize.adjusted(classification, rings: [runs[0]])
+            }
             let geometry: FeatureSpec.Geometry = classification.kind == .area ? .rings([runs[0]]) : .lines(runs)
             var borderName: String?
             if classification.featureClass == .countryBorder || classification.featureClass == .boundary,

@@ -54,7 +54,7 @@ struct FeatureClassifierTests {
         Case(tags: ["railway": "funicular"], featureClass: .railway, band: .overview, watch: true),
         Case(tags: ["railway": "tram"], featureClass: .railway, band: .detail, watch: true),
         Case(tags: ["waterway": "river"], featureClass: .waterLine, band: .overview, watch: true),
-        Case(tags: ["waterway": "canal"], featureClass: .waterLine, band: .overview, watch: true),
+        Case(tags: ["waterway": "canal"], featureClass: .waterLine, band: .mid, watch: true),
         Case(tags: ["waterway": "stream"], featureClass: .waterLine, band: .mid, watch: true),
         Case(tags: ["waterway": "ditch"], featureClass: .waterLine, band: .detail, watch: false),
         Case(tags: ["waterway": "drain"], featureClass: .waterLine, band: .detail, watch: false),
@@ -340,6 +340,13 @@ struct FeatureClassifierTests {
         #expect(classify(["highway": "residential", "area": "no"], .closedWay).featureClass == .roadMinor)
     }
 
+    @Test("A place keeps its subclass whatever its population, and the population reads as a number")
+    func populationOfAPlace() {
+        #expect(classify(["place": "town", "population": "9000"], .openWay).subclass == 2)
+        #expect(PlacePopulation.population("12 345") == 12_345 && PlacePopulation.population("12,345") == 12_345)
+        #expect(PlacePopulation.population("12.345") == 12_345 && PlacePopulation.population("many") == nil && PlacePopulation.population(nil) == nil)
+    }
+
     @Test("A coastline is a coastline line even when the way is also a place or another area")
     func coastlineWins() {
         for extra in [["place": "islet"], ["place": "island", "name": "Holmen"], ["natural": "coastline", "landuse": "grass"]] {
@@ -401,9 +408,9 @@ struct FeatureClassifierTests {
         }
     }
 
-    @Test("The rule table version is 20, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 21, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 20)
+        #expect(FeatureClassifier.version == 21)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)

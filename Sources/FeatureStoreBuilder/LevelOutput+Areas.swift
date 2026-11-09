@@ -35,6 +35,22 @@ extension LevelOutput {
             report.joinedAlongBorder += dissolved.joinedAlongBorder
             report.openAreaChains += dissolved.open.count
 
+            // A water area that is a ditch or a canal (thin) or a pond (small) is left out at this zoom, with its outline: a polder is
+            // cut by thousands of them and they colour the land blue. A feature with an open chain is not judged, because what was
+            // read of it is only a part.
+            if key.classID == FeatureClass.waterArea.rawValue, dissolved.open.isEmpty {
+                let size = widthAndArea(of: dissolved.rings)
+                if size.width < spec.minimumWaterWidth || size.area < spec.minimumWaterArea {
+                    droppedWater.insert(LevelWaterKey(type: key.type, id: key.id))
+                    report.droppedAsSmall += 1
+                    continue
+                }
+            }
+
+            if key.classID == FeatureClass.waterArea.rawValue {
+                if let box = Self.box(of: dissolved.rings) { keptWater.append((box, dissolved.rings)) }
+            }
+
             // The rings that closed are filled; a chain that did not close is written on its own, closed with a straight line and
             // marked incomplete, so that it is drawn as an outline and the rest of the feature (the sea of the block) keeps its fill.
             let closed = parts(of: dissolved.rings)

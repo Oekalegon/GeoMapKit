@@ -18,6 +18,11 @@ public struct LabelStyle: Sendable, Equatable {
     /// The smallest area, in square points on the screen, that an area must cover to get this label: a pond is not named, a lake is.
     /// It only applies to areas; 0 names every area.
     public var minimumArea: Double
+    /// For the name of a point: within this many points of a larger place of the same class, a place gets no name (the larger is
+    /// the lower subclass number, then the greater `population`). 0 for no thinning. By zoom, so it can fade out.
+    public var thinningRadius: ZoomValue<Double>
+    /// For the name of a place: the font size follows the population, see ``PopulationScale``. `nil` writes every name at `size`.
+    public var populationScale: PopulationScale?
 
     /// Creates a label style.
     public init(
@@ -25,8 +30,12 @@ public struct LabelStyle: Sendable, Equatable {
         priority: Int = 0,
         visibleZoom: ClosedRange<Double> = 0...24,
         placement: LabelPlacement = .onLine,
-        minimumArea: Double = 0
+        minimumArea: Double = 0,
+        thinningRadius: ZoomValue<Double> = ZoomValue(constant: 0),
+        populationScale: PopulationScale? = nil
     ) {
+        self.thinningRadius = thinningRadius
+        self.populationScale = populationScale
         self.size = size
         self.color = color
         self.haloColor = haloColor

@@ -55,6 +55,10 @@ public enum LevelBuilder {
             columns: (tile.x << levelShift)...(((tile.x + 1) << levelShift) - 1),
             rows: (tile.y << levelShift)...(((tile.y + 1) << levelShift) - 1))
 
+        // The course of a river in its own area (`riverName`) is read whenever the level has river lines: where the area is left out of
+        // the level the river is drawn as a line again (see `writeLines`).
+        var readClasses = spec.classes
+        if readClasses.contains(FeatureClass.waterLine.rawValue) { readClasses.insert(FeatureClass.riverName.rawValue) }
         var collected = LevelCollection()
         var report = LevelReport()
         var firstFile: FeatureStoreFile?
@@ -63,7 +67,7 @@ public enum LevelBuilder {
                 guard let cell = TileID(zoom: sourceZoom, x: x, y: y), let file = try source.file(containing: cell) else { continue }
                 firstFile = firstFile ?? file
                 report.cellsRead += 1
-                for feature in try file.features(in: cell, band: .overview, classes: spec.classes) {
+                for feature in try file.features(in: cell, band: .overview, classes: readClasses) {
                     report.featuresRead += 1
                     collected.add(feature, in: cell, of: file)
                 }
@@ -78,8 +82,9 @@ public enum LevelBuilder {
             attribution: source.attribution, classifierVersion: UInt16(truncatingIfNeeded: firstFile.classifierVersion))
         var output = LevelOutput(writer: writer, spec: spec, tile: tile, block: block, report: report)
         try output.writePoints(collected)
-        try output.writeLines(collected)
+        // The areas first: a water area that is left out takes its outline (a line) with it.
         try output.writeAreas(collected, region: region)
+        try output.writeLines(collected)
         writer = output.writer
         report = output.report
         guard writer.cellCount > 0 else { return nil }
