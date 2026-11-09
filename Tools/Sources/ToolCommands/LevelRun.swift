@@ -18,7 +18,7 @@ public struct LevelRequest: Sendable {
 
     /// Creates a request.
     public init(
-        directory: URL, topZooms: [Int] = [8, 7, 6, 5, 4, 3], jobs: Int = 2, margin: Int = LevelBuilder.defaultMargin,
+        directory: URL, topZooms: [Int] = [9, 8, 7, 6, 5, 4, 3], jobs: Int = 2, margin: Int = LevelBuilder.defaultMargin,
         style: MapStyle = .standard
     ) {
         self.directory = directory
@@ -49,6 +49,16 @@ public struct LevelOutcome: Sendable, Equatable {
     public let y: Int
     /// The result.
     public let status: Status
+    /// The area chains of the block that did not close and are drawn as outlines (0 for a block that was left as it is).
+    public let openAreaChains: Int
+
+    init(topZoom: Int, x: Int, y: Int, status: Status, openAreaChains: Int = 0) {
+        self.topZoom = topZoom
+        self.x = x
+        self.y = y
+        self.status = status
+        self.openAreaChains = openAreaChains
+    }
 }
 
 /// The size of one level after a run.
@@ -75,4 +85,10 @@ public struct LevelRunReport: Sendable {
     public let totalTime: Duration
     /// The peak memory footprint of the process, if known.
     public let peakFootprint: Int64?
+    /// The area chains that did not close, over the level blocks that were built (they are drawn as outlines).
+    public let openAreaChains: Int
+    /// The ends of area chains that were joined to another chain, over the level blocks that were built.
+    public let areaEndsJoined: Int
+    /// How many of those were joined along a line of a cell border.
+    public let areaEndsJoinedAlongBorder: Int
 }

@@ -47,6 +47,7 @@ extension ToolRunner {
         var states: [Int: StoreManifest.Level] = Dictionary(uniqueKeysWithValues: manifest.levels.map { ($0.topZoom, $0) })
         var tasks: [LevelTask] = []
         var outcomes: [Int: LevelOutcome] = [:]
+        var openChains = 0, endsJoined = 0, endsAlongBorder = 0
         var position = 0
         for topZoom in request.topZooms.sorted(by: >) {
             let blockZoom = min(topZoom + 2, manifest.blockZoom)
@@ -130,8 +131,12 @@ extension ToolRunner {
                         x: task.tile.x, y: task.tile.y, file: result.file, bytes: built.bytes, builtAt: Date(), derivedFrom: task.origins))
                     level.blocks.sort { ($0.y, $0.x) < ($1.y, $1.x) }
                     states[topZoom] = level
+                    openChains += built.openAreaChains
+                    endsJoined += built.joinedBySnap + built.joinedAlongBorder
+                    endsAlongBorder += built.joinedAlongBorder
                     outcomes[task.position] = LevelOutcome(
-                        topZoom: topZoom, x: task.tile.x, y: task.tile.y, status: .built(bytes: built.bytes, features: built.features, seconds: built.seconds))
+                        topZoom: topZoom, x: task.tile.x, y: task.tile.y, status: .built(bytes: built.bytes, features: built.features, seconds: built.seconds),
+                        openAreaChains: built.openAreaChains)
                 } else {
                     outcomes[task.position] = LevelOutcome(topZoom: topZoom, x: task.tile.x, y: task.tile.y, status: .empty)
                 }
@@ -146,7 +151,8 @@ extension ToolRunner {
         }
         return LevelRunReport(
             outcomes: outcomes.keys.sorted().compactMap { outcomes[$0] }, summaries: summaries, manifestURL: manifestURL,
-            totalTime: clock.now - started, peakFootprint: ProcessMemory.peakFootprintBytes())
+            totalTime: clock.now - started, peakFootprint: ProcessMemory.peakFootprintBytes(), openAreaChains: openChains,
+            areaEndsJoined: endsJoined, areaEndsJoinedAlongBorder: endsAlongBorder)
     }
 
     // MARK: Level blocks
@@ -166,6 +172,9 @@ extension ToolRunner {
             var bytes: Int64
             var features: Int
             var seconds: Double
+            var openAreaChains: Int
+            var joinedBySnap: Int
+            var joinedAlongBorder: Int
         }
         var task: LevelTask
         var file: String
@@ -193,7 +202,10 @@ extension ToolRunner {
         let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
         return BuiltLevelBlock(
             task: task, file: relative,
-            block: BuiltLevelBlock.Block(bytes: Int64(result.data.count), features: result.report.featuresWritten, seconds: seconds))
+            block: BuiltLevelBlock.Block(
+                bytes: Int64(result.data.count), features: result.report.featuresWritten, seconds: seconds,
+                openAreaChains: result.report.openAreaChains, joinedBySnap: result.report.joinedBySnap,
+                joinedAlongBorder: result.report.joinedAlongBorder))
     }
 
     private static func fileSize(at url: URL) -> Int64? {

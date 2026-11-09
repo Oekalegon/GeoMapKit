@@ -62,8 +62,9 @@ GeoMapKit tools
       and, after four blocks, the time left; it is redrawn when a block starts or
       ends. --no-progress turns it off.
 
-  geomapkit build-levels <folder> [--levels 8,7,6,5,4,3] [--jobs N] [--margin 32]
+  geomapkit build-levels <folder> [--levels 9,8,7,6,5,4,3] [--jobs N] [--margin 32]
       Add coarse levels to a set of blocks, for views of hundreds of kilometres
+      (levels 9 to 3 by default)
       (the blocks hold the cells of zoom 13, which are too many to draw then).
       A level with the top zoom t serves the zooms above t-1 up to t: its cells
       have the zoom t+2, and it holds only the classes that the standard style
@@ -187,7 +188,7 @@ do {
     case "build-levels":
         let parsed = try CommandLineArguments(rest, knownOptions: ["levels", "jobs", "margin"])
         guard parsed.positional.count == 1 else { throw ToolError("build-levels needs the folder of a set of blocks") }
-        var topZooms = [8, 7, 6, 5, 4, 3]
+        var topZooms = [9, 8, 7, 6, 5, 4, 3]
         if let text = parsed.value(for: "levels") {
             let values = text.split(separator: ",").map { Int($0.trimmingCharacters(in: .whitespaces)) }
             guard !values.isEmpty, values.allSatisfy({ $0 != nil }) else { throw ToolError("--levels expects top zooms like 8,7,6") }

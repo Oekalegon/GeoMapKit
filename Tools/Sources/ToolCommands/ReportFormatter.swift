@@ -138,7 +138,8 @@ public enum ReportFormatter {
         let name = "level \(outcome.topZoom) block \(outcome.x)/\(outcome.y)"
         switch outcome.status {
         case .built(let bytes, let features, let seconds):
-            return "\(name): built, \(Formatting.bytes(bytes)), \(Formatting.count(features)) features, \(String(format: "%.1f", seconds)) s"
+            let open = outcome.openAreaChains > 0 ? ", \(outcome.openAreaChains) open area chain\(outcome.openAreaChains == 1 ? "" : "s")" : ""
+            return "\(name): built, \(Formatting.bytes(bytes)), \(Formatting.count(features)) features, \(String(format: "%.1f", seconds)) s\(open)"
         case .upToDate: return "\(name): up to date, left as it is"
         case .empty: return "\(name): nothing to store"
         }
@@ -158,6 +159,7 @@ public enum ReportFormatter {
         for summary in report.summaries {
             lines.append("  level \(summary.topZoom) (cells of zoom \(summary.storageZoom)): \(summary.blocks) block\(summary.blocks == 1 ? "" : "s"), \(Formatting.bytes(summary.bytes))")
         }
+        lines.append("Area chains that did not close (drawn as outlines): \(report.openAreaChains); area ends joined to another chain: \(report.areaEndsJoined), \(report.areaEndsJoinedAlongBorder) of them along a border")
         lines.append("Manifest: \(report.manifestURL.path)")
         lines.append("Total: \(Formatting.seconds(report.totalTime)), peak memory footprint \(report.peakFootprint.map(Formatting.bytes) ?? "n/a")")
         return lines.joined(separator: "\n")

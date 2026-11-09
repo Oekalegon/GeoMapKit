@@ -134,4 +134,43 @@ struct StoreSetLevelTests {
         // The level that was not made from a changed block would be fine: here both are stale.
         #expect(throws: StoreSetError.self) { try set.level(forZoom: 3)?.file(containing: f.cell8) }
     }
+
+    @Test func aLevelKeepsAtMostTheOpenBlocksItIsGivenAndSurvivesThreads() throws {
+        let (f, base) = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.folder) }
+        // A second level block (the file is a copy; its cells do not matter) and a set that may keep one block open.
+        try FileManager.default.copyItem(at: f.folder.appendingPathComponent("levels/8/8-140-75.gmk"), to: f.folder.appendingPathComponent("levels/8/8-141-75.gmk"))
+        var manifest = base.manifest
+        let first = manifest.levels[0].blocks[0]
+        manifest.levels[0].blocks.append(
+            StoreManifest.LevelBlock(x: 141, y: 75, file: "levels/8/8-141-75.gmk", bytes: first.bytes, builtAt: Date(), derivedFrom: first.derivedFrom))
+        let set = try StoreSet(manifest: manifest, directory: f.folder, maximumOpenBlocks: 1)
+        let level = try #require(set.level(forZoom: 7))
+        let other = TileID(zoom: 10, x: 4 * 141 + 1, y: 4 * 75 + 1)!
+        _ = try level.file(containing: f.cell10)
+        #expect(level.openBlockCount == 1)
+        _ = try level.file(containing: other)
+        #expect(level.openBlockCount == 1, "the least recently used block was closed")
+        // Many threads asking for both blocks at once: no crash, the limit holds, and the right cell is found.
+        let found = LockedCounter()
+        DispatchQueue.concurrentPerform(iterations: 200) { index in
+            let cell = index.isMultiple(of: 2) ? f.cell10 : other
+            if let file = try? level.file(containing: cell), (try? file.containsCell(cell)) == true { found.increment() }
+        }
+        #expect(found.value == 100 && level.openBlockCount <= 1)
+    }
+
+    @Test func aZoomThatIsNotANumberIsServedByTheBlocks() throws {
+        let (f, set) = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.folder) }
+        #expect(set.levelName(forZoom: .nan) == "blocks")
+        #expect(set.levelName(forZoom: .infinity) == "blocks" && set.levelName(forZoom: -.infinity) == "level 6")
+    }
+}
+
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func increment() { lock.lock(); count += 1; lock.unlock() }
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
 }

@@ -19,13 +19,13 @@ public struct LevelSource: CellSource {
     private let staleTiles: Set<Int>
     private let cache: BlockCache
 
-    init(level: StoreManifest.Level, manifest: StoreManifest, directory: URL, maximumOpenBlocks: Int) {
+    init(level: StoreManifest.Level, manifest: StoreManifest, stale: [StoreManifest.StaleLevelBlock], directory: URL, maximumOpenBlocks: Int) {
         self.level = level
         self.manifest = manifest
         self.directory = directory
         let side = 1 << level.blockZoom
         blocksByTile = Dictionary(uniqueKeysWithValues: level.blocks.map { ($0.y * side + $0.x, $0) })
-        staleTiles = Set(manifest.staleLevelBlocks().filter { $0.topZoom == level.topZoom }.map { $0.y * side + $0.x })
+        staleTiles = Set(stale.filter { $0.topZoom == level.topZoom }.map { $0.y * side + $0.x })
         cache = BlockCache(limit: max(maximumOpenBlocks, 1))
     }
 

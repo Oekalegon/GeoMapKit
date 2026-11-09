@@ -50,8 +50,9 @@ public struct StoreSet: CellSource {
         let side = 1 << manifest.blockZoom
         blocksByTile = Dictionary(uniqueKeysWithValues: manifest.blocks.map { ($0.y * side + $0.x, $0) })
         cache = BlockCache(limit: self.maximumOpenBlocks)
+        let stale = manifest.staleLevelBlocks()
         levels = manifest.levels.sorted { $0.topZoom < $1.topZoom }.map {
-            LevelSource(level: $0, manifest: manifest, directory: directory, maximumOpenBlocks: maximumOpenBlocks)
+            LevelSource(level: $0, manifest: manifest, stale: stale, directory: directory, maximumOpenBlocks: maximumOpenBlocks)
         }
     }
 

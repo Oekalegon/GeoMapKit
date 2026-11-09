@@ -33,7 +33,6 @@ struct LevelRing {
 
 /// The pieces read from the source, grouped by feature.
 struct LevelCollection {
-    var present: Set<TileID> = []
     var attributes: [LevelKey: LevelAttributes] = [:]
     var points: [(key: LevelKey, point: PackedPoint)] = []
     var lines: [LevelKey: [LevelLinePiece]] = [:]

@@ -136,10 +136,10 @@ struct LevelBuilderTests {
         #expect(!features[0].flags.contains(.incomplete))
     }
 
-    @Test func aMissingQuarterLeavesAnOpenChainThatIsMarkedIncomplete() throws {
+    @Test func aQuarterThatIsMissingFromACellThatHoldsNothingElseOfTheFeatureLeavesTheRingClosed() throws {
         var w = writer()
-        // The north-east quarter is missing, but its cell exists (another feature lies in it): the edges that face it
-        // are not an outer border, so the chains do not close.
+        // The north-east quarter is missing and its cell holds a road only: nothing of the area is there, so the edges that face it
+        // stay and the three quarters make one closed ring.
         _ = try squareQuarters(into: &w, skip: [1])
         let b = CellRect(tile: cell(1, 0))
         try w.add(
@@ -148,10 +148,30 @@ struct LevelBuilderTests {
                 parts: [GeometryPart(points: [pt(b.west + 10, b.north - 10)])]),
             band: .overview, cell: cell(1, 0))
         let (result, file) = try level(w, spec: try LevelSpec(topZoom: 8, classes: [FeatureClass.waterArea.rawValue, FeatureClass.roadMajor.rawValue]))
+        #expect(try #require(result).report.openAreaChains == 0)
+        let level = try #require(file)
+        let areas = try level.cells().flatMap { try level.features(in: $0, band: .overview) }.filter { $0.kind == .area }
+        #expect(!areas.isEmpty && areas.allSatisfy { !$0.flags.contains(.incomplete) })
+    }
+
+    @Test func aChainThatCannotCloseIsWrittenApartAsAnIncompleteFeatureAndTheRestKeepsItsFill() throws {
+        var w = writer()
+        // The north-east quarter is missing, but its cell holds a small ring of the same feature far from the border: that cell has
+        // a piece of the feature, so the edges that face it are taken to have a twin there, and the chain stays open.
+        _ = try squareQuarters(into: &w, skip: [1])
+        let b = CellRect(tile: cell(1, 0))
+        let lon = b.west / 2 + b.east / 2, lat = b.north / 2 + b.south / 2, d: Int32 = 100_000
+        try w.add(
+            StoredFeature(
+                classID: FeatureClass.waterArea.rawValue, kind: .area, objectType: .way, objectID: 7,
+                parts: [GeometryPart(points: [pt(lon - d, lat + d), pt(lon + d, lat + d), pt(lon + d, lat - d), pt(lon - d, lat - d), pt(lon - d, lat + d)])]),
+            band: .overview, cell: cell(1, 0))
+        let (result, file) = try level(w)
         #expect(try #require(result).report.openAreaChains == 1)
         let level = try #require(file)
-        let flagged = try level.cells().flatMap { try level.features(in: $0, band: .overview) }.filter { $0.kind == .area }
-        #expect(!flagged.isEmpty && flagged.allSatisfy { $0.flags.contains(.incomplete) })
+        let areas = try level.cells().flatMap { try level.features(in: $0, band: .overview) }.filter { $0.kind == .area }
+        #expect(areas.contains { $0.flags.contains(.incomplete) }, "the open chain is drawn as an outline")
+        #expect(areas.contains { !$0.flags.contains(.incomplete) }, "the small ring that closed keeps its fill")
     }
 
     @Test func aLevelHasOnlyTheCellsInsideItsBlock() throws {
