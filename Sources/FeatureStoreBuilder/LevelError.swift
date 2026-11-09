@@ -1,6 +1,6 @@
 /// Why a level cannot be built.
 public enum LevelError: Error, Equatable, Sendable, CustomStringConvertible {
-    /// The top zoom of a level is outside 1 to 11.
+    /// The top zoom of a level is outside 1 to 10.
     case invalidTopZoom(Int)
     /// The block of the level is finer than the cells of the level, or the level is not coarser than the source.
     case invalidTile(String)
@@ -11,7 +11,7 @@ public enum LevelError: Error, Equatable, Sendable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .invalidTopZoom(let zoom): return "a level needs a top zoom from 1 to 11, not \(zoom)"
+        case .invalidTopZoom(let zoom): return "a level needs a top zoom from 1 to 10, not \(zoom)"
         case .invalidTile(let reason): return "the block of the level is not valid: \(reason)"
         case .regionTooLarge(let cells): return "the block and its margin hold \(cells) source cells, more than \(LevelBuilder.maximumRegionCells)"
         case .noOverviewBand: return "the source holds no overview band; the levels are made from it"

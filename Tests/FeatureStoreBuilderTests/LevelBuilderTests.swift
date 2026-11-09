@@ -290,4 +290,54 @@ struct LevelBuilderTests {
         #expect(left == right, "the line crosses the border of the blocks at the same point in both")
         #expect(left.longitude == w.east)
     }
+
+    @Test func anAreaCutByTheBorderOfTwoLevelBlocksMeetsOnIt() throws {
+        // A rectangle across the border between block (4, 74) and block (5, 74), cut by the clip into a west and an east piece whose
+        // edges along the border of the cells are artificial.
+        let west = TileID(zoom: 13, x: 32 * 4 + 31, y: 32 * 74 + 5)!, east = TileID(zoom: 13, x: 32 * 5, y: 32 * 74 + 5)!
+        let w = CellRect(tile: west)
+        let border = w.east
+        let lat = w.north / 2 + w.south / 2
+        let halfWidth: Int32 = 120_000, halfHeight: Int32 = 100_000
+        var source = writer()
+        func area(_ points: [PackedPoint], artificial: Range<Int>, in cell: TileID) throws {
+            try source.add(
+                StoredFeature(
+                    classID: FeatureClass.waterArea.rawValue, kind: .area, objectType: .way, objectID: 31,
+                    parts: [GeometryPart(points: points, artificialEdges: [artificial])]),
+                band: .overview, cell: cell)
+        }
+        // West piece, clockwise from the north-west corner: the edge down the border is edge 1 (north-east corner to south-east corner).
+        let nw = pt(border - halfWidth, lat + halfHeight), ne = pt(border, lat + halfHeight)
+        let se = pt(border, lat - halfHeight), sw = pt(border - halfWidth, lat - halfHeight)
+        try area([nw, ne, se, sw, nw], artificial: 1..<2, in: west)
+        let nw2 = pt(border, lat + halfHeight), ne2 = pt(border + halfWidth, lat + halfHeight)
+        let se2 = pt(border + halfWidth, lat - halfHeight), sw2 = pt(border, lat - halfHeight)
+        try area([nw2, ne2, se2, sw2, nw2], artificial: 3..<4, in: east)
+        let file = try FeatureStoreFile(data: try source.data())
+        let spec = try LevelSpec(topZoom: 8, classes: [FeatureClass.waterArea.rawValue])
+
+        func borderPoints(_ tile: TileID) throws -> (points: Set<PackedPoint>, artificial: Bool) {
+            let result = try #require(try LevelBuilder.build(from: file, spec: spec, tile: tile, margin: 4))
+            let built = try FeatureStoreFile(data: result.data)
+            var points = Set<PackedPoint>()
+            var artificial = false
+            for cell in try built.cells() {
+                for feature in try built.features(in: cell, band: .overview) {
+                    for part in feature.parts {
+                        for (index, point) in part.points.enumerated() where point.longitude == border {
+                            points.insert(point)
+                            if index + 1 < part.points.count, part.points[index + 1].longitude == border,
+                                part.artificialEdges.contains(where: { $0.contains(index) })
+                            { artificial = true }
+                        }
+                    }
+                }
+            }
+            return (points, artificial)
+        }
+        let left = try borderPoints(TileID(zoom: 8, x: 4, y: 74)!), right = try borderPoints(TileID(zoom: 8, x: 5, y: 74)!)
+        #expect(left.points == right.points && left.points.count == 2, "the corners on the border are the same in both blocks")
+        #expect(left.artificial && right.artificial, "the edge along the border of the blocks is marked artificial on both sides")
+    }
 }

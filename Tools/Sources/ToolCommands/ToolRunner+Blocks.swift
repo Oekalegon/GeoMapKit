@@ -81,7 +81,8 @@ extension ToolRunner {
         // Blocks from an earlier run that fit this one are kept; a manifest of another build is started again.
         let profileName = request.profile == .watch ? "watch" : "full"
         var manifest = existingManifest(at: manifestURL, blockZoom: request.blockZoom, profile: profileName)
-        if manifest == nil, FileManager.default.fileExists(atPath: manifestURL.path) {
+        let existingManifestWasDiscarded = manifest == nil && FileManager.default.fileExists(atPath: manifestURL.path)
+        if existingManifestWasDiscarded {
             // The manifest of another build is not reused, and it must not stay as if it were the result of this run.
             try? FileManager.default.removeItem(at: manifestURL)
         }
@@ -103,6 +104,23 @@ extension ToolRunner {
                 toBuild.append(task)
             }
         }
+
+        // A block that is built again (or that goes) makes every level that read it out of date, so the levels go (build-levels makes
+        // them again); a manifest that lists them would show levels that do not match the blocks. A tile that has nothing to store is
+        // looked at again in every run and changes nothing, so it does not count.
+        var levelsDropped = false
+        func dropLevels() throws {
+            guard !levelsDropped else { return }
+            levelsDropped = true
+            try? FileManager.default.removeItem(at: request.output.appendingPathComponent("levels", isDirectory: true))
+            if var current = manifest, !current.levels.isEmpty {
+                current.levels = []
+                manifest = current
+                try Self.write(current, to: manifestURL)
+            }
+        }
+        // The levels of a manifest that was not reused are not reused either.
+        if existingManifestWasDiscarded { try dropLevels() }
 
         // Build the blocks, up to `jobs` at a time.
         let jobs = max(request.jobs, 1)
@@ -144,13 +162,14 @@ extension ToolRunner {
                 let task = result.task
                 let regionIDs = task.regions.map(\.id)
                 if let block = result.block {
+                    try dropLevels()
                     kept[BlockKey(x: task.tile.x, y: task.tile.y)] = StoreManifest.Block(
                         x: task.tile.x, y: task.tile.y, file: "blocks/\(result.fileName)", bytes: block.bytes, builtAt: Date(),
                         sources: block.sources)
                     if manifest == nil {
                         manifest = StoreManifest(
                             formatVersion: block.formatVersion, classifierVersion: block.classifierVersion, storageZoom: block.storageZoom,
-                            blockZoom: request.blockZoom, bands: block.bands, profile: profileName,
+                            blockZoom: request.blockZoom, bands: Self.bands(of: request.profile), profile: profileName,
                             attribution: block.attribution, blocks: [])
                     }
                     manifest?.blocks = kept.values.sorted { ($0.y, $0.x) < ($1.y, $1.x) }
@@ -164,6 +183,7 @@ extension ToolRunner {
                 } else {
                     // The block has nothing to store now: its old entry and file go, and the manifest says so.
                     if let old = removedFiles[BlockKey(x: task.tile.x, y: task.tile.y)] {
+                        try dropLevels()
                         try? FileManager.default.removeItem(at: request.output.appendingPathComponent(old))
                         if manifest != nil {
                             manifest?.blocks = kept.values.sorted { ($0.y, $0.x) < ($1.y, $1.x) }
@@ -292,6 +312,12 @@ extension ToolRunner {
         return BoundingBox(
             south: max(box.south - margin, -TileID.maximumLatitude), west: max(box.west - margin, -180),
             north: min(box.north + margin, TileID.maximumLatitude), east: min(box.east + margin, 180))
+    }
+
+    /// The bands the blocks of a profile can hold. A block file only has the bands that hold a feature, so the manifest must not take
+    /// them from the first block that happens to be built (a block of sea may have one band).
+    private static func bands(of profile: BuildProfile) -> [ZoomBand] {
+        profile == .watch ? [.mid, .detail] : [.overview, .mid, .detail]
     }
 
     private static func existingManifest(at url: URL, blockZoom: Int, profile: String) -> StoreManifest? {

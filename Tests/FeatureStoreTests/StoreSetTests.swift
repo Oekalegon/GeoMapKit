@@ -125,7 +125,7 @@ struct StoreSetTests {
             change(&broken)
             do { try broken.validate(); return false } catch is StoreSetError { return true }
         }
-        #expect(try refused { $0.version = 2 })
+        #expect(try refused { $0.levels = [StoreManifest.Level(topZoom: 0, blockZoom: 0, classes: [])] })
         #expect(try refused { $0.blockZoom = 14 })
         #expect(try refused { $0.storageZoom = 31 })
         #expect(try refused { $0.bands = [] })
