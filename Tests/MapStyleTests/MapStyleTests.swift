@@ -42,6 +42,23 @@ struct MapStyleTests {
         #expect(MapStyle.watch.style(for: .militaryArea) == nil, "not on the Watch")
     }
 
+    @Test func glaciersAreWhiteWithALightBlueBorderAndGroundIsNotGreen() throws {
+        let glacier = try #require(MapStyle.standard.style(for: .glacier))
+        let fill = try #require(glacier.fill).color.value(atZoom: 12)
+        #expect(fill.red == fill.green && fill.green == fill.blue && fill.red > 0.99, "white")
+        let border = try #require(glacier.stroke).color.value(atZoom: 12)
+        #expect(border.blue > border.red && border.blue > 0.8, "a light blue border")
+        let landcover = try #require(MapStyle.standard.style(for: .landcover)), forest = try #require(MapStyle.standard.style(for: .forest))
+        #expect(glacier.layer > landcover.layer && glacier.layer >= forest.layer, "a glacier is drawn over the land cover and the forest")
+        let green = landcover.fill?.color.value(atZoom: 12)
+        for ground in [FeatureClass.bareGround, .wetland, .sand] {
+            #expect(MapStyle.standard.style(for: ground)?.fill?.color.value(atZoom: 12) != green, "\(ground) does not look like grass")
+        }
+        let sand = try #require(MapStyle.standard.style(for: .sand)?.fill?.color.value(atZoom: 12))
+        #expect(sand.red > sand.blue && sand.green > sand.blue && sand.red > 0.9, "sand and beaches are light yellow")
+        for class_ in [FeatureClass.glacier, .bareGround, .wetland, .sand] { #expect(MapStyle.watch.style(for: class_) != nil, "\(class_) on the Watch") }
+    }
+
     @Test func sidewalksAreFainterAndThinnerThanPaths() throws {
         let pavement = try #require(MapStyle.standard.style(for: .pavement))
         let path = try #require(MapStyle.standard.style(for: .path))
@@ -155,7 +172,7 @@ struct MapStyleTests {
     @Test func watchStyleDrawsOnlyTheWatchProfile() {
         let watchClasses: Set<FeatureClass> = [
             .peak, .place, .poiAnchor, .path, .track, .roadMajor, .roadMinor, .roadService, .railway, .waterLine, .waterArea,
-            .forest, .landcover, .powerLine, .aerialway, .piste, .sea,
+            .forest, .landcover, .glacier, .bareGround, .wetland, .sand, .powerLine, .aerialway, .piste, .sea,
         ]
         #expect(Set(MapStyle.watch.classes.keys) == watchClasses)
     }

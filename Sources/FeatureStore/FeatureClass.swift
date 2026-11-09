@@ -79,4 +79,12 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     /// Military land (`landuse=military`), an area a runner keeps out of; the standard style draws it so (it was part of `landuseUrban`
     /// until rule table version 17).
     case militaryArea = 36
+    /// Glaciers and permanent snow fields (`natural=glacier`): white with a light blue border in the standard style. Was part of `landcover` until rule table version 18.
+    case glacier = 37
+    /// Bare ground: bare rock, scree, shingle, sand, beach, rock outcrops, bedrock, boulder fields, shale and quarries. Was part of `landcover` until rule table version 18.
+    case bareGround = 38
+    /// Wetland and mud (`natural=wetland`, `natural=mud`). Was part of `landcover` until rule table version 18.
+    case wetland = 39
+    /// Sand and beaches (`natural=sand`, `natural=beach`): light yellow in the standard style. Was part of `landcover` until rule table version 18.
+    case sand = 40
 }
