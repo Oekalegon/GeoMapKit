@@ -71,6 +71,13 @@ public struct FeatureClassifier: Sendable {
         case .multipolygon: kind = .area
         case .closedWay: kind = Self.isArea(tags) ? .area : .line
         }
+        // The land cover classes are surfaces: a node that carries one of their tags (a single rock, a spot marked as a wetland) has
+        // nothing to draw and is not stored as one of them; it stays an unclassified point with its tags.
+        if kind == .point, Self.surfaceClasses.contains(outcome.featureClass) {
+            return Classification(
+                featureClass: Self.fallback.featureClass, subclass: 0, kind: .point, minimumBand: Self.fallback.band,
+                showsOnWatch: Self.fallback.watch)
+        }
         // The shore of an island is a closed line even when the way also carries an area key such as `place`.
         if outcome.featureClass == .coastline, shape != .node { kind = .line }
         // The border of a protected area is a line to stroke, never a surface (it has no fill, and the builder splits it where it
@@ -110,6 +117,7 @@ public struct FeatureClassifier: Sendable {
     }
 
     /// The classes that are lines of the movement network; as areas they become `roadArea`.
+    private static let surfaceClasses: Set<FeatureClass> = [.landcover, .glacier, .bareGround, .wetland, .sand]
     private static let roadClasses: Set<FeatureClass> = [.roadMajor, .roadMinor, .roadService, .path, .track, .pavement]
 
     /// Whether a boundary is tagged as the limit of an area of sea (`border_type` territorial, economic zone, contiguous zone).

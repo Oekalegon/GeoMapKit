@@ -98,13 +98,17 @@ extension FeatureClassifier {
         // Land cover and land use.
         // The large kinds of land cover are in the overview band, so that at zoom 11 a village (urban land use) differs from the
         // fields, heath and bare rock around it; the small ones (lawns, allotments, flower beds) start at the mid band.
-        // Rule table version 18 splits the ground that is not vegetation off `landcover`: glaciers, bare ground and wetland are classes of
+        // Rule table version 18 splits the ground that is not vegetation off `landcover`: glaciers, bare ground, sand and wetland are classes of
         // their own, so that a style can draw a glacier white and a boulder field grey and not as a lawn.
         rules.append(ClassifierRule("natural", make(.landcover, .overview, watch: true,
             [("scrub", 1), ("shrubbery", 13), ("shrub", 14), ("heath", 2), ("grassland", 3), ("fell", 4), ("grass", 15)])))
         rules.append(ClassifierRule("natural", make(.glacier, .overview, watch: true, [("glacier", 1)])))
-        rules.append(ClassifierRule("natural", make(.bareGround, .overview, watch: true,
-            [("bare_rock", 1), ("scree", 2), ("shingle", 3), ("sand", 4), ("beach", 5), ("rock", 6), ("bedrock", 7), ("blockfield", 8), ("shale", 9)])))
+        // The large kinds of bare ground are in the overview band; rock outcrops, bedrock, boulder fields and shale are mostly small
+        // patches and start at the mid band.
+        rules.append(ClassifierRule("natural", merged(
+            make(.bareGround, .overview, watch: true, [("bare_rock", 1), ("scree", 2), ("shingle", 3)]),
+            make(.bareGround, .mid, watch: true, [("rock", 6), ("bedrock", 7), ("blockfield", 8), ("shale", 9)]))))
+        rules.append(ClassifierRule("natural", make(.sand, .overview, watch: true, [("sand", 1), ("beach", 2)])))
         rules.append(ClassifierRule("natural", make(.wetland, .overview, watch: true, [("wetland", 1), ("mud", 2)])))
         rules.append(ClassifierRule("landuse", merged(
             make(.landcover, .overview, watch: true, [("meadow", 20), ("farmland", 22), ("orchard", 23), ("vineyard", 24), ("pasture", 39)]),

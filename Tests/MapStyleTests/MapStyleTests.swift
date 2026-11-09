@@ -51,10 +51,12 @@ struct MapStyleTests {
         let landcover = try #require(MapStyle.standard.style(for: .landcover)), forest = try #require(MapStyle.standard.style(for: .forest))
         #expect(glacier.layer > landcover.layer && glacier.layer >= forest.layer, "a glacier is drawn over the land cover and the forest")
         let green = landcover.fill?.color.value(atZoom: 12)
-        for ground in [FeatureClass.bareGround, .wetland] {
+        for ground in [FeatureClass.bareGround, .wetland, .sand] {
             #expect(MapStyle.standard.style(for: ground)?.fill?.color.value(atZoom: 12) != green, "\(ground) does not look like grass")
         }
-        for class_ in [FeatureClass.glacier, .bareGround, .wetland] { #expect(MapStyle.watch.style(for: class_) != nil, "\(class_) on the Watch") }
+        let sand = try #require(MapStyle.standard.style(for: .sand)?.fill?.color.value(atZoom: 12))
+        #expect(sand.red > sand.blue && sand.green > sand.blue && sand.red > 0.9, "sand and beaches are light yellow")
+        for class_ in [FeatureClass.glacier, .bareGround, .wetland, .sand] { #expect(MapStyle.watch.style(for: class_) != nil, "\(class_) on the Watch") }
     }
 
     @Test func sidewalksAreFainterAndThinnerThanPaths() throws {
@@ -170,7 +172,7 @@ struct MapStyleTests {
     @Test func watchStyleDrawsOnlyTheWatchProfile() {
         let watchClasses: Set<FeatureClass> = [
             .peak, .place, .poiAnchor, .path, .track, .roadMajor, .roadMinor, .roadService, .railway, .waterLine, .waterArea,
-            .forest, .landcover, .glacier, .bareGround, .wetland, .powerLine, .aerialway, .piste, .sea,
+            .forest, .landcover, .glacier, .bareGround, .wetland, .sand, .powerLine, .aerialway, .piste, .sea,
         ]
         #expect(Set(MapStyle.watch.classes.keys) == watchClasses)
     }

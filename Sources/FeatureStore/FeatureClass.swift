@@ -85,4 +85,6 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     case bareGround = 38
     /// Wetland and mud (`natural=wetland`, `natural=mud`). Was part of `landcover` until rule table version 18.
     case wetland = 39
+    /// Sand and beaches (`natural=sand`, `natural=beach`): light yellow in the standard style. Was part of `landcover` until rule table version 18.
+    case sand = 40
 }

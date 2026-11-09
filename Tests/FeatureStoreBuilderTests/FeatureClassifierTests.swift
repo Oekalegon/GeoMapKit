@@ -79,12 +79,12 @@ struct FeatureClassifierTests {
         Case(tags: ["natural": "wetland"], featureClass: .wetland, band: .overview, watch: true),
         Case(tags: ["natural": "mud"], featureClass: .wetland, band: .overview, watch: true),
         Case(tags: ["natural": "bare_rock"], featureClass: .bareGround, band: .overview, watch: true),
-        Case(tags: ["natural": "rock"], featureClass: .bareGround, band: .overview, watch: true),
-        Case(tags: ["natural": "bedrock"], featureClass: .bareGround, band: .overview, watch: true),
-        Case(tags: ["natural": "blockfield"], featureClass: .bareGround, band: .overview, watch: true),
-        Case(tags: ["natural": "shale"], featureClass: .bareGround, band: .overview, watch: true),
-        Case(tags: ["natural": "sand"], featureClass: .bareGround, band: .overview, watch: true),
-        Case(tags: ["natural": "beach"], featureClass: .bareGround, band: .overview, watch: true),
+        Case(tags: ["natural": "rock"], featureClass: .bareGround, band: .mid, watch: true),
+        Case(tags: ["natural": "bedrock"], featureClass: .bareGround, band: .mid, watch: true),
+        Case(tags: ["natural": "blockfield"], featureClass: .bareGround, band: .mid, watch: true),
+        Case(tags: ["natural": "shale"], featureClass: .bareGround, band: .mid, watch: true),
+        Case(tags: ["natural": "sand"], featureClass: .sand, band: .overview, watch: true),
+        Case(tags: ["natural": "beach"], featureClass: .sand, band: .overview, watch: true),
         Case(tags: ["natural": "shingle"], featureClass: .bareGround, band: .overview, watch: true),
         Case(tags: ["natural": "grass"], featureClass: .landcover, band: .overview, watch: true),
         Case(tags: ["landuse": "cemetery"], featureClass: .landcover, band: .mid, watch: true),
@@ -374,6 +374,15 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
+    @Test("A node with a land cover tag is not stored as a surface: a single rock is an unclassified point")
+    func nodesOfSurfaceTags() {
+        for tags in [["natural": "rock"], ["natural": "glacier"], ["natural": "wetland"], ["natural": "sand"], ["natural": "scrub"], ["leisure": "pitch"]] {
+            let node = classify(tags, .node)
+            #expect(node.featureClass == .other && node.kind == .point, "\(tags)")
+            #expect(classify(tags, .closedWay).featureClass != .other, "the area with the same tags keeps its class: \(tags)")
+        }
+    }
+
     @Test("The rule table version is 18, and the class IDs of earlier versions did not change")
     func version() {
         #expect(FeatureClassifier.version == 18)
@@ -382,6 +391,10 @@ struct FeatureClassifierTests {
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
         #expect(FeatureClass.militaryArea.rawValue == 36 && FeatureClass.glacier.rawValue == 37)
         #expect(FeatureClass.bareGround.rawValue == 38 && FeatureClass.wetland.rawValue == 39)
-        #expect(FeatureClass.allCases.count == 40)
+        #expect(FeatureClass.sand.rawValue == 40 && FeatureClass.allCases.count == 41)
+        // The subclass numbers of the values that moved out of landcover (rule table 18) are fixed by this table.
+        #expect(classify(["natural": "scree"], .closedWay).subclass == 2 && classify(["natural": "rock"], .closedWay).subclass == 6)
+        #expect(classify(["natural": "beach"], .closedWay).subclass == 2 && classify(["natural": "wetland"], .closedWay).subclass == 1)
+        #expect(classify(["landuse": "quarry"], .closedWay).subclass == 10 && classify(["natural": "glacier"], .closedWay).subclass == 1)
     }
 }

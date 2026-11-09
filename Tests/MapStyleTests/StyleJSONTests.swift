@@ -182,20 +182,20 @@ struct StyleJSONTests {
             "other", "path", "track", "roadMajor", "roadMinor", "railway", "waterLine", "waterArea", "forest", "landcover",
             "landuseUrban", "building", "peak", "place", "poiAnchor", "poi", "boundary", "powerLine", "piste", "aerialway",
             "tree", "barrier", "transportStop", "roadPoint", "countryBorder", "address", "pavement", "cliff", "sea", "coastline", "roadArea", "roadService",
-            "waterEdge", "parkBorder", "parkBorderSea", "pier", "militaryArea", "glacier", "bareGround", "wetland",
+            "waterEdge", "parkBorder", "parkBorderSea", "pier", "militaryArea", "glacier", "bareGround", "wetland", "sand",
         ]
         #expect(FeatureClass.allCases.map { String(describing: $0) } == names)
         for name in names {
             let json = document().replacingOccurrences(of: "roadMajor", with: name)
             // `boundary`, `roadMinor`, `parkBorder` and `landuseUrban` also fill in the classes that were added after them, for old style files.
-            let expected = ["boundary": 4, "roadMinor": 2, "parkBorder": 2, "landuseUrban": 2, "landcover": 4][name] ?? 1
+            let expected = ["boundary": 4, "roadMinor": 2, "parkBorder": 2, "landuseUrban": 2, "landcover": 5][name] ?? 1
             #expect(try parse(json).classes.count == expected, "class \(name)")
         }
     }
 
     @Test func aStyleFileWithoutGlaciersBareGroundAndWetlandDrawsThemLikeLandCover() throws {
         let style = try parse(document().replacingOccurrences(of: "roadMajor", with: "landcover"))
-        for split in [FeatureClass.glacier, .bareGround, .wetland] { #expect(style.classes[split] == style.classes[.landcover], "\(split)") }
+        for split in [FeatureClass.glacier, .bareGround, .wetland, .sand] { #expect(style.classes[split] == style.classes[.landcover], "\(split)") }
     }
 
     @Test func aStyleFileWithoutMilitaryLandDrawsItLikeUrbanLand() throws {

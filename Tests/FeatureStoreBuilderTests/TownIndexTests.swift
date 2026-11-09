@@ -82,6 +82,24 @@ struct TownIndexTests {
         #expect(result.report.townAreas == 1 && result.report.greenAreas == 1)
     }
 
+    @Test("Glaciers, bare ground, sand and wetland are green: a footway across them is a path, and they keep their class")
+    func surfacesAreGreen() throws {
+        let surfaces: [(Int64, String, String, FeatureClass)] = [
+            (700, "natural", "glacier", .glacier), (710, "natural", "scree", .bareGround), (720, "natural", "beach", .sand),
+            (730, "natural", "wetland", .wetland),
+        ]
+        for (id, key, value, expected) in surfaces {
+            var world = SyntheticWorld()
+            world.way(id, world.rectangle(first: id, 0.3, 0.3, 2.7, 2.7), [(key, value)])
+            walk(&world, id + 1, (0.5, 1.0), (2.5, 1.0))
+            let result = try FeatureStoreBuilder().build(from: try world.extract())
+            let file = try FeatureStoreFile(data: result.data)
+            #expect(try classID(of: id, in: file) == expected.rawValue, "\(value)")
+            #expect(try classID(of: id + 1, in: file) == FeatureClass.path.rawValue, "a footway across \(value) is a path")
+            #expect(result.report.greenAreas == 1 && result.report.townAreas == 0, "\(value)")
+        }
+    }
+
     @Test("A built-up area mapped as a relation counts, and its hole does not")
     func townAsRelationWithHole() throws {
         var world = SyntheticWorld()

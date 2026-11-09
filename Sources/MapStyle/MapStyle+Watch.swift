@@ -11,6 +11,7 @@ extension MapStyle {
         classes: [
             .landcover: ClassStyle(fill: FillStyle(color: .color(0x1E2A18)), visibleZoom: 12...24, layer: 10),
             .bareGround: ClassStyle(fill: FillStyle(color: .color(0x2A2824)), visibleZoom: 12...24, layer: 10),
+            .sand: ClassStyle(fill: FillStyle(color: .color(0x332F1E)), visibleZoom: 12...24, layer: 10),
             .wetland: ClassStyle(fill: FillStyle(color: .color(0x1A3030)), visibleZoom: 12...24, layer: 10),
             .glacier: ClassStyle(fill: FillStyle(color: .color(0x3A4C5C)), visibleZoom: 12...24, layer: 11),
             .forest: ClassStyle(fill: FillStyle(color: .color(0x203A22)), visibleZoom: 12...24, layer: 11),
