@@ -46,6 +46,11 @@ enum LabelCandidates {
             // The larger places first (the lower subclass, then the greater population); a place within the thinning radius of one that
             // has its name gets none.
             let radius = label.thinningRadius.value(atZoom: zoom)
+            // The largest place in view (the names of the sizes are relative to it).
+            let largest = label.populationScale == nil ? 0 : step.points.reduce(0) { best, point in
+                ScreenBounds(of: [point.position])?.intersects(view) == true
+                    ? max(best, point.population ?? Self.assumedPopulation(of: point.subclass)) : best
+            }
             var named: [ScenePoint] = []
             let ranked = radius > 0
                 ? step.points.sorted {
@@ -62,7 +67,8 @@ enum LabelCandidates {
                 let symbolRadius = classStyle.point?.radius.value(atZoom: zoom) ?? 0
                 var pointSize = size
                 if let scale = label.populationScale {
-                    pointSize *= scale.scale(population: point.population ?? Self.assumedPopulation(of: point.subclass), atZoom: zoom)
+                    pointSize *= scale.scale(
+                        population: point.population ?? Self.assumedPopulation(of: point.subclass), largest: largest, atZoom: zoom)
                 }
                 candidates.append(LabelCandidate(
                     objectID: point.objectID, text: name, anchor: point.position, symbolRadius: symbolRadius, fontSize: pointSize, style: label))

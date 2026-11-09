@@ -68,9 +68,24 @@ struct PlaceRankLabelTests {
         ]
         let low = sizes(points, zoom: 9)
         let utrecht = try #require(low["Utrecht"]), houten = try #require(low["Houten"]), untagged = try #require(low["Untagged"])
-        #expect(houten < utrecht && untagged < houten, "a village without population is taken as 2,000 people")
+        #expect(houten < 0.85 * utrecht && untagged < houten, "a village without population is taken as 2,000 people")
         let near = sizes(points, zoom: 14)
         #expect(near["Utrecht"] == near["Houten"] && near["Houten"] == near["Untagged"])
         #expect(utrecht == MapStyle.standard.classes[.place]?.label?.size.value(atZoom: 9), "a city has the size of the style")
+    }
+
+    @Test func theSizesAreRelativeToTheLargestPlaceInView() throws {
+        let valley = [place(1, "Town", x: 100, population: 8_000), place(2, "Village", x: 400, subclass: 3, population: 800)]
+        let withCity = valley + [place(3, "City", x: 700, subclass: 1, population: 360_000)]
+        let alone = sizes(valley, zoom: 9), crowded = sizes(withCity, zoom: 9)
+        #expect(alone["Town"] == MapStyle.standard.classes[.place]?.label?.size.value(atZoom: 9), "the largest in view has the size of the style")
+        let townCrowded = try #require(crowded["Town"]), townAlone = try #require(alone["Town"]), village = try #require(alone["Village"])
+        #expect(townCrowded < townAlone)
+        #expect(village < townAlone)
+    }
+
+    @Test func aPlaceOutOfViewDoesNotSetTheScale() throws {
+        let points = [place(1, "Town", x: 100, population: 8_000), place(3, "FarCity", x: 5_000, subclass: 1, population: 360_000)]
+        #expect(sizes(points, zoom: 9)["Town"] == MapStyle.standard.classes[.place]?.label?.size.value(atZoom: 9))
     }
 }

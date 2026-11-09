@@ -254,46 +254,46 @@ struct LabelThinningStyleTests {
 
 @Suite("Population scale")
 struct PopulationScaleTests {
-    private let scale = PopulationScale(
-        stops: [.init(population: 300_000, scale: 1), .init(population: 2_000, scale: 0.7), .init(population: 20_000, scale: 0.8)],
-        strength: ZoomValue((10, 1), (13, 0)))!
+    private let scale = PopulationScale(smallest: 0.5, decades: 2, strength: ZoomValue((10, 1), (13, 0)))!
 
-    @Test func aBigCityKeepsTheFullSizeAndSmallerPlacesAreSmallerAtLowZoom() {
-        #expect(scale.scale(population: 360_000, atZoom: 9) == 1)
-        #expect(scale.scale(population: 300_000, atZoom: 9) == 1)
-        #expect(scale.scale(population: 500, atZoom: 9) == 0.7, "below the first stop")
-        #expect(scale.scale(population: 20_000, atZoom: 9) == 0.8)
-        let houten = scale.scale(population: 50_000, atZoom: 9)
-        #expect(houten > 0.8 && houten < 1)
+    @Test func theLargestPlaceKeepsTheFullSizeAndASmallerOneIsSmallerByTheLogarithm() {
+        #expect(scale.scale(population: 360_000, largest: 360_000, atZoom: 9) == 1)
+        #expect(abs(scale.scale(population: 36_000, largest: 360_000, atZoom: 9) - 0.75) < 1e-9, "a tenth: half way down")
+        #expect(abs(scale.scale(population: 3_600, largest: 360_000, atZoom: 9) - 0.5) < 1e-9, "a hundredth: the smallest")
+        #expect(scale.scale(population: 100, largest: 360_000, atZoom: 9) == 0.5, "never below the smallest")
+        let houten = scale.scale(population: 50_000, largest: 360_000, atZoom: 9)
+        #expect(houten > 0.75 && houten < 0.85)
     }
 
-    @Test func theScaleFollowsTheLogarithmBetweenStops() {
-        // 6,325 is the geometric mean of 2,000 and 20,000: half way between 0.7 and 0.8.
-        #expect(abs(scale.scale(population: 6_325, atZoom: 9) - 0.75) < 0.001)
+    @Test func itIsRelativeToTheLargestPlaceInView() {
+        // A town of 8,000 is the largest in a Norwegian valley: full size. Next to Utrecht it is small.
+        #expect(scale.scale(population: 8_000, largest: 8_000, atZoom: 9) == 1)
+        #expect(scale.scale(population: 8_000, largest: 360_000, atZoom: 9) < 0.6)
+        #expect(scale.scale(population: 500_000, largest: 360_000, atZoom: 9) == 1, "a larger one than the given largest is not enlarged")
     }
 
     @Test func theEffectFadesOutWithZoom() {
-        #expect(scale.scale(population: 2_000, atZoom: 13) == 1 && scale.scale(population: 2_000, atZoom: 15) == 1)
-        let half = scale.scale(population: 2_000, atZoom: 11.5)
-        #expect(abs(half - 0.85) < 0.001)
+        #expect(scale.scale(population: 3_600, largest: 360_000, atZoom: 13) == 1 && scale.scale(population: 3_600, largest: 360_000, atZoom: 16) == 1)
+        #expect(abs(scale.scale(population: 3_600, largest: 360_000, atZoom: 11.5) - 0.75) < 1e-9)
     }
 
     @Test func theStandardStyleWritesHoutenSmallerThanUtrechtAtZoom9() {
         let scale = MapStyle.standard.classes[.place]?.label?.populationScale
-        #expect(scale?.scale(population: 360_000, atZoom: 9) == 1)
-        #expect((scale?.scale(population: 50_000, atZoom: 9) ?? 1) < 0.95)
-        #expect(scale?.scale(population: 50_000, atZoom: 14) == 1)
+        #expect(scale?.scale(population: 360_000, largest: 360_000, atZoom: 9) == 1)
+        #expect((scale?.scale(population: 50_000, largest: 360_000, atZoom: 9) ?? 1) < 0.85)
+        #expect(scale?.scale(population: 50_000, largest: 360_000, atZoom: 14) == 1)
     }
 
-    @Test func itSurvivesAJsonRoundTripAndBadStopsAreRefused() throws {
+    @Test func itSurvivesAJsonRoundTripAndBadNumbersAreRefused() throws {
         let again = try MapStyle(json: try MapStyle.standard.jsonData())
         #expect(again.classes[.place]?.label?.populationScale == MapStyle.standard.classes[.place]?.label?.populationScale)
         func decode(_ json: String) throws -> PopulationScale { try JSONDecoder().decode(PopulationScale.self, from: Data(json.utf8)) }
-        #expect(try decode(#"{"stops": [[2000, 0.7], [300000, 1]]}"#).stops.count == 2)
-        #expect(throws: (any Error).self) { try decode(#"{"stops": [[2000, 0]]}"#) }
-        #expect(throws: (any Error).self) { try decode(#"{"stops": []}"#) }
-        #expect(throws: (any Error).self) { try decode(#"{"stops": [[2000]]}"#) }
-        #expect(throws: (any Error).self) { try decode(#"{"stops": [[2000, 1]], "strenth": 1}"#) }
-        #expect(PopulationScale(stops: []) == nil)
+        #expect(try decode(#"{"smallest": 0.5, "decades": 2}"#).decades == 2)
+        #expect(throws: (any Error).self) { try decode(#"{"smallest": 0, "decades": 2}"#) }
+        #expect(throws: (any Error).self) { try decode(#"{"smallest": 1.5, "decades": 2}"#) }
+        #expect(throws: (any Error).self) { try decode(#"{"smallest": 0.5, "decades": 0}"#) }
+        #expect(throws: (any Error).self) { try decode(#"{"smallest": 0.5}"#) }
+        #expect(throws: (any Error).self) { try decode(#"{"smallest": 0.5, "decades": 2, "strenth": 1}"#) }
+        #expect(PopulationScale(smallest: 0, decades: 1) == nil)
     }
 }
