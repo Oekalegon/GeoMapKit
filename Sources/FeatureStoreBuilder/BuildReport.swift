@@ -65,6 +65,8 @@ public struct BuildReport: Sendable, Equatable {
     public var seaOpenEnds = 0
     /// Stretches of coastline left out because they run through the water of a river (they close its mouth).
     public var coastlineStretchesInRivers = 0
+    /// Stretches of a named river's centre line in the river's own area that were kept as `riverName` lines, for the name.
+    public var riverNameStretches = 0
     /// Stretches of a river's centre line left out because they lie in the river's own area.
     public var waterLineStretchesInWater = 0
     /// Stretches of the border of protected areas that lie in the sea.

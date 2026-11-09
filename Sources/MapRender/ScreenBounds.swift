@@ -21,6 +21,14 @@ struct ScreenBounds {
         }
     }
 
+    /// A rectangle from its sides.
+    init(minX: Double, minY: Double, maxX: Double, maxY: Double) {
+        self.minX = minX
+        self.minY = minY
+        self.maxX = maxX
+        self.maxY = maxY
+    }
+
     /// The rectangle `0...width × 0...height` grown by `margin` on every side.
     init(width: Double, height: Double, margin: Double) {
         minX = -margin

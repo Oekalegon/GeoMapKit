@@ -91,6 +91,29 @@ struct ShoreTests {
         return (file, result.report)
     }
 
+    @Test("A named river keeps its name in the water: its course there is stored as a riverName line, an unnamed one leaves nothing")
+    func riverNameInTheWater() throws {
+        var world = SyntheticWorld()
+        world.way(100, world.rectangle(first: 10, 0.5, 0.5, 2.5, 1.0), [("natural", "water")])
+        world.node(20, 0.2, 0.75); world.node(21, 2.8, 0.75)
+        world.way(101, [20, 21], [("waterway", "river"), ("name", "Testelva")])
+        world.node(22, 0.2, 0.6); world.node(23, 2.8, 0.6)
+        world.way(102, [22, 23], [("waterway", "river")])   // the same, without a name
+        let (file, report) = try build(&world)
+        #expect(report.riverNameStretches == 1)
+        var names: [String] = [], ways = Set<Int64>()
+        for cell in try file.cells() {
+            for feature in try file.features(in: cell, band: .overview) where feature.classID == FeatureClass.riverName.rawValue {
+                ways.insert(feature.objectID)
+                if let id = feature.nameID, let name = file.string(at: id) { names.append(name) }
+                #expect(feature.kind == .line)
+            }
+        }
+        #expect(Set(names) == ["Testelva"] && ways == [101], "only the way with a name, on the way's own ID")
+        #expect(report.featuresByClass[.riverName] == 1)
+        #expect(report.featuresByClass[.waterLine] == 2, "the two rivers are kept where they are outside the lake")
+    }
+
     @Test("A lake gets an outline of its own, and a river inside it no centre line")
     func lakeOutlineAndRiver() throws {
         var world = SyntheticWorld()

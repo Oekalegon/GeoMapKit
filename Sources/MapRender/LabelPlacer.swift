@@ -61,6 +61,8 @@ public enum LabelPlacer {
                 guard !seen.contains(candidate.objectID) else { continue }
                 let size = measure(candidate.text, candidate.fontSize)
                 guard size.width > 0, size.height > 0 else { continue }
+                // The name of an area that is far narrower than the name is left out: it would lie over the shore and the land.
+                if let fit = candidate.fitWidth, size.width > fit * Self.areaLabelOverflow { continue }
                 for origin in positions(for: candidate, width: size.width, height: size.height) {
                     let box = ScreenBounds(of: [
                         ScreenPoint(x: origin.x - padding, y: origin.y - padding),
@@ -80,6 +82,9 @@ public enum LabelPlacer {
         }
         return placed
     }
+
+    /// How many times wider than the water at its anchor the name of an area may be: a long narrow lake is named across, a pond is not.
+    static let areaLabelOverflow = 2.5
 
     private static func positions(for candidate: LabelCandidate, width: Double, height: Double) -> [ScreenPoint] {
         let a = candidate.anchor

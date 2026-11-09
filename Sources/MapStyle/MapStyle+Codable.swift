@@ -37,6 +37,11 @@ extension MapStyle: Codable {
         for split in [FeatureClass.glacier, .bareGround, .wetland, .sand] where classes[split] == nil {
             if let cover = classes[.landcover] { classes[split] = cover }
         }
+        // River names are a class of their own since rule table 20 and a style file from before has no entry for it: the name of a wide
+        // river is then drawn like the name of a stream.
+        if classes[.riverName] == nil, let stream = classes[.waterLine], let label = stream.label {
+            classes[.riverName] = ClassStyle(label: label, visibleZoom: stream.visibleZoom, layer: stream.layer)
+        }
         // Service roads were part of `roadMinor` before `roadService` existed; a style file from then draws them as streets.
         if classes[.roadService] == nil, let street = classes[.roadMinor] { classes[.roadService] = street }
         self.init(

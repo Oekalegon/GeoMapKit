@@ -92,4 +92,7 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     /// not draw it; a style can. Unlike an unclassified object it is stored from the mid band, with the value of the tag in every band, so
     /// that a style can select by it. Added in rule table version 19.
     case landUse = 41
+    /// The course of a named river through its own area (`waterway=river` where it lies in a `riverbank` or `natural=water` area), kept for its
+    /// name only: it is not drawn, the area is. Added in rule table version 20.
+    case riverName = 42
 }

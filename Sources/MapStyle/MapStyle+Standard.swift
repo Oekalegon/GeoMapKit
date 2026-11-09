@@ -29,7 +29,16 @@ extension MapStyle {
                 fill: FillStyle(color: .color(0xD03030, alpha: 26.0 / 255)),
                 stroke: .line(0xC02020, ZoomValue((9, 0.8), (16, 1.5)), dash: [6, 3]), visibleZoom: 9...24, layer: 16),
             .forest: ClassStyle(fill: FillStyle(color: .color(0xC5DDB0)), layer: 12),
-            .waterArea: ClassStyle(fill: FillStyle(color: .color(0xAAD3EA)), layer: 13),
+            // The name of a lake goes in its water; a pond (less than about 1,200 square points on the screen) is not named.
+            .waterArea: ClassStyle(
+                fill: FillStyle(color: .color(0xAAD3EA)),
+                label: LabelStyle(
+                    size: ZoomValue((10, 10), (14, 12)), color: MapColor(hex: 0x2F6F9F), priority: 18, visibleZoom: 10...24, minimumArea: 1_200),
+                layer: 13),
+            // The name of a river that is drawn as an area (the centre line is not drawn there): along its course, like a stream.
+            .riverName: ClassStyle(
+                label: LabelStyle(size: ZoomValue((10, 10), (14, 12)), color: MapColor(hex: 0x2F6F9F), priority: 21, visibleZoom: 10...24),
+                visibleZoom: 9...24, layer: 22),
             // Buildings from zoom 14 as a fill, which shows where a town is built; the outline fades in by zoom 15.
             .building: ClassStyle(
                 fill: FillStyle(color: .color(0xD9D0C9)),

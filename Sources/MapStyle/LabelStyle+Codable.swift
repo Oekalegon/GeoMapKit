@@ -1,5 +1,5 @@
 extension LabelStyle: Codable {
-    private enum Keys: String, CodingKey, CaseIterable { case size, color, haloColor, haloWidth, priority, visibleZoom, placement }
+    private enum Keys: String, CodingKey, CaseIterable { case size, color, haloColor, haloWidth, priority, visibleZoom, placement, minimumArea }
 
     public init(from decoder: Decoder) throws {
         try decoder.requireKnownKeys(Keys.self)
@@ -18,7 +18,11 @@ extension LabelStyle: Codable {
             haloColor: try c.decodeIfPresent(MapColor.self, forKey: .haloColor) ?? .white,
             haloWidth: try c.decodeNumber(forKey: .haloWidth, default: 2),
             priority: try c.decodeIfPresent(Int.self, forKey: .priority) ?? 0, visibleZoom: range,
-            placement: try c.decodeIfPresent(LabelPlacement.self, forKey: .placement) ?? .onLine)
+            placement: try c.decodeIfPresent(LabelPlacement.self, forKey: .placement) ?? .onLine,
+            minimumArea: try c.decodeNumber(forKey: .minimumArea, default: 0))
+        guard minimumArea >= 0, minimumArea.isFinite else {
+            throw DecodingError.dataCorruptedError(forKey: .minimumArea, in: c, debugDescription: "expects an area of 0 or more square points")
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -32,5 +36,6 @@ extension LabelStyle: Codable {
         // Only written when it is not the default, so that style files without besideLine labels stay as they were and
         // older readers (which refuse unknown keys) can still read them.
         if placement != .onLine { try c.encode(placement, forKey: .placement) }
+        if minimumArea > 0 { try c.encode(minimumArea, forKey: .minimumArea) }
     }
 }
