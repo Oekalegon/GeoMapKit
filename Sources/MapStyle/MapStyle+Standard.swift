@@ -14,6 +14,12 @@ extension MapStyle {
                 fill: FillStyle(color: .color(0xFFFFFF)), stroke: .line(0xB0B0B0, .constant(0.5)), visibleZoom: 14...24, layer: 13),
             .landuseUrban: ClassStyle(fill: FillStyle(color: .color(0xE6E0D8)), visibleZoom: 9...24, layer: 10),
             .landcover: ClassStyle(fill: FillStyle(color: .color(0xDDE8C8)), visibleZoom: 10...24, layer: 11),
+            // Ground that is not vegetation (rule table 18): bare rock, scree and sand in a grey beige, wetland in a bluish green, and
+            // glaciers white with a light blue border (on the layer of the forest, above it, because a glacier lies over the land cover).
+            .bareGround: ClassStyle(fill: FillStyle(color: .color(0xDEDAD2)), visibleZoom: 10...24, layer: 11),
+            .wetland: ClassStyle(fill: FillStyle(color: .color(0xC4DDD6)), visibleZoom: 10...24, layer: 11),
+            .glacier: ClassStyle(
+                fill: FillStyle(color: .color(0xFFFFFF)), stroke: .line(0x7FB5DC, ZoomValue((9, 0.8), (16, 1.5))), visibleZoom: 9...24, layer: 12),
             // Military land, an area to keep out of: a dashed red outline and a faint red tint (26 of 255, a value that survives the JSON round trip). The tint is translucent and drawn above the
             // water, so a military area at sea (a radar sector, a firing range) shows the water and the land under it.
             .militaryArea: ClassStyle(

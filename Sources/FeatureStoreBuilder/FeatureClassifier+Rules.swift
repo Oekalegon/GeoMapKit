@@ -98,13 +98,20 @@ extension FeatureClassifier {
         // Land cover and land use.
         // The large kinds of land cover are in the overview band, so that at zoom 11 a village (urban land use) differs from the
         // fields, heath and bare rock around it; the small ones (lawns, allotments, flower beds) start at the mid band.
+        // Rule table version 18 splits the ground that is not vegetation off `landcover`: glaciers, bare ground and wetland are classes of
+        // their own, so that a style can draw a glacier white and a boulder field grey and not as a lawn.
         rules.append(ClassifierRule("natural", make(.landcover, .overview, watch: true,
-            [("scrub", 1), ("shrubbery", 13), ("shrub", 14), ("heath", 2), ("grassland", 3), ("fell", 4), ("bare_rock", 5), ("scree", 6), ("shingle", 7),
-             ("sand", 8), ("beach", 9), ("glacier", 10), ("wetland", 11), ("mud", 12)])))
+            [("scrub", 1), ("shrubbery", 13), ("shrub", 14), ("heath", 2), ("grassland", 3), ("fell", 4), ("grass", 15)])))
+        rules.append(ClassifierRule("natural", make(.glacier, .overview, watch: true, [("glacier", 1)])))
+        rules.append(ClassifierRule("natural", make(.bareGround, .overview, watch: true,
+            [("bare_rock", 1), ("scree", 2), ("shingle", 3), ("sand", 4), ("beach", 5), ("rock", 6), ("bedrock", 7), ("blockfield", 8), ("shale", 9)])))
+        rules.append(ClassifierRule("natural", make(.wetland, .overview, watch: true, [("wetland", 1), ("mud", 2)])))
         rules.append(ClassifierRule("landuse", merged(
-            make(.landcover, .overview, watch: true, [("meadow", 20), ("farmland", 22), ("orchard", 23), ("vineyard", 24), ("quarry", 26)]),
+            make(.landcover, .overview, watch: true, [("meadow", 20), ("farmland", 22), ("orchard", 23), ("vineyard", 24), ("pasture", 39)]),
+            make(.bareGround, .overview, watch: true, [("quarry", 10)]),
             make(.landcover, .mid, watch: true,
-                [("grass", 21), ("allotments", 25), ("village_green", 27), ("recreation_ground", 28), ("flowerbed", 29)]))))
+                [("grass", 21), ("allotments", 25), ("village_green", 27), ("recreation_ground", 28), ("flowerbed", 29), ("cemetery", 35),
+                 ("brownfield", 36), ("greenfield", 37)]))))
         rules.append(ClassifierRule("leisure", make(.landcover, .mid, watch: true,
             [("park", 30), ("garden", 31), ("golf_course", 32), ("pitch", 33), ("playground", 34)])))
         // Military land is a class of its own (rule table version 17): an area to avoid, not a built-up one (it stays "built-up" for

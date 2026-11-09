@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 17
+    public static let version: UInt16 = 18
 
     /// Creates a classifier.
     public init() {}

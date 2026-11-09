@@ -74,9 +74,23 @@ struct FeatureClassifierTests {
         Case(tags: ["man_made": "pier"], featureClass: .pier, band: .mid, watch: false),
         Case(tags: ["man_made": "breakwater"], featureClass: .pier, band: .mid, watch: false),
         Case(tags: ["natural": "scrub"], featureClass: .landcover, band: .overview, watch: true),
-        Case(tags: ["natural": "scree"], featureClass: .landcover, band: .overview, watch: true),
-        Case(tags: ["natural": "glacier"], featureClass: .landcover, band: .overview, watch: true),
-        Case(tags: ["natural": "wetland"], featureClass: .landcover, band: .overview, watch: true),
+        Case(tags: ["natural": "scree"], featureClass: .bareGround, band: .overview, watch: true),
+        Case(tags: ["natural": "glacier"], featureClass: .glacier, band: .overview, watch: true),
+        Case(tags: ["natural": "wetland"], featureClass: .wetland, band: .overview, watch: true),
+        Case(tags: ["natural": "mud"], featureClass: .wetland, band: .overview, watch: true),
+        Case(tags: ["natural": "bare_rock"], featureClass: .bareGround, band: .overview, watch: true),
+        Case(tags: ["natural": "rock"], featureClass: .bareGround, band: .overview, watch: true),
+        Case(tags: ["natural": "bedrock"], featureClass: .bareGround, band: .overview, watch: true),
+        Case(tags: ["natural": "blockfield"], featureClass: .bareGround, band: .overview, watch: true),
+        Case(tags: ["natural": "shale"], featureClass: .bareGround, band: .overview, watch: true),
+        Case(tags: ["natural": "sand"], featureClass: .bareGround, band: .overview, watch: true),
+        Case(tags: ["natural": "beach"], featureClass: .bareGround, band: .overview, watch: true),
+        Case(tags: ["natural": "shingle"], featureClass: .bareGround, band: .overview, watch: true),
+        Case(tags: ["natural": "grass"], featureClass: .landcover, band: .overview, watch: true),
+        Case(tags: ["landuse": "cemetery"], featureClass: .landcover, band: .mid, watch: true),
+        Case(tags: ["landuse": "brownfield"], featureClass: .landcover, band: .mid, watch: true),
+        Case(tags: ["landuse": "greenfield"], featureClass: .landcover, band: .mid, watch: true),
+        Case(tags: ["landuse": "pasture"], featureClass: .landcover, band: .overview, watch: true),
         Case(tags: ["landuse": "meadow"], featureClass: .landcover, band: .overview, watch: true),
         Case(tags: ["landuse": "farmland"], featureClass: .landcover, band: .overview, watch: true),
         Case(tags: ["landuse": "village_green"], featureClass: .landcover, band: .mid, watch: true),
@@ -95,7 +109,7 @@ struct FeatureClassifierTests {
         Case(tags: ["addr:housenumber": "5", "addr:street": "Storgata"], featureClass: .address, band: .detail, watch: false),
         Case(tags: ["addr:city": "Oslo"], featureClass: .address, band: .detail, watch: false),
         Case(tags: ["highway": "footway", "footway": "sidewalk"], featureClass: .pavement, band: .detail, watch: false),
-        Case(tags: ["landuse": "quarry"], featureClass: .landcover, band: .overview, watch: true),
+        Case(tags: ["landuse": "quarry"], featureClass: .bareGround, band: .overview, watch: true),
         Case(tags: ["leisure": "park"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["leisure": "pitch"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["landuse": "residential"], featureClass: .landuseUrban, band: .overview, watch: false),
@@ -360,12 +374,14 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
-    @Test("The rule table version is 17, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 18, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 17)
+        #expect(FeatureClassifier.version == 18)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
-        #expect(FeatureClass.allCases.count == 37)
+        #expect(FeatureClass.militaryArea.rawValue == 36 && FeatureClass.glacier.rawValue == 37)
+        #expect(FeatureClass.bareGround.rawValue == 38 && FeatureClass.wetland.rawValue == 39)
+        #expect(FeatureClass.allCases.count == 40)
     }
 }

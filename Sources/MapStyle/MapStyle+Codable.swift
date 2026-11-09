@@ -33,6 +33,10 @@ extension MapStyle: Codable {
         // Military land was part of `landuseUrban` before `militaryArea` existed (rule table 17); a style file from then draws it that way.
         // (A file cannot hide military land by leaving the class out: a missing class is read as an old file.)
         if classes[.militaryArea] == nil, let urban = classes[.landuseUrban] { classes[.militaryArea] = urban }
+        // Glaciers, bare ground and wetland were part of `landcover` before rule table 18; a style file from then draws them that way.
+        for split in [FeatureClass.glacier, .bareGround, .wetland] where classes[split] == nil {
+            if let cover = classes[.landcover] { classes[split] = cover }
+        }
         // Service roads were part of `roadMinor` before `roadService` existed; a style file from then draws them as streets.
         if classes[.roadService] == nil, let street = classes[.roadMinor] { classes[.roadService] = street }
         self.init(
