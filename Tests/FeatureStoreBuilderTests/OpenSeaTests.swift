@@ -198,4 +198,67 @@ struct OpenSeaTests {
         let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, open]))
         #expect(!report.changed && after == before)
     }
+
+    @Test func aBorderWithAPartialSeaCellIsUnclearAndTheGroupIsLeft() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), open = Position(x: 11, y: 10)
+        // A sea block whose east edge has one cell that is only part sea.
+        var writer = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: attribution, classifierVersion: 16)
+        let all = cells(of: seaBlock)
+        for cell in all { for band in bands { try writer.add(seaSquare(cell), band: band, cell: cell) } }
+        try writer.add(coastline(all[0]), band: .overview, cell: all[0])
+        let edge = all[31]    // the east edge of the first row
+        let rect = CellRect(tile: edge)
+        var part = StoredFeature(
+            classID: FeatureClass.sea.rawValue, kind: .area, objectType: .way, objectID: 0,
+            parts: [GeometryPart(points: [
+                PackedPoint(longitude: rect.west, latitude: rect.north), PackedPoint(longitude: rect.east, latitude: rect.north),
+                PackedPoint(longitude: rect.west, latitude: rect.south), PackedPoint(longitude: rect.west, latitude: rect.north),
+            ])])
+        part.flags = []
+        var broken = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: attribution, classifierVersion: 16)
+        for cell in all where cell != edge { for band in bands { try broken.add(seaSquare(cell), band: band, cell: cell) } }
+        for band in bands { try broken.add(part, band: band, cell: edge) }
+        try broken.add(coastline(all[0]), band: .overview, cell: all[0])
+        let name = "blocks/8-10-10.gmk"
+        let data = try broken.data()
+        try data.write(to: folder.appendingPathComponent(name))
+        let before = try manifest([StoreManifest.Block(x: 10, y: 10, file: name, bytes: Int64(data.count), builtAt: Date(timeIntervalSince1970: 0))])
+        let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, open]))
+        #expect(!report.changed && after == before && report.left == [open] && report.conflicting.isEmpty)
+    }
+
+    @Test func aBlockThatOnlyTouchesSeaAtACornerIsLeft() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), diagonal = Position(x: 11, y: 11)
+        let before = try manifest([write(.sea, at: seaBlock, in: folder)])
+        let (_, report) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, diagonal]))
+        #expect(!report.changed && report.left == [diagonal])
+    }
+
+    @Test func aBlockThatCannotBeReadIsNeverReplaced() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), sparse = Position(x: 11, y: 10)
+        let good = try write(.sea, at: seaBlock, in: folder)
+        var bad = try write(.sparse, at: sparse, in: folder)
+        let url = folder.appendingPathComponent(bad.file)
+        try Data("not a store file".utf8).write(to: url)
+        bad.bytes = 16
+        let before = try manifest([good, bad])
+        #expect(throws: (any Error).self) { try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, sparse])) }
+        #expect(try Data(contentsOf: url) == Data("not a store file".utf8))
+    }
+
+    @Test func theManifestIsPersistedAfterEachBlockAndTheTimeIsInjected() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), a = Position(x: 11, y: 10), b = Position(x: 9, y: 10)
+        let before = try manifest([write(.sea, at: seaBlock, in: folder)])
+        let moment = Date(timeIntervalSince1970: 1_000_000)
+        var saved: [Int] = []
+        let (after, _) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, a, b]), now: moment) { saved.append($0.blocks.count) }
+        #expect(saved == [2, 3])
+        #expect(after.blocks.filter { $0.builtAt == moment }.count == 2)
+    }
 }

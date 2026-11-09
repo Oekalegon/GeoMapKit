@@ -12,7 +12,9 @@ extension ToolRunner {
     /// Each block is built on its own: its area is cut, with a margin, from the source files its tile needs, and only the cells of
     /// the tile are written. Up to `jobs` blocks are built at once. The source files must be in the cache (see `fetch`); nothing
     /// is downloaded. A block that is already in the manifest, built from the same source files, is left as it is, so a run that
-    /// was stopped can be run again. The manifest is written after each block, so it lists only blocks that are complete.
+    /// was stopped can be run again. The manifest is written after each block, so it lists only blocks that are complete. When the
+    /// blocks are done, the sea of blocks of open sea is added from what their neighbours show (``OpenSea``, question 53) unless
+    /// ``BlockRequest/fillsOpenSea`` is off.
     ///
     /// - Parameters:
     ///   - request: What to build.
@@ -212,11 +214,10 @@ extension ToolRunner {
                         lastModified: $0.lastModified)
                 }
             }
-            let (filled, report) = try OpenSea.fill(manifest: current, folder: request.output, covered: covered)
-            if report.changed {
-                manifest = filled
-                try Self.write(filled, to: manifestURL)
+            let (filled, report) = try OpenSea.fill(manifest: current, folder: request.output, covered: covered) { updated in
+                try Self.write(updated, to: manifestURL)
             }
+            if report.changed { manifest = filled }
             openSea = report
         }
         // A manifest that exists after a run in which nothing was built (everything up to date, or empty) is the one that was there.

@@ -89,6 +89,10 @@ struct FeatureStoreFormatTests {
         #expect(file.string(at: relation.members[0].role) == "outer")
         #expect(try file.relation(withID: 5)?.members.isEmpty == true)
         #expect(try file.relation(withID: 6) == nil)
+        // `relations()` returns the same relations, in order of ID.
+        let all = try file.relations()
+        #expect(all.map(\.id) == all.map(\.id).sorted() && all.count >= 2)
+        for relation in all { #expect(try file.relation(withID: relation.id) == relation) }
     }
 
     @Test("Lower bands carry the name but no tags")

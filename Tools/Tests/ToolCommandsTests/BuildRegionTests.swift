@@ -305,6 +305,19 @@ struct BuildRegionTests {
         }
     }
 
+    @Test("The open-sea pass runs after a full build, changes nothing without sea, and --no-open-sea skips it")
+    func openSeaPass() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        let with = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let sea = try #require(with.openSea)
+        #expect(!sea.changed)
+        let other = s.output.deletingLastPathComponent().appendingPathComponent("out2")
+        var off = request(s, output: other)
+        off.fillsOpenSea = false
+        #expect(try await ToolRunner.buildRegion(off, catalog: s.catalog).openSea == nil)
+    }
+
     @Test("The progress lines and the summary read as text")
     func text() {
         let built = BlockOutcome(x: 134, y: 74, status: .built(bytes: 110_000_000, cells: 1_332, seconds: 84.2), regions: ["sweden", "ostlandet"])

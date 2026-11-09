@@ -32,6 +32,7 @@ public enum OpenSea {
             self.y = y
         }
 
+        /// Orders by row, then column.
         public static func < (lhs: Position, rhs: Position) -> Bool { (lhs.y, lhs.x) < (rhs.y, rhs.x) }
     }
 
@@ -44,7 +45,8 @@ public enum OpenSea {
         /// Blocks without a coastline and without sea that were not changed, because no neighbour showed that they are sea: land, or
         /// nothing known.
         public var left: [Position] = []
-        /// The part of those where the neighbours disagreed (some showed sea and some land, or a border was mixed).
+        /// The part of those that touch sea but whose neighbours also showed land or a mixed border (a coastline that was not joined,
+        /// or one with no node in the cut). Groups that only touch land or unclear edges are in `left` only.
         public var conflicting: [Position] = []
 
         /// Creates a report.
@@ -62,42 +64,40 @@ public enum OpenSea {
     /// Fills the open sea of a block set.
     ///
     /// Only a manifest of the `full` profile is looked at (the Watch profile has no coastline class, so a block with a coastline
-    /// cannot be told from one without).
+    /// cannot be told from one without). Block files are opened one at a time and not kept, so the number of mappings stays small
+    /// for a set of thousands of blocks.
     ///
     /// - Parameters:
     ///   - manifest: The manifest; it is not changed here.
     ///   - folder: The folder of the manifest.
     ///   - covered: The blocks that a source file covers at least in part, with the source files each was built from. A block that is
     ///     not here (no data at all) is never changed.
+    ///   - now: The time recorded for the blocks that are written.
+    ///   - persist: Called with the manifest after each block is written, so that the manifest on disk always matches the files (a
+    ///     run that stops half way leaves a set that opens). The default does nothing.
     /// - Returns: The manifest with the new and rewritten blocks, and what was done. The files are already written.
-    /// - Throws: `FeatureStoreError` for a block that cannot be read, and the file errors.
+    /// - Throws: `FeatureStoreError` for a block that cannot be read (a block that cannot be read is never replaced), the errors of
+    ///   `persist` and the file errors.
     public static func fill(
-        manifest: StoreManifest, folder: URL, covered: [Position: [StoreManifest.Source]]
+        manifest: StoreManifest, folder: URL, covered: [Position: [StoreManifest.Source]], now: Date = Date(),
+        persist: (StoreManifest) throws -> Void = { _ in }
     ) throws -> (manifest: StoreManifest, report: Report) {
         var report = Report()
         guard manifest.profile == "full" else { return (manifest, report) }
         let blocks = Dictionary(uniqueKeysWithValues: manifest.blocks.map { (Position(x: $0.x, y: $0.y), $0) })
+        func open(_ block: StoreManifest.Block) throws -> FeatureStoreFile {
+            try FeatureStoreFile(contentsOf: folder.appendingPathComponent(block.file))
+        }
 
-        // Which blocks are known: they have a coastline or sea of their own. The others that are covered are the candidates.
-        var files: [Position: FeatureStoreFile] = [:]
+        // Which blocks are known: they have a coastline or sea of their own. The others that are covered are the candidates. Blocks
+        // outside the run that have sea or a coastline are evidence too.
         var candidates = Set<Position>()
-        for position in covered.keys {
+        var known = Set<Position>()
+        for (position, block) in blocks.sorted(by: { $0.key < $1.key }) {
             try Task.checkCancellation()
-            guard let block = blocks[position] else { candidates.insert(position); continue }
-            let file = try FeatureStoreFile(contentsOf: folder.appendingPathComponent(block.file))
-            files[position] = file
-            let found = try scan(file)
-            if !found.hasSea && !found.hasCoastline { candidates.insert(position) }
+            if try hasSeaOrCoastline(try open(block)) { known.insert(position) } else if covered[position] != nil { candidates.insert(position) }
         }
-        // Blocks outside the run that have sea or a coastline are evidence too.
-        var known: [Position: FeatureStoreFile] = [:]
-        for (position, block) in blocks where !candidates.contains(position) {
-            if let file = files[position] { known[position] = file; continue }
-            try Task.checkCancellation()
-            let file = try FeatureStoreFile(contentsOf: folder.appendingPathComponent(block.file))
-            let found = try scan(file)
-            if found.hasSea || found.hasCoastline { known[position] = file }
-        }
+        for position in covered.keys where blocks[position] == nil { candidates.insert(position) }
 
         // Connected groups of candidates, and what their neighbours say.
         var seen = Set<Position>()
@@ -109,12 +109,13 @@ public enum OpenSea {
             var verdicts = Set<Border>()
             while let position = queue.popLast() {
                 group.append(position)
+                // The edge to look at is the one of the neighbour that faces this block: a neighbour to the west shows its east edge.
                 for (dx, dy, side) in [(-1, 0, Side.east), (1, 0, .west), (0, -1, .south), (0, 1, .north)] {
                     let next = Position(x: position.x + dx, y: position.y + dy)
                     if candidates.contains(next) {
                         if seen.insert(next).inserted { queue.append(next) }
-                    } else if let file = known[next] {
-                        verdicts.insert(try border(of: file, side: side, position: next, blockZoom: manifest.blockZoom))
+                    } else if known.contains(next), let block = blocks[next] {
+                        verdicts.insert(try border(of: try open(block), side: side, position: next, blockZoom: manifest.blockZoom))
                     }
                 }
             }
@@ -128,28 +129,30 @@ public enum OpenSea {
         report.left.sort()
         report.conflicting.sort()
 
-        // Write the sea blocks.
+        // Write the sea blocks, and the manifest after each.
         var result = manifest
         var byPosition = blocks
         let bands = manifest.bands.compactMap { ZoomBand(rawValue: UInt8($0)) }
         for position in sea.sorted() {
             try Task.checkCancellation()
             let block: StoreManifest.Block
-            if let existing = blocks[position], let file = files[position] ?? (try? FeatureStoreFile(contentsOf: folder.appendingPathComponent(existing.file))) {
-                let data = try rewrite(file, adding: position, manifest: manifest, bands: bands)
-                block = try write(data, to: existing.file, folder: folder, replacing: existing)
+            if let existing = blocks[position] {
+                let data = try rewrite(try open(existing), adding: position, manifest: manifest, bands: bands)
+                block = try write(data, to: existing.file, folder: folder, replacing: existing, now: now)
                 report.extended.append(position)
             } else {
                 let name = "blocks/\(manifest.blockZoom)-\(position.x)-\(position.y).gmk"
                 let data = try seaOnly(position, manifest: manifest, bands: bands)
                 block = try write(
                     data, to: name, folder: folder,
-                    replacing: StoreManifest.Block(x: position.x, y: position.y, file: name, bytes: 0, builtAt: Date(), sources: covered[position] ?? []))
+                    replacing: StoreManifest.Block(x: position.x, y: position.y, file: name, bytes: 0, builtAt: now, sources: covered[position] ?? []),
+                    now: now)
                 report.created.append(position)
             }
             byPosition[position] = block
+            result.blocks = byPosition.values.sorted { ($0.y, $0.x) < ($1.y, $1.x) }
+            try persist(result)
         }
-        result.blocks = byPosition.values.sorted { ($0.y, $0.x) < ($1.y, $1.x) }
         return (result, report)
     }
 
@@ -164,24 +167,22 @@ public enum OpenSea {
         return ((position.x << shift)..<((position.x + 1) << shift), (position.y << shift)..<((position.y + 1) << shift))
     }
 
-    private static let storageZoom = FeatureStoreBuilder.storageZoom
+    /// The band to look at in a file: the overview band, or the lowest one it has.
+    private static func lookBand(of file: FeatureStoreFile) -> ZoomBand {
+        file.bands.contains(.overview) ? .overview : (file.bands.first ?? .overview)
+    }
 
-    private static func scan(_ file: FeatureStoreFile) throws -> (hasSea: Bool, hasCoastline: Bool) {
-        let band: ZoomBand = file.bands.contains(.overview) ? .overview : (file.bands.first ?? .overview)
+    /// Whether the file has a `sea` or a `coastline` feature anywhere; stops at the first.
+    private static func hasSeaOrCoastline(_ file: FeatureStoreFile) throws -> Bool {
+        let band = lookBand(of: file)
         let classes: Set<UInt8> = [FeatureClass.sea.rawValue, FeatureClass.coastline.rawValue]
-        var hasSea = false, hasCoastline = false
-        for cell in try file.cells() {
-            for feature in try file.features(in: cell, band: band, classes: classes) {
-                if feature.classID == FeatureClass.sea.rawValue { hasSea = true } else { hasCoastline = true }
-            }
-            if hasSea && hasCoastline { break }
-        }
-        return (hasSea, hasCoastline)
+        for cell in try file.cells() where !(try file.features(in: cell, band: band, classes: classes)).isEmpty { return true }
+        return false
     }
 
     /// What the cells along one edge of a known block say: all sea squares, no sea at all, or neither.
     private static func border(of file: FeatureStoreFile, side: Side, position: Position, blockZoom: Int) throws -> Border {
-        let range = cellRange(of: position, manifest: (blockZoom, storageZoom))
+        let range = cellRange(of: position, manifest: (blockZoom, file.storageZoom))
         let cells: [(Int, Int)]
         switch side {
         case .west: cells = range.rows.map { (range.columns.lowerBound, $0) }
@@ -189,10 +190,10 @@ public enum OpenSea {
         case .north: cells = range.columns.map { ($0, range.rows.lowerBound) }
         case .south: cells = range.columns.map { ($0, range.rows.upperBound - 1) }
         }
-        let band: ZoomBand = file.bands.contains(.overview) ? .overview : (file.bands.first ?? .overview)
+        let band = lookBand(of: file)
         var squares = 0, empty = 0
         for (x, y) in cells {
-            guard let cell = TileID(zoom: storageZoom, x: x, y: y) else { return .unclear }
+            guard let cell = TileID(zoom: file.storageZoom, x: x, y: y) else { return .unclear }
             let found = try file.features(in: cell, band: band, classes: [FeatureClass.sea.rawValue])
             if found.isEmpty { empty += 1 } else if isSquare(found, of: cell) { squares += 1 } else { return .unclear }
         }
@@ -277,14 +278,14 @@ public enum OpenSea {
         return try writer.data()
     }
 
-    private static func write(_ data: Data, to name: String, folder: URL, replacing old: StoreManifest.Block) throws -> StoreManifest.Block {
+    private static func write(_ data: Data, to name: String, folder: URL, replacing old: StoreManifest.Block, now: Date) throws -> StoreManifest.Block {
         try FeatureStoreFile(data: data).verify()
         let url = folder.appendingPathComponent(name)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
         var block = old
         block.bytes = Int64(data.count)
-        block.builtAt = Date()
+        block.builtAt = now
         return block
     }
 }
