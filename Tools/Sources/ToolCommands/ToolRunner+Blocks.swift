@@ -19,12 +19,14 @@ extension ToolRunner {
     ///   - catalog: The list of regions, or `nil` for the Geofabrik index kept in the cache folder.
     ///   - downloader: The network for the region index, or `nil` for `URLSession`.
     ///   - progress: Called when a block is done, from the calling task.
+    ///   - onProgress: Called with the state of the whole run when it starts, whenever a block starts and whenever one is done, from the
+    ///     calling task. A progress bar is drawn from it.
     /// - Returns: The report.
     /// - Throws: ``ToolError`` for a bad request, an unknown region or source files that are not in the cache; the errors of the
     ///   cutter, the builder and the files; `CancellationError`.
     public static func buildRegion(
         _ request: BlockRequest, catalog: (any RegionCatalog)? = nil, downloader: (any Downloader)? = nil,
-        progress: (BlockOutcome) -> Void = { _ in }
+        progress: (BlockOutcome) -> Void = { _ in }, onProgress: (BlockProgress) -> Void = { _ in }
     ) async throws -> BlockRunReport {
         guard (0...13).contains(request.blockZoom) else { throw ToolError("--block-zoom must be from 0 to 13") }
         guard request.margin >= 0, request.margin <= 2, request.margin.isFinite else { throw ToolError("--margin must be from 0 to 2 degrees") }
@@ -85,6 +87,7 @@ extension ToolRunner {
         }
         var kept = Dictionary(uniqueKeysWithValues: (manifest?.blocks ?? []).map { (BlockKey(x: $0.x, y: $0.y), $0) })
         var toBuild: [BlockTask] = []
+        var finishedCount = 0
         var removedFiles: [BlockKey: String] = [:]
         for task in tasks {
             let sources = task.regions.compactMap { records[$0.id] }
@@ -92,6 +95,7 @@ extension ToolRunner {
             if let block = kept[key], blockIsUpToDate(block, sources: sources, folder: request.output) {
                 let outcome = BlockOutcome(x: task.tile.x, y: task.tile.y, status: .upToDate, regions: task.regions.map(\.id))
                 outcomes[task.position] = outcome
+                finishedCount += 1
                 progress(outcome)
             } else {
                 if let old = kept[key] { removedFiles[key] = old.file }
@@ -104,11 +108,22 @@ extension ToolRunner {
         let jobs = max(request.jobs, 1)
         var next = 0
         var built = 0
+        var running = 0
+        let buildStart = clock.now
+        let total = tasks.count
+        func state() -> BlockProgress {
+            let elapsed = clock.now - buildStart
+            return BlockProgress(
+                total: total, finished: finishedCount, running: running, built: built, elapsed: elapsed,
+                remaining: BlockProgress.estimateRemaining(left: total - finishedCount, built: built, elapsed: elapsed))
+        }
+        onProgress(state())
         try await withThrowingTaskGroup(of: BuiltBlock.self) { group in
             func start() {
                 guard next < toBuild.count else { return }
                 let task = toBuild[next]
                 next += 1
+                running += 1
                 let files = task.regions.map { cache.fileURL(forRegionID: $0.id) }
                 let sources = task.regions.compactMap { records[$0.id] }
                 let profile = request.profile
@@ -119,8 +134,11 @@ extension ToolRunner {
                 }
             }
             for _ in 0..<min(jobs, toBuild.count) { start() }
+            onProgress(state())
             while let result = try await group.next() {
                 try Task.checkCancellation()
+                running -= 1
+                finishedCount += 1
                 let task = result.task
                 let regionIDs = task.regions.map(\.id)
                 if let block = result.block {
@@ -155,6 +173,7 @@ extension ToolRunner {
                     progress(outcome)
                 }
                 start()
+                onProgress(state())
             }
         }
         // A manifest that exists after a run in which nothing was built (everything up to date, or empty) is the one that was there.
