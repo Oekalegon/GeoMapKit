@@ -78,8 +78,9 @@ public enum LevelBuilder {
             attribution: source.attribution, classifierVersion: UInt16(truncatingIfNeeded: firstFile.classifierVersion))
         var output = LevelOutput(writer: writer, spec: spec, tile: tile, block: block, report: report)
         try output.writePoints(collected)
-        try output.writeLines(collected)
+        // The areas first: a water area that is left out takes its outline (a line) with it.
         try output.writeAreas(collected, region: region)
+        try output.writeLines(collected)
         writer = output.writer
         report = output.report
         guard writer.cellCount > 0 else { return nil }

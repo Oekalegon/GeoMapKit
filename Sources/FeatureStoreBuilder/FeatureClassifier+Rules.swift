@@ -78,9 +78,11 @@ extension FeatureClassifier {
         rules.append(ClassifierRule("piste:type", any: one(.piste, .mid, watch: true)))
 
         // Water, forest, boundaries.
+        // Rule table version 21: a canal is stored from the mid band (a canal a few metres wide is a line the overview zooms do not
+        // need; the wide ones are areas), and a town under 35,000 people is a small town (`PlaceRank`, see `classify`).
         rules.append(ClassifierRule("waterway", merged(
-            make(.waterLine, .overview, watch: true, [("river", 1), ("canal", 2)]),
-            make(.waterLine, .mid, watch: true, [("stream", 3)]),
+            make(.waterLine, .overview, watch: true, [("river", 1)]),
+            make(.waterLine, .mid, watch: true, [("canal", 2), ("stream", 3)]),
             make(.waterLine, .detail, watch: false, [("ditch", 4), ("drain", 5), ("dam", 6), ("weir", 7)]),
             make(.waterArea, .overview, watch: true, [("riverbank", 2)]))))
         rules.append(ClassifierRule("natural", make(.waterArea, .overview, watch: true, [("water", 1)])))

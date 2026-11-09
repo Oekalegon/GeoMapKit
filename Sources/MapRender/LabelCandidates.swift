@@ -34,6 +34,8 @@ enum LabelCandidates {
             guard size > 0, label.visibleZoom.contains(zoom) else { continue }
             for point in step.points {
                 guard let name = point.name, !name.isEmpty else { continue }
+                // A rank that the style holds back until a later zoom (the smaller towns).
+                if let first = label.subclassMinimumZoom[point.subclass], zoom < first { continue }
                 let radius = classStyle.point?.radius.value(atZoom: zoom) ?? 0
                 candidates.append(LabelCandidate(
                     objectID: point.objectID, text: name, anchor: point.position, symbolRadius: radius, fontSize: size, style: label))

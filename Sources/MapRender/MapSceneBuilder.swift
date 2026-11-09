@@ -81,7 +81,8 @@ public struct MapSceneBuilder: Sendable {
                         let position = viewport.screenPoint(for: first)
                         guard ScreenBounds(of: [position])?.intersects(visible) == true else { continue }
                         points[featureClass, default: []].append(ScenePoint(
-                            featureClass: featureClass, objectID: feature.objectID, position: position, name: name(of: feature, in: file)))
+                            featureClass: featureClass, objectID: feature.objectID, position: position, name: name(of: feature, in: file),
+                            subclass: feature.subclass))
                     }
                 }
             }

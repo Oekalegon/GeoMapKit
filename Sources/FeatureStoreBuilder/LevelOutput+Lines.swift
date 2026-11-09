@@ -12,6 +12,11 @@ extension LevelOutput {
     mutating func writeLines(_ collected: LevelCollection) throws {
         for key in collected.lines.keys.sorted() {
             guard let pieces = collected.lines[key], let attributes = collected.attributes[key] else { continue }
+            // The outline of a water area that was left out (see `writeAreas`) goes with it.
+            if key.classID == FeatureClass.waterEdge.rawValue, droppedWater.contains(LevelWaterKey(type: key.type, id: key.id)) {
+                report.droppedAsSmall += 1
+                continue
+            }
             var starts: [PackedPoint: [Int]] = [:]
             for (index, piece) in pieces.enumerated() where piece.continuesBefore {
                 starts[piece.points[0], default: []].append(index)

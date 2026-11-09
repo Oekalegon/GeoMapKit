@@ -54,7 +54,7 @@ struct FeatureClassifierTests {
         Case(tags: ["railway": "funicular"], featureClass: .railway, band: .overview, watch: true),
         Case(tags: ["railway": "tram"], featureClass: .railway, band: .detail, watch: true),
         Case(tags: ["waterway": "river"], featureClass: .waterLine, band: .overview, watch: true),
-        Case(tags: ["waterway": "canal"], featureClass: .waterLine, band: .overview, watch: true),
+        Case(tags: ["waterway": "canal"], featureClass: .waterLine, band: .mid, watch: true),
         Case(tags: ["waterway": "stream"], featureClass: .waterLine, band: .mid, watch: true),
         Case(tags: ["waterway": "ditch"], featureClass: .waterLine, band: .detail, watch: false),
         Case(tags: ["waterway": "drain"], featureClass: .waterLine, band: .detail, watch: false),
@@ -340,6 +340,24 @@ struct FeatureClassifierTests {
         #expect(classify(["highway": "residential", "area": "no"], .closedWay).featureClass == .roadMinor)
     }
 
+    @Test("A town under 35,000 people is a small town, in the overview band like any town; a city, a town with no population and a village are not")
+    func smallTowns() {
+        func rank(_ tags: [String: String]) -> UInt8 { classify(tags, .openWay).subclass }
+        #expect(rank(["place": "town", "population": "28000"]) == PlaceRank.smallTown)
+        #expect(rank(["place": "town", "population": "12 345"]) == PlaceRank.smallTown, "spaces in the number")
+        #expect(rank(["place": "town", "population": "12.345"]) == PlaceRank.smallTown, "a Dutch thousands point")
+        #expect(rank(["place": "town", "population": "34999"]) == PlaceRank.smallTown)
+        #expect(rank(["place": "town", "population": "35000"]) == PlaceRank.town)
+        #expect(rank(["place": "town", "population": "73,000"]) == PlaceRank.town)
+        #expect(rank(["place": "town"]) == PlaceRank.town, "no population: a town")
+        #expect(rank(["place": "town", "population": "many"]) == PlaceRank.town, "no number: a town")
+        #expect(rank(["place": "city", "population": "500"]) == PlaceRank.city, "only towns are split")
+        #expect(rank(["place": "village", "population": "500"]) == PlaceRank.village)
+        let small = classify(["place": "town", "population": "9000"], .openWay)
+        #expect(small.featureClass == .place && small.minimumBand == .overview && small.showsOnWatch)
+        #expect(FeatureClassifier.population("1 234 567") == 1_234_567 && FeatureClassifier.population(nil) == nil && FeatureClassifier.population("") == nil)
+    }
+
     @Test("A coastline is a coastline line even when the way is also a place or another area")
     func coastlineWins() {
         for extra in [["place": "islet"], ["place": "island", "name": "Holmen"], ["natural": "coastline", "landuse": "grass"]] {
@@ -401,9 +419,9 @@ struct FeatureClassifierTests {
         }
     }
 
-    @Test("The rule table version is 20, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 21, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 20)
+        #expect(FeatureClassifier.version == 21)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)

@@ -119,6 +119,65 @@ struct LevelBuilderTests {
         return (lonMid, latMid, dLon, dLat)
     }
 
+    /// A water area that is a rectangle in one cell, with the outline as a `waterEdge` line of the same feature.
+    private func waterRectangle(
+        _ id: Int64, halfWidth: Int32, halfHeight: Int32, in cell: TileID, to w: inout FeatureStoreWriter
+    ) throws {
+        let rect = CellRect(tile: cell)
+        let lon = rect.west + (rect.east - rect.west) / 2, lat = rect.south + (rect.north - rect.south) / 2
+        let ring = [
+            pt(lon - halfWidth, lat - halfHeight), pt(lon + halfWidth, lat - halfHeight), pt(lon + halfWidth, lat + halfHeight),
+            pt(lon - halfWidth, lat + halfHeight), pt(lon - halfWidth, lat - halfHeight),
+        ]
+        try w.add(
+            StoredFeature(
+                classID: FeatureClass.waterArea.rawValue, kind: .area, objectType: .way, objectID: id,
+                parts: [GeometryPart(points: ring)]),
+            band: .overview, cell: cell)
+        try w.add(
+            StoredFeature(
+                classID: FeatureClass.waterEdge.rawValue, kind: .line, objectType: .way, objectID: id,
+                parts: [GeometryPart(points: ring)]),
+            band: .overview, cell: cell)
+    }
+
+    private func levelFeatures(_ file: FeatureStoreFile?, classID: FeatureClass) throws -> [StoredFeature] {
+        let file = try #require(file)
+        var found: [StoredFeature] = []
+        for cell in (0..<4).flatMap({ dx in (0..<4).map { dy in TileID(zoom: 10, x: (baseColumn / 8) + dx - 1, y: (baseRow / 8) + dy - 1)! } }) {
+            found += try file.features(in: cell, band: .overview, classes: [classID.rawValue])
+        }
+        return found
+    }
+
+    @Test func aDitchThatIsKilometresLongIsLeftOutOfALevelWithItsOutlineAndALakeStays() throws {
+        var w = writer()
+        let cellWidth = CellRect(tile: cell(0, 0)).east - CellRect(tile: cell(0, 0)).west
+        let cellHeight = CellRect(tile: cell(0, 0)).north - CellRect(tile: cell(0, 0)).south
+        // Level 8: a pixel is 0.0014 degree of longitude × 2^5 ... a ditch of 2 cells long and 0.002 of a cell high is far
+        // under half a pixel wide but its box is far over three pixels; the lake is a third of a cell on each side.
+        try waterRectangle(1, halfWidth: cellWidth / 2 - 10, halfHeight: cellHeight / 1000, in: cell(0, 0), to: &w)
+        try waterRectangle(2, halfWidth: cellWidth / 3, halfHeight: cellHeight / 3, in: cell(1, 0), to: &w)
+        let spec = try LevelSpec(
+            topZoom: 8, classes: [FeatureClass.waterArea.rawValue, FeatureClass.waterEdge.rawValue])
+        let (result, file) = try level(w, spec: spec)
+        let areas = try levelFeatures(file, classID: .waterArea)
+        let edges = try levelFeatures(file, classID: .waterEdge)
+        #expect(areas.map(\.objectID) == [2], "the ditch is not a surface at this zoom")
+        #expect(edges.map(\.objectID) == [2], "and its outline goes with it")
+        #expect((result?.report.droppedAsSmall ?? 0) >= 2)
+    }
+
+    @Test func aPondIsLeftOutOfALevel() throws {
+        var w = writer()
+        let cellWidth = CellRect(tile: cell(0, 0)).east - CellRect(tile: cell(0, 0)).west
+        // Square, so it is not thin: a tenth of a cell (about 0.4 pixel at level 8) on a side is a pond.
+        try waterRectangle(3, halfWidth: cellWidth / 20, halfHeight: cellWidth / 40, in: cell(0, 0), to: &w)
+        let spec = try LevelSpec(topZoom: 8, classes: [FeatureClass.waterArea.rawValue, FeatureClass.waterEdge.rawValue])
+        let (result, _) = try level(w, spec: spec)
+        #expect(result == nil)
+    }
+
     @Test func aSquareCutIntoFourQuartersIsOneRing() throws {
         var w = writer()
         let (lonMid, latMid, dLon, dLat) = try squareQuarters(into: &w)

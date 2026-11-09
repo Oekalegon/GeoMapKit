@@ -1,3 +1,5 @@
+import FeatureStore
+
 extension MapStyle {
     /// The default style for iOS, iPadOS and macOS: every class, light colours, trails drawn on top.
     ///
@@ -168,9 +170,12 @@ extension MapStyle {
                 point: PointStyle(radius: ZoomValue((12, 2.5), (15, 4)), color: .color(0x8D6E63)),
                 label: LabelStyle(size: ZoomValue((12, 10), (15, 12)), color: MapColor(hex: 0x5D4037), priority: 40),
                 visibleZoom: 12...24, layer: 60),
+            // Cities and the larger towns (`PlaceRank.city` and `.town`) from the start; a smaller town (`PlaceRank.smallTown`, under 35,000 people) from zoom 10, so
+            // that a dense country (the Netherlands) is not covered in names at zoom 9. A town that has no `population` tag counts as large.
             .place: ClassStyle(
                 label: LabelStyle(
-                    size: ZoomValue((8, 11), (14, 15)), color: MapColor(hex: 0x222222), haloWidth: 2.5, priority: 50),
+                    size: ZoomValue((8, 11), (14, 15)), color: MapColor(hex: 0x222222), haloWidth: 2.5, priority: 50,
+                    subclassMinimumZoom: [PlaceRank.smallTown: 10]),
                 layer: 61),
         ])
 }

@@ -2,6 +2,12 @@ import FeatureStore
 import Foundation
 import GeoCore
 
+/// A feature that is a water area.
+struct LevelWaterKey: Hashable {
+    var type: UInt8
+    var id: Int64
+}
+
 /// Writes the features of a level block: points, joined lines and dissolved areas.
 struct LevelOutput {
     var writer: FeatureStoreWriter
@@ -9,6 +15,8 @@ struct LevelOutput {
     let tile: TileID
     let block: LevelRegion
     var report: LevelReport
+    /// The water areas (object type and ID) that were left out as thin or small: their outlines (`waterEdge`) go with them.
+    var droppedWater: Set<LevelWaterKey> = []
 
     init(writer: FeatureStoreWriter, spec: LevelSpec, tile: TileID, block: LevelRegion, report: LevelReport) {
         self.writer = writer
@@ -48,6 +56,24 @@ struct LevelOutput {
             minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
         }
         return hypot((maxX - minX) * .pi / 180 / 1e7, maxY - minY)
+    }
+
+    /// The mean width and the area of the dissolved rings, in projected radians (the Mercator projection is conformal, so the ratio
+    /// needs no correction for the latitude). Every ring is counted with its absolute area, holes included, which is a bit more
+    /// than the water: an island in a lake counts for the lake.
+    func widthAndArea(of rings: [[PackedPoint]]) -> (width: Double, area: Double) {
+        var area = 0.0, perimeter = 0.0
+        for ring in rings where ring.count >= 4 {
+            var twice = 0.0
+            for index in 0..<(ring.count - 1) {
+                let ax = Double(ring[index].longitude) * .pi / 180 / 1e7, ay = Mercator.y(latitude: Double(ring[index].latitude))
+                let bx = Double(ring[index + 1].longitude) * .pi / 180 / 1e7, by = Mercator.y(latitude: Double(ring[index + 1].latitude))
+                twice += ax * by - bx * ay
+                perimeter += hypot(bx - ax, by - ay)
+            }
+            area += abs(twice) / 2
+        }
+        return (perimeter > 0 ? 2 * area / perimeter : 0, area)
     }
 
     mutating func writePoints(_ collected: LevelCollection) throws {

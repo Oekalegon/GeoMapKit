@@ -9,7 +9,7 @@ import FeatureStore
 /// changes, since files built with older rules need a rebuild.
 public struct FeatureClassifier: Sendable {
     /// The version of the rule table.
-    public static let version: UInt16 = 20
+    public static let version: UInt16 = 21
 
     /// Creates a classifier.
     public init() {}
@@ -54,6 +54,13 @@ public struct FeatureClassifier: Sendable {
             outcome = ClassifierOutcome(featureClass: .coastline, subclass: 1, band: .overview, watch: false)
         }
         var subclass = outcome.subclass
+        // A town of fewer than 35,000 people is a small town: the style names it from a later zoom than a city or a larger town, so
+        // that a dense country is not covered in names at zoom 9. A town with no (or no readable) `population` stays a town.
+        if outcome.featureClass == .place, subclass == PlaceRank.town, let population = Self.population(tags.value(forKey: "population")),
+            population < PlaceRank.smallTownPopulation
+        {
+            subclass = PlaceRank.smallTown
+        }
         switch outcome.featureClass {
         case .track:
             subclass = Self.trackGrade(tags.value(forKey: "tracktype"))
@@ -92,6 +99,13 @@ public struct FeatureClassifier: Sendable {
         return Classification(
             featureClass: outcome.featureClass, subclass: subclass, kind: kind, minimumBand: outcome.band,
             showsOnWatch: outcome.watch)
+    }
+
+    /// The number in a `population` tag: its digits, so `12 345` and `12,345` and `12.345` are 12345; `nil` if there are none.
+    static func population(_ value: String?) -> Int? {
+        guard let value else { return nil }
+        let digits = value.filter { $0.isASCII && $0.isNumber }
+        return digits.isEmpty ? nil : Int(digits)
     }
 
     /// Whether the tags of a closed way describe an area rather than a closed line.

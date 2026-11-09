@@ -18,6 +18,9 @@ public struct LabelStyle: Sendable, Equatable {
     /// The smallest area, in square points on the screen, that an area must cover to get this label: a pond is not named, a lake is.
     /// It only applies to areas; 0 names every area.
     public var minimumArea: Double
+    /// For a point with a subclass (a place's rank), the zoom from which that subclass gets the label, later than ``visibleZoom``.
+    /// A subclass that is not in the table is labelled as the range says. Empty by default.
+    public var subclassMinimumZoom: [UInt8: Double]
 
     /// Creates a label style.
     public init(
@@ -25,8 +28,10 @@ public struct LabelStyle: Sendable, Equatable {
         priority: Int = 0,
         visibleZoom: ClosedRange<Double> = 0...24,
         placement: LabelPlacement = .onLine,
-        minimumArea: Double = 0
+        minimumArea: Double = 0,
+        subclassMinimumZoom: [UInt8: Double] = [:]
     ) {
+        self.subclassMinimumZoom = subclassMinimumZoom
         self.size = size
         self.color = color
         self.haloColor = haloColor

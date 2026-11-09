@@ -79,11 +79,12 @@ extension FeatureStoreBuilder {
         emitter.report.orphanInnerRings += assembly.report.orphanInnerRings
         emitter.report.missingMembers += assembly.report.missingMembers
 
-        let classification = classifier.classify(ClassifierTagArray(tags), shape: .multipolygon)
+        var classification = classifier.classify(ClassifierTagArray(tags), shape: .multipolygon)
         if assembly.isComplete {
             emitter.report.multipolygonsAssembled += 1
             emitter.report.polygons += assembly.polygons.count
             let rings = assembly.polygons.flatMap(\.rings)
+            classification = WaterSize.adjusted(classification, rings: rings)
             if classification.featureClass == .coastline {
                 // A coastline is a line, not an area: the land is not a polygon to fill (the sea is built apart, see
                 // `storeSea`). An island mapped as a multipolygon gets its shore line like any coastline way.

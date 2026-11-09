@@ -236,3 +236,19 @@ struct StyleJSONTests {
         #expect(throws: MapStyleError.unsupportedVersion(7)) { try parse(document(version: 7)) }
     }
 }
+
+@Suite("Label rank zooms")
+struct LabelRankZoomTests {
+    @Test func theStandardStyleHoldsTheSmallTownsBackUntilZoom10() {
+        let label = MapStyle.standard.classes[.place]?.label
+        #expect(label?.subclassMinimumZoom == [PlaceRank.smallTown: 10])
+    }
+
+    @Test func theTableSurvivesAJsonRoundTripAndABadKeyIsRefused() throws {
+        let style = MapStyle.standard
+        let again = try MapStyle(json: try style.jsonData())
+        #expect(again.classes[.place]?.label?.subclassMinimumZoom == [PlaceRank.smallTown: 10])
+        let json = String(decoding: try style.jsonData(), as: UTF8.self).replacingOccurrences(of: "\"13\"", with: "\"town\"")
+        #expect(throws: (any Error).self) { try MapStyle(json: Data(json.utf8)) }
+    }
+}
