@@ -53,7 +53,7 @@ struct LibraryScreen: View {
                     styleRow("Watch", choice: .watch)
                     ForEach(library.styles) { style in styleRow(style.name, choice: .user(style.id), item: style) }
                 } header: { Text("Styles") } footer: {
-                    Text("A style is chosen for the map that is open. Touch and hold a style to make a copy of it that you can change.")
+                    Text("A style is chosen for the map that is open. Touch and hold a style to change it (a built-in style is copied first).")
                 }
             }
             .navigationTitle("Library")
@@ -149,7 +149,14 @@ struct LibraryScreen: View {
         .buttonStyle(.plain)
         .disabled(selectedMap == nil)
         .contextMenu {
-            Button { copy(choice, named: name) } label: { Label("Make a copy to edit", systemImage: "doc.on.doc") }
+            if let item {
+                Button { edit(item) } label: { Label("Edit…", systemImage: "slider.horizontal.3") }
+            } else {
+                Button { copy(choice, named: name) } label: { Label("Edit a copy…", systemImage: "slider.horizontal.3") }
+            }
+            if item != nil {
+                Button { copy(choice, named: name) } label: { Label("Make a copy", systemImage: "doc.on.doc") }
+            }
             if let item {
                 Button { begin(.style(item)) } label: { Label("Rename…", systemImage: "pencil") }
                 ShareLink(item: library.url(of: item))
@@ -157,7 +164,10 @@ struct LibraryScreen: View {
             }
         }
         .swipeActions {
-            if let item { Button(role: .destructive) { remove(item) } label: { Label("Remove", systemImage: "trash") } }
+            if let item {
+                Button(role: .destructive) { remove(item) } label: { Label("Remove", systemImage: "trash") }
+                Button { edit(item) } label: { Label("Edit", systemImage: "slider.horizontal.3") }.tint(.indigo)
+            }
         }
     }
 
@@ -181,10 +191,18 @@ struct LibraryScreen: View {
         self.renaming = nil
     }
 
+    /// Asks the map screen to open the style in the editor, and closes the library.
+    private func edit(_ item: StyleItem) {
+        library.styleToEdit = item.id
+        dismiss()
+    }
+
+    /// A copy of a style (a built-in one to change, or one of the user's); a copy of a built-in style is opened in the editor.
     private func copy(_ choice: StyleChoice, named name: String) {
         do {
             let style = try library.style(for: choice)
-            try library.addStyle(style, named: "\(name) copy")
+            let item = try library.addStyle(style, named: "\(name) copy")
+            if choice == .standard || choice == .watch { edit(item) }
         } catch {
             errors = [(error as? LibraryError) ?? .failed(name, error.localizedDescription)]
         }

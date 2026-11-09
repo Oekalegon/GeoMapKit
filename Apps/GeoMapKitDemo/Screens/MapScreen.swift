@@ -14,6 +14,7 @@ struct MapScreen: View {
     @State private var style: MapStyle = .standard
     @State private var message: String?
     @State private var showLibrary = false
+    @State private var editor: EditorSession?
     @State private var location = LocationModel()
     /// The user pressed "centre on me" before there was a position: the first one that comes is where the map goes.
     @State private var centreWhenFound = false
@@ -60,7 +61,14 @@ struct MapScreen: View {
             #endif
             .toolbar { toolbar }
         }
-        .sheet(isPresented: $showLibrary) { LibraryScreen().environment(library) }
+        .sheet(isPresented: $showLibrary, onDismiss: {
+            // The library asked for a style to be edited: it is closed now, so the editor can open.
+            if let id = library.styleToEdit {
+                library.styleToEdit = nil
+                startEditing(id)
+            }
+        }) { LibraryScreen().environment(library) }
+        .sheet(item: $editor) { session in StyleEditorScreen(session: session).environment(library) }
         .task(id: library.selectedMapID) { loadMap() }
         .onChange(of: library.revision) { _, _ in loadStyle() }
         .onDisappear { location.stop() }
@@ -107,6 +115,8 @@ struct MapScreen: View {
                 Text("Watch").tag(StyleChoice.watch)
                 ForEach(library.styles) { Text($0.name).tag(StyleChoice.user($0.id)) }
             }
+            Divider()
+            Button { editCurrentStyle() } label: { Label("Edit this style…", systemImage: "slider.horizontal.3") }
         } label: {
             Label("Style", systemImage: "paintpalette")
         }
@@ -157,6 +167,36 @@ struct MapScreen: View {
         } catch {
             opened = nil
             message = "Cannot open \(item.name): \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: Style editor
+
+    /// Opens a style of the user in the editor, on the map that is open; the map is drawn with it meanwhile.
+    private func startEditing(_ id: String) {
+        guard let item = library.styles.first(where: { $0.id == id }) else { return }
+        do {
+            let style = try library.style(for: .user(id))
+            if let map = library.selectedMapID { library.setStyleChoice(.user(id), forMap: map) }
+            editor = EditorSession(
+                model: StyleEditorModel(style: style, item: item), preview: opened.map { PreviewMap(opened: $0, center: center, zoom: zoom) })
+        } catch {
+            message = error.localizedDescription
+        }
+    }
+
+    /// Edits the style of the map: a style of the user directly, a built-in one as a copy.
+    private func editCurrentStyle() {
+        let choice = library.styleChoice(forMap: library.selectedMapID)
+        if case .user(let id) = choice {
+            startEditing(id)
+            return
+        }
+        do {
+            let item = try library.addStyle(try library.style(for: choice), named: choice == .watch ? "Watch copy" : "Standard copy")
+            startEditing(item.id)
+        } catch {
+            message = error.localizedDescription
         }
     }
 
