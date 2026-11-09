@@ -19,7 +19,7 @@ struct LevelOutput {
     var droppedWater: Set<LevelWaterKey> = []
     /// The rings of the water areas that were kept, one list of rings (even-odd) for each feature: a river name that does not lie in one
     /// of them is written as the river line, because its area is not drawn at this level.
-    var keptWater: [[[PackedPoint]]] = []
+    var keptWater: [(box: (minX: Int32, maxX: Int32, minY: Int32, maxY: Int32), rings: [[PackedPoint]])] = []
 
     init(writer: FeatureStoreWriter, spec: LevelSpec, tile: TileID, block: LevelRegion, report: LevelReport) {
         self.writer = writer
@@ -83,7 +83,8 @@ struct LevelOutput {
     /// Whether a point lies in the water of a kept water area (inside an odd number of the rings of one feature).
     func isInKeptWater(_ point: PackedPoint) -> Bool {
         let x = Double(point.longitude), y = Double(point.latitude)
-        for rings in keptWater {
+        for (box, rings) in keptWater {
+            guard point.longitude >= box.minX, point.longitude <= box.maxX, point.latitude >= box.minY, point.latitude <= box.maxY else { continue }
             var inside = false
             for ring in rings where ring.count >= 4 {
                 var j = ring.count - 1
@@ -100,6 +101,18 @@ struct LevelOutput {
             if inside { return true }
         }
         return false
+    }
+
+    /// The bounding box of rings, for the quick test in ``isInKeptWater(_:)``.
+    static func box(of rings: [[PackedPoint]]) -> (minX: Int32, maxX: Int32, minY: Int32, maxY: Int32)? {
+        let points = rings.joined()
+        guard let first = points.first else { return nil }
+        var box = (minX: first.longitude, maxX: first.longitude, minY: first.latitude, maxY: first.latitude)
+        for point in points {
+            box.minX = min(box.minX, point.longitude); box.maxX = max(box.maxX, point.longitude)
+            box.minY = min(box.minY, point.latitude); box.maxY = max(box.maxY, point.latitude)
+        }
+        return box
     }
 
     mutating func writePoints(_ collected: LevelCollection) throws {

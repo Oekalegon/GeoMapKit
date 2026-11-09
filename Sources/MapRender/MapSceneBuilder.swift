@@ -229,7 +229,7 @@ public struct MapSceneBuilder: Sendable {
     /// The `population` tag of a place (it is kept in every band), read as a number.
     private func population(of feature: StoredFeature, in file: FeatureStoreFile) -> Int? {
         for tag in feature.tags where file.string(at: tag.key) == "population" {
-            return PlaceRank.population(file.string(at: tag.value))
+            return PlacePopulation.population(file.string(at: tag.value))
         }
         return nil
     }

@@ -7,6 +7,9 @@ import Foundation
 /// the logarithm of the population in between. So the sizes follow the places on the screen: in a view of Utrecht Houten is smaller,
 /// in a view of a Norwegian valley a town of 8,000 is the largest and gets the full size. ``strength`` says how much of this applies at a
 /// zoom: 1 all of it, 0 none, so that zoomed in all places have the size of the style.
+///
+/// The largest place is taken from the places in view, so the sizes of the other names change a little while panning when the largest
+/// place leaves the screen.
 public struct PopulationScale: Sendable, Equatable {
     /// The scale of the font size for a place `decades` powers of ten smaller than the largest one, more than 0 and at most 1.
     public var smallest: Double

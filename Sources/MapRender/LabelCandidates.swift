@@ -24,12 +24,14 @@ enum LabelCandidates {
         return candidates
     }
 
-    /// The population taken for a place that has no `population` tag: by its rank (1 city, 2 town, 3 village, the rest smaller).
+    /// The population taken for a place that has no `population` tag, by its rank: the `place` subclasses are 1 city, 2 town and 3 village
+    /// (see the rule table), and the rest (hamlets and the like) are smaller still.
     static func assumedPopulation(of subclass: UInt8) -> Int {
+        let city: UInt8 = 1, town: UInt8 = 2, village: UInt8 = 3
         switch subclass {
-        case 1: return 200_000
-        case 2: return 20_000
-        case 3: return 2_000
+        case city: return 200_000
+        case town: return 20_000
+        case village: return 2_000
         default: return 500
         }
     }

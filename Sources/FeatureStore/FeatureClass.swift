@@ -93,6 +93,7 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     /// that a style can select by it. Added in rule table version 19.
     case landUse = 41
     /// The course of a named river through its own area (`waterway=river` where it lies in a `riverbank` or `natural=water` area), kept for its
-    /// name only: it is not drawn, the area is. Added in rule table version 20.
+    /// name only: it is not drawn, the area is. Added in rule table version 20. The builder makes it only where the area is in the overview
+    /// band (not thin, not small, rule table 21); a level that leaves the area out writes the stretch as a river line.
     case riverName = 42
 }

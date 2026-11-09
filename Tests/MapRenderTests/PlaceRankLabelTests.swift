@@ -7,7 +7,7 @@ import Testing
 
 /// At low zoom a place is named only when no larger place is near: the density follows the country.
 @Suite("Place name thinning")
-struct PlaceRankLabelTests {
+struct PlacePopulationLabelTests {
     private func place(_ id: Int64, _ name: String, x: Double, subclass: UInt8 = 2, population: Int? = nil) -> ScenePoint {
         ScenePoint(featureClass: .place, objectID: id, position: ScreenPoint(x: x, y: 300), name: name, subclass: subclass, population: population)
     }

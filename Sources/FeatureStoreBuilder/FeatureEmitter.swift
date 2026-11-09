@@ -48,7 +48,7 @@ struct FeatureEmitter {
         }
         // A place keeps its `population` in every band: the style ranks the names of places by it (question 52).
         if classification.featureClass == .place,
-            let population = ClassifierTagArray(spec.tags).value(forKey: "population"), PlaceRank.population(population) != nil
+            let population = ClassifierTagArray(spec.tags).value(forKey: "population"), PlacePopulation.population(population) != nil
         {
             valueTags.append(StoredTag(key: writer.intern("population"), value: writer.intern(population)))
         }

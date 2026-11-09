@@ -343,8 +343,8 @@ struct FeatureClassifierTests {
     @Test("A place keeps its subclass whatever its population, and the population reads as a number")
     func populationOfAPlace() {
         #expect(classify(["place": "town", "population": "9000"], .openWay).subclass == 2)
-        #expect(PlaceRank.population("12 345") == 12_345 && PlaceRank.population("12,345") == 12_345)
-        #expect(PlaceRank.population("12.345") == 12_345 && PlaceRank.population("many") == nil && PlaceRank.population(nil) == nil)
+        #expect(PlacePopulation.population("12 345") == 12_345 && PlacePopulation.population("12,345") == 12_345)
+        #expect(PlacePopulation.population("12.345") == 12_345 && PlacePopulation.population("many") == nil && PlacePopulation.population(nil) == nil)
     }
 
     @Test("A coastline is a coastline line even when the way is also a place or another area")

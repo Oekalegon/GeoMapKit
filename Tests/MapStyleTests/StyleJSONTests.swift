@@ -247,8 +247,11 @@ struct LabelThinningStyleTests {
     @Test func theRadiusSurvivesAJsonRoundTripAndABadOneIsRefused() throws {
         let again = try MapStyle(json: try MapStyle.standard.jsonData())
         #expect(again.classes[.place]?.label?.thinningRadius.value(atZoom: 9) == 80)
-        let json = String(decoding: try MapStyle.standard.jsonData(), as: UTF8.self).replacingOccurrences(of: "\"thinningRadius\"", with: "\"thinningRadius\": \"far\", \"x\"")
-        #expect(throws: (any Error).self) { try MapStyle(json: Data(json.utf8)) }
+        func decode(_ json: String) throws -> LabelStyle { try JSONDecoder().decode(LabelStyle.self, from: Data(json.utf8)) }
+        let base = ##""size": 10, "color": "#000000""##
+        #expect(throws: (any Error).self) { try decode("{\(base), \"thinningRadius\": \"far\"}") }
+        #expect(throws: (any Error).self) { try decode("{\(base), \"thinningRadius\": -5}") }
+        #expect(try decode("{\(base), \"thinningRadius\": [[10, 80], [11, 0]]}").thinningRadius.value(atZoom: 10) == 80)
     }
 }
 
