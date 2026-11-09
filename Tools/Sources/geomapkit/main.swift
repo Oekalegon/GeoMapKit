@@ -59,7 +59,8 @@ GeoMapKit tools
       is, so a run that was stopped can be run again. --region takes the ids of
       the region index (sweden, ostlandet); the blocks that meet them are built.
       On a terminal a bar shows the blocks done, the share, the blocks running
-      and, after four blocks, the time left; --no-progress turns it off.
+      and, after four blocks, the time left; it is redrawn when a block starts or
+      ends. --no-progress turns it off.
 
   geomapkit compare <first> <second> [--limit N] [--inner N]
       Compare two stores (a .gmk file or a manifest.json) in the cells both
@@ -146,7 +147,7 @@ do {
             profile: try ProfileArgument.parse(parsed.value(for: "profile")) == .watch ? .watch : .full,
             cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) })
         // The bar is on standard error, only when that is a terminal; the block lines stay on standard output.
-        let showBar = isatty(STDERR_FILENO) != 0 && !parsed.hasFlag("no-progress")
+        let showBar = ProgressBar.isUsableTerminal && !parsed.hasFlag("no-progress")
         func clearBar() { if showBar { FileHandle.standardError.write(Data("\r\u{1B}[2K".utf8)) } }
         let report = try await ToolRunner.buildRegion(
             request,
@@ -158,7 +159,7 @@ do {
             onProgress: { state in
                 guard showBar else { return }
                 clearBar()
-                FileHandle.standardError.write(Data(ProgressBar.line(for: state).utf8))
+                FileHandle.standardError.write(Data(ProgressBar.line(for: state, terminalWidth: ProgressBar.terminalWidth()).utf8))
             })
         clearBar()
         print(ReportFormatter.text(for: report, blockZoom: request.blockZoom))
@@ -283,6 +284,8 @@ do {
         throw ToolError("Unknown command '\(command)'\n\n\(usage)")
     }
 } catch {
+    // A bar that is still on the line must not run into the message.
+    if ProgressBar.isUsableTerminal { FileHandle.standardError.write(Data("\r\u{1B}[2K".utf8)) }
     FileHandle.standardError.write(Data("error: \(error)\n".utf8))
     exit(1)
 }
@@ -292,17 +295,20 @@ final class ProgressPrinter: @unchecked Sendable {
     // The download reports from one task at a time, but the lock keeps the printer safe if that ever changes.
     private let lock = NSLock()
     private var lastStep: [String: Int] = [:]
-    private static let isTerminal = isatty(STDERR_FILENO) != 0
+    private static let isTerminal = ProgressBar.isUsableTerminal
+    private var finished = Set<String>()
 
     func report(_ id: String, _ bytes: Int64, _ total: Int64?) {
         lock.lock(); defer { lock.unlock() }
         guard let total, total > 0 else { return }
         if Self.isTerminal {
             // One line per file: redrawn while it comes in (at most every 1 %), then left in place.
+            guard !finished.contains(id) else { return }
             let percent = Int(bytes * 100 / total)
+            if bytes >= total { finished.insert(id) }
             guard percent > lastStep[id, default: -1] || bytes >= total else { return }
             lastStep[id] = percent
-            FileHandle.standardError.write(Data(("\r\u{1B}[2K" + ProgressBar.downloadLine(id: id, bytes: bytes, total: total) + (bytes >= total ? "\n" : "")).utf8))
+            FileHandle.standardError.write(Data(("\r\u{1B}[2K" + ProgressBar.downloadLine(id: id, bytes: bytes, total: total, terminalWidth: ProgressBar.terminalWidth()) + (bytes >= total ? "\n" : "")).utf8))
             return
         }
         let step = Int(bytes * 20 / total)

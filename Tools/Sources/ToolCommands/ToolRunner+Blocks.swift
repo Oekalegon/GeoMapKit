@@ -111,11 +111,13 @@ extension ToolRunner {
         var running = 0
         let buildStart = clock.now
         let total = tasks.count
+        let finishedAtStart = finishedCount
         func state() -> BlockProgress {
             let elapsed = clock.now - buildStart
             return BlockProgress(
                 total: total, finished: finishedCount, running: running, built: built, elapsed: elapsed,
-                remaining: BlockProgress.estimateRemaining(left: total - finishedCount, built: built, elapsed: elapsed))
+                remaining: BlockProgress.estimateRemaining(
+                    left: total - finishedCount, finishedInRun: finishedCount - finishedAtStart, elapsed: elapsed))
         }
         onProgress(state())
         try await withThrowingTaskGroup(of: BuiltBlock.self) { group in

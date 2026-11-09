@@ -252,6 +252,8 @@ struct BuildRegionTests {
         // A second run leaves the built blocks as they are: they count as finished at once (a block with nothing to store is cut again).
         var again: [BlockProgress] = []
         _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog, onProgress: { again.append($0) })
-        #expect(again.first?.finished == built(report).count && again.last?.finished == again.last?.total && again.allSatisfy { $0.running <= 1 })
+        let cutAgain = last.total - built(report).count
+        #expect(again.first?.finished == built(report).count && again.last?.finished == again.last?.total)
+        #expect(again.map(\.running).max() == (cutAgain > 0 ? 1 : 0))
     }
 }

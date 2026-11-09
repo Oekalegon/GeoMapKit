@@ -34,12 +34,13 @@ public struct BlockProgress: Sendable, Equatable {
     ///
     /// - Parameters:
     ///   - left: The blocks that are not finished.
-    ///   - built: The blocks built so far in this run.
+    ///   - finishedInRun: The blocks finished so far in this run: built, or found to have nothing to store (blocks that were
+    ///     already up to date are not counted, they cost no time).
     ///   - elapsed: The time since the first block was started.
-    ///   - minimumBuilt: The fewest built blocks that give an estimate; the first blocks of a run say little.
-    /// - Returns: The estimate, or `nil` when fewer than `minimumBuilt` blocks are built or nothing is left.
-    public static func estimateRemaining(left: Int, built: Int, elapsed: Duration, minimumBuilt: Int = 4) -> Duration? {
-        guard left > 0, built >= max(minimumBuilt, 1) else { return nil }
-        return elapsed * left / built
+    ///   - minimumBuilt: The fewest finished blocks that give an estimate; the first blocks of a run say little.
+    /// - Returns: The estimate, or `nil` when fewer than `minimumBuilt` blocks are finished or nothing is left.
+    public static func estimateRemaining(left: Int, finishedInRun: Int, elapsed: Duration, minimumBuilt: Int = 4) -> Duration? {
+        guard left > 0, finishedInRun >= max(minimumBuilt, 1) else { return nil }
+        return elapsed * left / finishedInRun
     }
 }

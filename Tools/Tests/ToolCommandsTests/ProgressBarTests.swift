@@ -6,10 +6,22 @@ import Testing
 struct ProgressBarTests {
     @Test("The estimate waits for four built blocks and uses wall-clock pace")
     func estimate() {
-        #expect(BlockProgress.estimateRemaining(left: 100, built: 3, elapsed: .seconds(300)) == nil)
-        #expect(BlockProgress.estimateRemaining(left: 0, built: 10, elapsed: .seconds(300)) == nil)
+        #expect(BlockProgress.estimateRemaining(left: 100, finishedInRun: 3, elapsed: .seconds(300)) == nil)
+        #expect(BlockProgress.estimateRemaining(left: 0, finishedInRun: 10, elapsed: .seconds(300)) == nil)
         // 8 blocks in 400 s is 50 s each; 20 are left.
-        #expect(BlockProgress.estimateRemaining(left: 20, built: 8, elapsed: .seconds(400)) == .seconds(1000))
+        #expect(BlockProgress.estimateRemaining(left: 20, finishedInRun: 8, elapsed: .seconds(400)) == .seconds(1000))
+    }
+
+    @Test("The bar gets narrower for a narrow terminal and is left out when there is no room")
+    func narrow() {
+        let p = BlockProgress(total: 163, finished: 57, running: 4, built: 40, elapsed: .seconds(3000), remaining: .seconds(4350))
+        let full = ProgressBar.line(for: p)
+        let fitted = ProgressBar.line(for: p, terminalWidth: full.count - 8)
+        #expect(fitted.count < full.count && fitted.count <= full.count - 8 - 1 && fitted.contains("█"))
+        #expect(!ProgressBar.line(for: p, terminalWidth: 10).contains("░"))
+        #expect(ProgressBar.line(for: p, terminalWidth: 200) == full)
+        let d = ProgressBar.downloadLine(id: "mecklenburg-vorpommern", bytes: 5, total: 10, terminalWidth: 50)
+        #expect(!d.contains("░") || d.count <= 49)
     }
 
     @Test("A run without blocks is complete")
