@@ -18,9 +18,9 @@ public struct LabelStyle: Sendable, Equatable {
     /// The smallest area, in square points on the screen, that an area must cover to get this label: a pond is not named, a lake is.
     /// It only applies to areas; 0 names every area.
     public var minimumArea: Double
-    /// For a point with a subclass (a place's rank), the zoom from which that subclass gets the label, later than ``visibleZoom``.
-    /// A subclass that is not in the table is labelled as the range says. Empty by default.
-    public var subclassMinimumZoom: [UInt8: Double]
+    /// For the name of a point: within this many points of a larger place of the same class, a place gets no name (the larger is
+    /// the lower subclass number, then the greater `population`). 0 for no thinning. By zoom, so it can fade out.
+    public var thinningRadius: ZoomValue<Double>
 
     /// Creates a label style.
     public init(
@@ -29,9 +29,9 @@ public struct LabelStyle: Sendable, Equatable {
         visibleZoom: ClosedRange<Double> = 0...24,
         placement: LabelPlacement = .onLine,
         minimumArea: Double = 0,
-        subclassMinimumZoom: [UInt8: Double] = [:]
+        thinningRadius: ZoomValue<Double> = ZoomValue(constant: 0)
     ) {
-        self.subclassMinimumZoom = subclassMinimumZoom
+        self.thinningRadius = thinningRadius
         self.size = size
         self.color = color
         self.haloColor = haloColor

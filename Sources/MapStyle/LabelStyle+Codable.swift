@@ -1,5 +1,5 @@
 extension LabelStyle: Codable {
-    private enum Keys: String, CodingKey, CaseIterable { case size, color, haloColor, haloWidth, priority, visibleZoom, placement, minimumArea, subclassMinimumZoom }
+    private enum Keys: String, CodingKey, CaseIterable { case size, color, haloColor, haloWidth, priority, visibleZoom, placement, minimumArea, thinningRadius }
 
     public init(from decoder: Decoder) throws {
         try decoder.requireKnownKeys(Keys.self)
@@ -20,23 +20,10 @@ extension LabelStyle: Codable {
             priority: try c.decodeIfPresent(Int.self, forKey: .priority) ?? 0, visibleZoom: range,
             placement: try c.decodeIfPresent(LabelPlacement.self, forKey: .placement) ?? .onLine,
             minimumArea: try c.decodeNumber(forKey: .minimumArea, default: 0),
-            subclassMinimumZoom: try Self.decodeSubclassZooms(c))
+            thinningRadius: c.contains(.thinningRadius) ? try c.decodeZoomNumber(forKey: .thinningRadius) : ZoomValue(constant: 0))
         guard minimumArea >= 0, minimumArea.isFinite else {
             throw DecodingError.dataCorruptedError(forKey: .minimumArea, in: c, debugDescription: "expects an area of 0 or more square points")
         }
-    }
-
-    private static func decodeSubclassZooms(_ c: KeyedDecodingContainer<Keys>) throws -> [UInt8: Double] {
-        guard c.contains(.subclassMinimumZoom) else { return [:] }
-        var result: [UInt8: Double] = [:]
-        for (key, zoom) in try c.decode([String: Double].self, forKey: .subclassMinimumZoom) {
-            guard let subclass = UInt8(key), zoom.isFinite else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .subclassMinimumZoom, in: c, debugDescription: "expects subclass numbers (0 to 255) as keys and zooms as values")
-            }
-            result[subclass] = zoom
-        }
-        return result
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -51,8 +38,6 @@ extension LabelStyle: Codable {
         // older readers (which refuse unknown keys) can still read them.
         if placement != .onLine { try c.encode(placement, forKey: .placement) }
         if minimumArea > 0 { try c.encode(minimumArea, forKey: .minimumArea) }
-        if !subclassMinimumZoom.isEmpty {
-            try c.encode(Dictionary(uniqueKeysWithValues: subclassMinimumZoom.map { (String($0.key), $0.value) }), forKey: .subclassMinimumZoom)
-        }
+        if thinningRadius != ZoomValue(constant: 0) { try c.encode(thinningRadius, forKey: .thinningRadius) }
     }
 }

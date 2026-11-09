@@ -15,6 +15,8 @@ struct LevelAttributes {
     var subclass: UInt8
     var name: String?
     var incomplete: Bool
+    /// The `population` tag of a place, as text.
+    var population: String?
 }
 
 /// One piece of a line in a source cell.
@@ -45,7 +47,8 @@ struct LevelCollection {
             if incomplete && !known.incomplete { known.incomplete = true; attributes[key] = known }
         } else {
             attributes[key] = LevelAttributes(
-                subclass: feature.subclass, name: feature.nameID.flatMap { file.string(at: $0) }, incomplete: incomplete)
+                subclass: feature.subclass, name: feature.nameID.flatMap { file.string(at: $0) }, incomplete: incomplete,
+                population: feature.tags.first { file.string(at: $0.key) == "population" }.flatMap { file.string(at: $0.value) })
         }
         switch feature.kind {
         case .point:

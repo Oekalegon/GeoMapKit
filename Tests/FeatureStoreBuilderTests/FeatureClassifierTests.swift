@@ -340,22 +340,11 @@ struct FeatureClassifierTests {
         #expect(classify(["highway": "residential", "area": "no"], .closedWay).featureClass == .roadMinor)
     }
 
-    @Test("A town under 35,000 people is a small town, in the overview band like any town; a city, a town with no population and a village are not")
-    func smallTowns() {
-        func rank(_ tags: [String: String]) -> UInt8 { classify(tags, .openWay).subclass }
-        #expect(rank(["place": "town", "population": "28000"]) == PlaceRank.smallTown)
-        #expect(rank(["place": "town", "population": "12 345"]) == PlaceRank.smallTown, "spaces in the number")
-        #expect(rank(["place": "town", "population": "12.345"]) == PlaceRank.smallTown, "a Dutch thousands point")
-        #expect(rank(["place": "town", "population": "34999"]) == PlaceRank.smallTown)
-        #expect(rank(["place": "town", "population": "35000"]) == PlaceRank.town)
-        #expect(rank(["place": "town", "population": "73,000"]) == PlaceRank.town)
-        #expect(rank(["place": "town"]) == PlaceRank.town, "no population: a town")
-        #expect(rank(["place": "town", "population": "many"]) == PlaceRank.town, "no number: a town")
-        #expect(rank(["place": "city", "population": "500"]) == PlaceRank.city, "only towns are split")
-        #expect(rank(["place": "village", "population": "500"]) == PlaceRank.village)
-        let small = classify(["place": "town", "population": "9000"], .openWay)
-        #expect(small.featureClass == .place && small.minimumBand == .overview && small.showsOnWatch)
-        #expect(FeatureClassifier.population("1 234 567") == 1_234_567 && FeatureClassifier.population(nil) == nil && FeatureClassifier.population("") == nil)
+    @Test("A place keeps its subclass whatever its population, and the population reads as a number")
+    func populationOfAPlace() {
+        #expect(classify(["place": "town", "population": "9000"], .openWay).subclass == 2)
+        #expect(PlaceRank.population("12 345") == 12_345 && PlaceRank.population("12,345") == 12_345)
+        #expect(PlaceRank.population("12.345") == 12_345 && PlaceRank.population("many") == nil && PlaceRank.population(nil) == nil)
     }
 
     @Test("A coastline is a coastline line even when the way is also a place or another area")

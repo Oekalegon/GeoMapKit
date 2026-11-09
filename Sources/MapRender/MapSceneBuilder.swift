@@ -82,7 +82,7 @@ public struct MapSceneBuilder: Sendable {
                         guard ScreenBounds(of: [position])?.intersects(visible) == true else { continue }
                         points[featureClass, default: []].append(ScenePoint(
                             featureClass: featureClass, objectID: feature.objectID, position: position, name: name(of: feature, in: file),
-                            subclass: feature.subclass))
+                            subclass: feature.subclass, population: featureClass == .place ? population(of: feature, in: file) : nil))
                     }
                 }
             }
@@ -226,6 +226,14 @@ public struct MapSceneBuilder: Sendable {
     /// The tags of a road that the scene uses, read in one pass: the `lanes` tag as a positive integer (or `nil`), and the direction of
     /// a one-way road (1 along the vertices of the way, -1 against them, 0 for a two-way road, a roundabout, or no tags; a motorway is one-way without a tag). Tags exist in
     /// the detail band only.
+    /// The `population` tag of a place (it is kept in every band), read as a number.
+    private func population(of feature: StoredFeature, in file: FeatureStoreFile) -> Int? {
+        for tag in feature.tags where file.string(at: tag.key) == "population" {
+            return PlaceRank.population(file.string(at: tag.value))
+        }
+        return nil
+    }
+
     private func roadTags(of feature: StoredFeature, in file: FeatureStoreFile) -> (lanes: Int?, flow: Int) {
         var lanes: Int?
         var oneway: String?

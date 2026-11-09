@@ -237,18 +237,17 @@ struct StyleJSONTests {
     }
 }
 
-@Suite("Label rank zooms")
-struct LabelRankZoomTests {
-    @Test func theStandardStyleHoldsTheSmallTownsBackUntilZoom10() {
-        let label = MapStyle.standard.classes[.place]?.label
-        #expect(label?.subclassMinimumZoom == [PlaceRank.smallTown: 10])
+@Suite("Label thinning")
+struct LabelThinningStyleTests {
+    @Test func theStandardStyleThinsThePlaceNamesAtLowZoomOnly() {
+        let radius = MapStyle.standard.classes[.place]?.label?.thinningRadius
+        #expect(radius?.value(atZoom: 9) == 80 && radius?.value(atZoom: 10) == 80 && radius?.value(atZoom: 12) == 0)
     }
 
-    @Test func theTableSurvivesAJsonRoundTripAndABadKeyIsRefused() throws {
-        let style = MapStyle.standard
-        let again = try MapStyle(json: try style.jsonData())
-        #expect(again.classes[.place]?.label?.subclassMinimumZoom == [PlaceRank.smallTown: 10])
-        let json = String(decoding: try style.jsonData(), as: UTF8.self).replacingOccurrences(of: "\"13\"", with: "\"town\"")
+    @Test func theRadiusSurvivesAJsonRoundTripAndABadOneIsRefused() throws {
+        let again = try MapStyle(json: try MapStyle.standard.jsonData())
+        #expect(again.classes[.place]?.label?.thinningRadius.value(atZoom: 9) == 80)
+        let json = String(decoding: try MapStyle.standard.jsonData(), as: UTF8.self).replacingOccurrences(of: "\"thinningRadius\"", with: "\"thinningRadius\": \"far\", \"x\"")
         #expect(throws: (any Error).self) { try MapStyle(json: Data(json.utf8)) }
     }
 }

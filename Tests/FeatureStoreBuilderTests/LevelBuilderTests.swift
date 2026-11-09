@@ -452,3 +452,24 @@ struct LevelBuilderTests {
         #expect(!features.isEmpty && features.allSatisfy { !$0.flags.contains(.incomplete) })
     }
 }
+
+extension LevelBuilderTests {
+    @Test func aPlaceKeepsItsPopulationInALevel() throws {
+        var w = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: "", classifierVersion: 21)
+        let rect = CellRect(tile: TileID(zoom: 13, x: 32 * 4 + 8, y: 32 * 74 + 8)!)
+        let point = PackedPoint(longitude: rect.west + (rect.east - rect.west) / 2, latitude: rect.south + (rect.north - rect.south) / 2)
+        try w.add(
+            StoredFeature(
+                classID: FeatureClass.place.rawValue, subclass: 2, kind: .point, objectType: .node, objectID: 5, nameID: w.intern("Gouda"),
+                tags: [StoredTag(key: w.intern("population"), value: w.intern("74 000"))], parts: [GeometryPart(points: [point])]),
+            band: .overview, cell: TileID(zoom: 13, x: 32 * 4 + 8, y: 32 * 74 + 8)!)
+        let source = try FeatureStoreFile(data: try w.data())
+        let spec = try LevelSpec(topZoom: 8, classes: [FeatureClass.place.rawValue])
+        let result = try #require(try LevelBuilder.build(from: source, spec: spec, tile: TileID(zoom: 8, x: 4, y: 74)!, margin: 8))
+        let file = try FeatureStoreFile(data: result.data)
+        let cell = try #require(CellRect.tile(owning: point, zoom: 10))
+        let feature = try #require(try file.features(in: cell, band: .overview).first)
+        #expect(feature.tags.count == 1 && file.string(at: feature.tags[0].key) == "population" && file.string(at: feature.tags[0].value) == "74 000")
+    }
+}

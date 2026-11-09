@@ -35,12 +35,13 @@ struct LevelOutput {
         parts: [GeometryPart], in cell: TileID
     ) throws {
         let nameID = attributes.name.map { writer.intern($0) }
+        let tags = attributes.population.map { [StoredTag(key: writer.intern("population"), value: writer.intern($0))] } ?? []
         var all = flags
         if attributes.incomplete { all.insert(.incomplete) }
         try writer.add(
             StoredFeature(
                 classID: key.classID, subclass: attributes.subclass, kind: kind, objectType: StoredObjectType(rawValue: key.type) ?? .way,
-                objectID: key.id, flags: all, offsetAlongLine: offset, nameID: nameID, parts: parts),
+                objectID: key.id, flags: all, offsetAlongLine: offset, nameID: nameID, tags: tags, parts: parts),
             band: .overview, cell: cell)
         report.featuresWritten += 1
         report.verticesWritten += parts.reduce(0) { $0 + $1.points.count }

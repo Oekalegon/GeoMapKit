@@ -1,4 +1,5 @@
 import FeatureStore
+import Foundation
 import MapStyle
 
 /// Collects the named features of a scene that have a label style.
@@ -32,13 +33,25 @@ enum LabelCandidates {
             guard let classStyle = style.style(for: step.step.featureClass), let label = classStyle.label else { continue }
             let size = label.size.value(atZoom: zoom)
             guard size > 0, label.visibleZoom.contains(zoom) else { continue }
-            for point in step.points {
+            // The larger places first (the lower subclass, then the greater population); a place within the thinning radius of one that
+            // has its name gets none.
+            let radius = label.thinningRadius.value(atZoom: zoom)
+            var named: [ScenePoint] = []
+            let ranked = radius > 0
+                ? step.points.sorted {
+                    ($0.subclass, -($0.population ?? 0), $0.objectID) < ($1.subclass, -($1.population ?? 0), $1.objectID)
+                }
+                : step.points
+            for point in ranked {
                 guard let name = point.name, !name.isEmpty else { continue }
-                // A rank that the style holds back until a later zoom (the smaller towns).
-                if let first = label.subclassMinimumZoom[point.subclass], zoom < first { continue }
-                let radius = classStyle.point?.radius.value(atZoom: zoom) ?? 0
+                if radius > 0 {
+                    let near = named.contains { hypot($0.position.x - point.position.x, $0.position.y - point.position.y) < radius }
+                    if near { continue }
+                    named.append(point)
+                }
+                let symbolRadius = classStyle.point?.radius.value(atZoom: zoom) ?? 0
                 candidates.append(LabelCandidate(
-                    objectID: point.objectID, text: name, anchor: point.position, symbolRadius: radius, fontSize: size, style: label))
+                    objectID: point.objectID, text: name, anchor: point.position, symbolRadius: symbolRadius, fontSize: size, style: label))
             }
             // One label per area, for the area as a whole: the pieces that the cells cut it into are taken together. The name goes at the
             // point of the part in view that is farthest from the real shore (the edges that the clip made along the cell borders are no
