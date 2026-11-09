@@ -238,4 +238,22 @@ struct BuildRegionTests {
         #expect(text.contains("2 in the area, 1 built (110.0 MB), 0 up to date, 1 with nothing to store"))
         #expect(text.contains("/out/manifest.json") && text.contains("warning: Sweden is old."))
     }
+
+    @Test("The progress of the run counts the blocks, ends complete and never shows more running than jobs")
+    func progressReports() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        var states: [BlockProgress] = []
+        let report = try await ToolRunner.buildRegion(request(s, jobs: 2), catalog: s.catalog, onProgress: { states.append($0) })
+        let last = try #require(states.last)
+        #expect(last.total >= built(report).count && last.built == built(report).count && last.finished == last.total && last.running == 0 && last.fraction == 1)
+        #expect(states.allSatisfy { $0.running <= 2 && $0.finished <= $0.total })
+        #expect(states.map(\.finished) == states.map(\.finished).sorted())
+        // A second run leaves the built blocks as they are: they count as finished at once (a block with nothing to store is cut again).
+        var again: [BlockProgress] = []
+        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog, onProgress: { again.append($0) })
+        let cutAgain = last.total - built(report).count
+        #expect(again.first?.finished == built(report).count && again.last?.finished == again.last?.total)
+        #expect(again.map(\.running).max() == (cutAgain > 0 ? 1 : 0))
+    }
 }

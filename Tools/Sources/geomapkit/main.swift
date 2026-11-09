@@ -49,7 +49,7 @@ GeoMapKit tools
       asked about again. An interrupted download continues where it stopped.
 
   geomapkit build-region (--region id[,id...] | area as above) --output <folder> [--block-zoom 8] [--jobs N] [--margin 0.1]
-                         [--cache DIR] [--profile full|watch]
+                         [--cache DIR] [--profile full|watch] [--no-progress]
       Build a big area (for example a country) as blocks: one store file for
       each tile of a grid (zoom 8: about 78 km), and a manifest.json that lists
       them. Each block is cut with a margin from the source files in the cache
@@ -58,6 +58,9 @@ GeoMapKit tools
       and a block that is already built from the same source files is left as it
       is, so a run that was stopped can be run again. --region takes the ids of
       the region index (sweden, ostlandet); the blocks that meet them are built.
+      On a terminal a bar shows the blocks done, the share, the blocks running
+      and, after four blocks, the time left; it is redrawn when a block starts or
+      ends. --no-progress turns it off.
 
   geomapkit compare <first> <second> [--limit N] [--inner N]
       Compare two stores (a .gmk file or a manifest.json) in the cells both
@@ -113,7 +116,8 @@ do {
         print(ReportFormatter.text(for: try ToolRunner.cut(urls: parsed.positional.map { URL(fileURLWithPath: $0) }, area: area, options: options)))
     case "build-region":
         let parsed = try CommandLineArguments(
-            rest, knownOptions: ["region", "bbox", "center", "radius-km", "output", "block-zoom", "jobs", "margin", "cache", "profile"])
+            rest, knownOptions: ["region", "bbox", "center", "radius-km", "output", "block-zoom", "jobs", "margin", "cache", "profile"],
+            knownFlags: ["no-progress"])
         guard parsed.positional.isEmpty else { throw ToolError("build-region takes an area, not files") }
         guard let output = parsed.value(for: "output"), !output.isEmpty else { throw ToolError("build-region needs --output <folder>") }
         let area: BlockRequest.Area
@@ -142,10 +146,22 @@ do {
             jobs: try whole("jobs", defaultJobs, in: 1...64), margin: margin,
             profile: try ProfileArgument.parse(parsed.value(for: "profile")) == .watch ? .watch : .full,
             cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) })
-        let report = try await ToolRunner.buildRegion(request) { outcome in
-            print(ReportFormatter.line(for: outcome, blockZoom: request.blockZoom))
-            fflush(stdout)
-        }
+        // The bar is on standard error, only when that is a terminal; the block lines stay on standard output.
+        let showBar = ProgressBar.isUsableTerminal && !parsed.hasFlag("no-progress")
+        func clearBar() { if showBar { FileHandle.standardError.write(Data("\r\u{1B}[2K".utf8)) } }
+        let report = try await ToolRunner.buildRegion(
+            request,
+            progress: { outcome in
+                clearBar()
+                print(ReportFormatter.line(for: outcome, blockZoom: request.blockZoom))
+                fflush(stdout)
+            },
+            onProgress: { state in
+                guard showBar else { return }
+                clearBar()
+                FileHandle.standardError.write(Data(ProgressBar.line(for: state, terminalWidth: ProgressBar.terminalWidth()).utf8))
+            })
+        clearBar()
         print(ReportFormatter.text(for: report, blockZoom: request.blockZoom))
     case "compare":
         let parsed = try CommandLineArguments(rest, knownOptions: ["limit", "inner"])
@@ -268,19 +284,33 @@ do {
         throw ToolError("Unknown command '\(command)'\n\n\(usage)")
     }
 } catch {
+    // A bar that is still on the line must not run into the message.
+    if ProgressBar.isUsableTerminal { FileHandle.standardError.write(Data("\r\u{1B}[2K".utf8)) }
     FileHandle.standardError.write(Data("error: \(error)\n".utf8))
     exit(1)
 }
 
-/// Prints the progress of a download to standard error, a line for every 5 % of a file.
+/// Prints the progress of a download to standard error: a bar that is redrawn on a terminal, else a line for every 5 % of a file.
 final class ProgressPrinter: @unchecked Sendable {
     // The download reports from one task at a time, but the lock keeps the printer safe if that ever changes.
     private let lock = NSLock()
     private var lastStep: [String: Int] = [:]
+    private static let isTerminal = ProgressBar.isUsableTerminal
+    private var finished = Set<String>()
 
     func report(_ id: String, _ bytes: Int64, _ total: Int64?) {
         lock.lock(); defer { lock.unlock() }
         guard let total, total > 0 else { return }
+        if Self.isTerminal {
+            // One line per file: redrawn while it comes in (at most every 1 %), then left in place.
+            guard !finished.contains(id) else { return }
+            let percent = Int(bytes * 100 / total)
+            if bytes >= total { finished.insert(id) }
+            guard percent > lastStep[id, default: -1] || bytes >= total else { return }
+            lastStep[id] = percent
+            FileHandle.standardError.write(Data(("\r\u{1B}[2K" + ProgressBar.downloadLine(id: id, bytes: bytes, total: total, terminalWidth: ProgressBar.terminalWidth()) + (bytes >= total ? "\n" : "")).utf8))
+            return
+        }
         let step = Int(bytes * 20 / total)
         guard step > lastStep[id, default: -1] else { return }
         lastStep[id] = step
