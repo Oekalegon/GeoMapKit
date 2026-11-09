@@ -69,6 +69,48 @@ struct BorderNamesTests {
         #expect(try names(of: .countryBorder, in: &world) == ["Norge"])
     }
 
+    // MARK: Ways with no border tags
+
+    private func count(of featureClass: FeatureClass, in world: inout SyntheticWorld) throws -> Int {
+        let result = try FeatureStoreBuilder().build(from: try world.extract())
+        let file = try FeatureStoreFile(data: result.data)
+        var found = 0
+        for cell in try file.cells() {
+            for feature in try file.features(in: cell, band: .overview) where feature.classID == featureClass.rawValue { found += 1 }
+        }
+        return found
+    }
+
+    @Test("A way with no border tags that belongs to a national border relation is a national border")
+    func untaggedWayInCountryRelation() throws {
+        var world = SyntheticWorld()
+        border(&world, tags: [("source", "Landsat")])
+        world.relation(50, [(10, "outer", 1)], [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2"), ("name", "Suomi")])
+        world.relation(51, [(10, "outer", 1)], [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2"), ("name", "Россия")])
+        #expect(try count(of: .countryBorder, in: &world) > 0)
+        #expect(try names(of: .countryBorder, in: &world) == ["Suomi – Россия"])
+    }
+
+    @Test("A way with no border tags that belongs to a state border relation is a state border")
+    func untaggedWayInStateRelation() throws {
+        var world = SyntheticWorld()
+        border(&world, tags: [("source", "Landsat")])
+        world.relation(50, [(10, "outer", 1)], [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "4"), ("name", "Østfold")])
+        #expect(try count(of: .boundary, in: &world) > 0)
+        #expect(try count(of: .countryBorder, in: &world) == 0)
+    }
+
+    @Test("A way in no border relation stays what it was, and a road in a border relation stays a road")
+    func otherWaysKeepTheirClass() throws {
+        var world = SyntheticWorld()
+        border(&world, tags: [("source", "Landsat")])
+        #expect(try count(of: .countryBorder, in: &world) == 0)
+        var roadWorld = SyntheticWorld()
+        border(&roadWorld, tags: [("highway", "track")])
+        roadWorld.relation(50, [(10, "outer", 1)], [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2"), ("name", "Norge")])
+        #expect(try count(of: .countryBorder, in: &roadWorld) == 0)
+    }
+
     // MARK: Sides
 
     private let level2: [(String, String)] = [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2")]
@@ -80,8 +122,11 @@ struct BorderNamesTests {
         world.node(4, 2.5, 0.5); world.node(5, 0.5, 0.5)
         world.node(7, 0.5, 1.5); world.node(8, 2.5, 1.5)
         world.way(10, wayNodes, level2)
-        world.way(11, [3, 4, 5]); world.way(12, [5, 1])
-        world.way(13, [1, 7, 8]); world.way(14, [8, 3])
+        // The other sides of the rings are tracks, so that only way 10 is a border here (a way with no class of its own that
+        // belongs to a border relation would be one too, see below).
+        let track = [("highway", "track")]
+        world.way(11, [3, 4, 5], track); world.way(12, [5, 1], track)
+        world.way(13, [1, 7, 8], track); world.way(14, [8, 3], track)
         if north {
             world.relation(50, [(10, "outer", 1), (11, "outer", 1), (12, "outer", 1)], level2 + [("name", "North")])
         }
