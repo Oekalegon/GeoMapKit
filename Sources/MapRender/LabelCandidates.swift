@@ -37,19 +37,35 @@ enum LabelCandidates {
                 candidates.append(LabelCandidate(
                     objectID: point.objectID, text: name, anchor: point.position, symbolRadius: radius, fontSize: size, style: label))
             }
-            // One label per area: the piece with the largest box wins, so a lake that spans cells is named once.
-            var largest: [Int64: LabelCandidate] = [:]
+            // One label per area, for the area as a whole: the pieces that the cells cut it into are taken together. The name goes at the
+            // point of the part in view that is farthest from the real shore (the edges that the clip made along the cell borders are no
+            // shore), so it is in the water also for a bent lake or one with many islands. An area is named only when its pieces in the
+            // scene together cover `minimumArea` square points (the boxes of the pieces are added up).
+            struct Pieces {
+                var name = ""
+                var rings: [[ScreenPoint]] = []
+                var shore: [[ScreenPoint]] = []
+                var total = 0.0
+            }
+            var byObject: [Int64: Pieces] = [:]
             for area in step.areas {
                 guard let name = area.name, !name.isEmpty, let bounds = ScreenBounds(of: area.rings.joined()) else { continue }
-                let centre = ScreenPoint(x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2)
-                guard ScreenBounds(of: [centre])?.intersects(view) == true else { continue }
-                let extent = (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY)
-                if let existing = largest[area.objectID], existing.extent >= extent { continue }
-                largest[area.objectID] = LabelCandidate(
-                    objectID: area.objectID, text: name, anchor: centre, symbolRadius: 0, fontSize: size, style: label,
-                    extent: extent)
+                var pieces = byObject[area.objectID] ?? Pieces(name: name)
+                pieces.rings += area.rings
+                pieces.shore += area.outline
+                pieces.total += (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY)
+                byObject[area.objectID] = pieces
             }
-            candidates.append(contentsOf: largest.values)
+            for (objectID, pieces) in byObject.sorted(by: { $0.key < $1.key }) where pieces.total >= label.minimumArea {
+                // The name is about as wide as its characters: keep its middle away from the edge of the view.
+                let halfWidth = Double(pieces.name.count) * size * 0.3, halfHeight = size * 0.6
+                let domain = ScreenBounds(
+                    minX: view.minX + halfWidth, minY: view.minY + halfHeight, maxX: view.maxX - halfWidth, maxY: view.maxY - halfHeight)
+                guard let found = PolygonLabelPoint.find(in: pieces.rings, edges: pieces.shore, domain: domain) else { continue }
+                candidates.append(LabelCandidate(
+                    objectID: objectID, text: pieces.name, anchor: found.point, symbolRadius: 0, fontSize: size, style: label,
+                    extent: pieces.total, fitWidth: 2 * found.distance))
+            }
         }
         return candidates
     }

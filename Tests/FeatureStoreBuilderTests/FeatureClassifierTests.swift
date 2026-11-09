@@ -176,8 +176,9 @@ struct FeatureClassifierTests {
     @Test("Every class is reachable, and class IDs are unique")
     func allClassesCovered() {
         // `sea` is made by the builder from the coastlines; no tags give it. The outline of a water area, and the sea part of a
-        // park border, are made by the builder from the geometry, and `roadArea` from a road that is an area.
-        let produced = Set(Self.table.map(\.featureClass)).union([.sea, .roadArea, .waterEdge, .parkBorderSea])
+        // park border, are made by the builder from the geometry, `roadArea` from a road that is an area, and `riverName` from the stretches of
+        // a named river that lie in its own area.
+        let produced = Set(Self.table.map(\.featureClass)).union([.sea, .roadArea, .waterEdge, .parkBorderSea, .riverName])
         #expect(produced == Set(FeatureClass.allCases))
         #expect(Set(FeatureClass.allCases.map(\.rawValue)).count == FeatureClass.allCases.count)
     }
@@ -400,15 +401,15 @@ struct FeatureClassifierTests {
         }
     }
 
-    @Test("The rule table version is 19, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 20, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 19)
+        #expect(FeatureClassifier.version == 20)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
         #expect(FeatureClass.militaryArea.rawValue == 36 && FeatureClass.glacier.rawValue == 37)
         #expect(FeatureClass.bareGround.rawValue == 38 && FeatureClass.wetland.rawValue == 39)
-        #expect(FeatureClass.sand.rawValue == 40 && FeatureClass.landUse.rawValue == 41 && FeatureClass.allCases.count == 42)
+        #expect(FeatureClass.sand.rawValue == 40 && FeatureClass.landUse.rawValue == 41 && FeatureClass.riverName.rawValue == 42 && FeatureClass.allCases.count == 43)
         // The subclass numbers of the values that moved out of landcover (rule table 18) are fixed by this table.
         #expect(classify(["natural": "scree"], .closedWay).subclass == 2 && classify(["natural": "rock"], .closedWay).subclass == 6)
         #expect(classify(["natural": "beach"], .closedWay).subclass == 2 && classify(["natural": "wetland"], .closedWay).subclass == 1)

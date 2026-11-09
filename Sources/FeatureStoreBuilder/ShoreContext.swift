@@ -89,6 +89,20 @@ struct ShoreContext {
         return LineSplitter.removing(from: lines, projection: projection, spacing: Self.spacing) { water.contains(x: $0.x, y: $0.y) }
     }
 
+    /// A river or stream split into the stretches outside the water areas and the stretches inside them.
+    mutating func waterLineStretches(_ lines: [[PackedPoint]]) -> (kept: [[PackedPoint]], inWater: [[PackedPoint]]) {
+        let water = water()
+        guard !water.polygons.isEmpty else { return (lines, []) }
+        var kept: [[PackedPoint]] = [], inWater: [[PackedPoint]] = []
+        for line in lines {
+            for stretch in LineSplitter.split(line, projection: projection, spacing: Self.spacing, test: { water.contains(x: $0.x, y: $0.y) })
+            where stretch.points.count >= 2 {
+                if stretch.answer { inWater.append(stretch.points) } else { kept.append(stretch.points) }
+            }
+        }
+        return (kept, inWater)
+    }
+
     /// The border of a protected area, split into what lies on land and what lies in the sea.
     func parkBorder(_ lines: [[PackedPoint]]) -> (land: [[PackedPoint]], sea: [[PackedPoint]]) {
         guard let sea else { return (lines, []) }

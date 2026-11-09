@@ -74,9 +74,18 @@ extension FeatureStoreBuilder {
                 runs = result.kept
             case .waterLine where classification.kind == .line && (1...5).contains(SubclassBits.value(of: classification.subclass)):
                 // The centre line of a river is not drawn through the river's own area.
-                let result = shore.waterLine(runs)
-                emitter.report.waterLineStretchesInWater += result.dropped
+                // Its name is kept: the stretches in the water are stored as `riverName` lines, which are not drawn but carry the name, so a
+                // wide river is named along its course though the area is what is drawn.
+                let result = shore.waterLineStretches(runs)
+                emitter.report.waterLineStretchesInWater += result.inWater.count
                 runs = result.kept
+                if !result.inWater.isEmpty, let name = tags.value(forKey: "name"), !name.isEmpty {
+                    try emitter.emit(FeatureSpec(
+                        classification: Classification(
+                            featureClass: .riverName, subclass: classification.subclass, kind: .line, minimumBand: .overview, showsOnWatch: false),
+                        objectType: .way, objectID: id, tags: tags.orderedTags, geometry: .lines(result.inWater)))
+                    emitter.report.riverNameStretches += result.inWater.count
+                }
             default:
                 break
             }
