@@ -2,10 +2,13 @@ import FeatureStore
 import GeoCore
 
 extension LevelOutput {
-    /// Joins the pieces of every line by their end points, simplifies the chain, drops it when it is small, and cuts it.
+    /// Joins the pieces of every line by their end points, drops the chain when it is small, cuts it at the border of the
+    /// block, simplifies what lies in the block and cuts that into the cells of the level.
     ///
     /// Two pieces are one line where a piece that continues ends exactly where a piece that has a predecessor starts: the
-    /// clip puts the same integer on the border of both cells.
+    /// clip puts the same integer on the border of both cells. The cut at the block comes before the simplification, so
+    /// that the point where a line crosses the border of the block is the same in both blocks (the end points of a
+    /// simplified line are kept), whatever part of the line each block read.
     mutating func writeLines(_ collected: LevelCollection) throws {
         for key in collected.lines.keys.sorted() {
             guard let pieces = collected.lines[key], let attributes = collected.attributes[key] else { continue }
@@ -39,11 +42,16 @@ extension LevelOutput {
             for index in pieces.indices where !visited[index] { chains.append(chain(from: index)) }  // a closed loop of pieces
             for line in chains where line.count >= 2 {
                 guard extent(line) >= spec.minimumExtent else { report.droppedAsSmall += 1; continue }
-                let simplified = GeometrySimplifier.simplify(line: line, tolerance: spec.tolerance)
-                for (cell, piece) in CellSplitter.split(line: simplified, zoom: spec.storageZoom) where inBlock(cell) {
-                    try add(
-                        key, attributes, kind: .line, flags: piece.flags, offset: piece.offsetCentimetres,
-                        parts: [GeometryPart(points: piece.points)], in: cell)
+                for (blockCell, inBlockPiece) in CellSplitter.split(line: line, zoom: tile.zoom) where blockCell == tile {
+                    let simplified = GeometrySimplifier.simplify(line: inBlockPiece.points, tolerance: spec.tolerance)
+                    for (cell, piece) in CellSplitter.split(line: simplified, zoom: spec.storageZoom) where inBlock(cell) {
+                        var flags = piece.flags
+                        // The ends of the piece in the block continue in the neighbouring block.
+                        if inBlockPiece.continuesBefore && piece.points.first == simplified.first { flags.insert(.continuesBefore) }
+                        if inBlockPiece.continuesAfter && piece.points.last == simplified.last { flags.insert(.continuesAfter) }
+                        let offset = UInt32(clamping: UInt64(inBlockPiece.offsetCentimetres) + UInt64(piece.offsetCentimetres))
+                        try add(key, attributes, kind: .line, flags: flags, offset: offset, parts: [GeometryPart(points: piece.points)], in: cell)
+                    }
                 }
             }
         }

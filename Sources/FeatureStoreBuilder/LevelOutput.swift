@@ -6,12 +6,14 @@ import GeoCore
 struct LevelOutput {
     var writer: FeatureStoreWriter
     let spec: LevelSpec
+    let tile: TileID
     let block: LevelRegion
     var report: LevelReport
 
-    init(writer: FeatureStoreWriter, spec: LevelSpec, block: LevelRegion, report: LevelReport) {
+    init(writer: FeatureStoreWriter, spec: LevelSpec, tile: TileID, block: LevelRegion, report: LevelReport) {
         self.writer = writer
         self.spec = spec
+        self.tile = tile
         self.block = block
         self.report = report
     }

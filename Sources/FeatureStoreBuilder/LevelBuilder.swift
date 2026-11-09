@@ -7,7 +7,8 @@ import GeoCore
 /// The overview band of the source cells holds the geometry of every feature cut at the borders of the cells of zoom 13.
 /// A level joins those pieces again (lines by their end points, areas by chaining the real edges of the rings), simplifies
 /// the result for the top zoom of the level, leaves out what is smaller than three pixels there, and cuts it into the
-/// larger cells of the level. No OSM file is read.
+/// larger cells of the level. A joined line or ring is cut at the border of the block before it is simplified (with the
+/// points on that border kept), so two neighbouring blocks of a level agree on the border. No OSM file is read.
 ///
 /// A level block is built from the source cells of its area and a margin around it, so a line or area that crosses the
 /// border of the block is whole when it is judged for its size.
@@ -16,6 +17,11 @@ public enum LevelBuilder {
     /// (about 12 cells at the top zoom 3).
     public static let defaultMargin = 32
 
+    /// The most source cells one block may read, margin included. The work keeps every piece of the area in memory, so it is
+    /// meant for the blocks of the design (zoom 8 or coarser blocks of the levels with a top zoom of 3 or more); a larger
+    /// area is refused.
+    public static let maximumRegionCells = 250_000
+
     /// Builds the file of one block of a level.
     ///
     /// - Parameters:
@@ -23,13 +29,14 @@ public enum LevelBuilder {
     ///   - spec: The level.
     ///   - tile: The block of the level: a tile whose zoom is at most the storage zoom of the level. The file holds the
     ///     cells of the level inside it.
-    ///   - margin: The source cells read around the block.
+    ///   - margin: The source cells read around the block, 0 or more.
     /// - Returns: The file and what went into it, or `nil` if the block has nothing to store.
     /// - Throws: ``LevelError`` for a block or source that does not fit, and the errors of reading the source.
     public static func build(
         from source: any CellSource, spec: LevelSpec, tile: TileID, margin: Int = defaultMargin
     ) throws -> LevelResult? {
         guard source.bands.contains(.overview) else { throw LevelError.noOverviewBand }
+        guard margin >= 0 else { throw LevelError.invalidTile("the margin is negative") }
         guard tile.zoom <= spec.storageZoom, spec.storageZoom < source.storageZoom else {
             throw LevelError.invalidTile(
                 "block zoom \(tile.zoom), level cells \(spec.storageZoom), source cells \(source.storageZoom)")
@@ -40,6 +47,9 @@ public enum LevelBuilder {
         let region = LevelRegion(
             columns: max(0, (tile.x << shift) - margin)...min(side - 1, ((tile.x + 1) << shift) - 1 + margin),
             rows: max(0, (tile.y << shift) - margin)...min(side - 1, ((tile.y + 1) << shift) - 1 + margin))
+        guard region.columns.count * region.rows.count <= maximumRegionCells else {
+            throw LevelError.regionTooLarge(cells: region.columns.count * region.rows.count)
+        }
         let levelShift = spec.storageZoom - tile.zoom
         let block = LevelRegion(
             columns: (tile.x << levelShift)...(((tile.x + 1) << levelShift) - 1),
@@ -67,7 +77,7 @@ public enum LevelBuilder {
             storageZoom: spec.storageZoom,
             boundingBox: BoundingBox(south: far.latitude, west: corner.longitude, north: corner.latitude, east: far.longitude),
             attribution: source.attribution, classifierVersion: UInt16(truncatingIfNeeded: firstFile.classifierVersion))
-        var output = LevelOutput(writer: writer, spec: spec, block: block, report: report)
+        var output = LevelOutput(writer: writer, spec: spec, tile: tile, block: block, report: report)
         try output.writePoints(collected)
         try output.writeLines(collected)
         try output.writeAreas(collected, region: region)

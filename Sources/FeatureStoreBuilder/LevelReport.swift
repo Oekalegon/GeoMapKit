@@ -1,5 +1,5 @@
 /// What building one level block read and wrote.
-public struct LevelReport: Sendable, Equatable {
+public struct LevelReport: Sendable, Equatable, CustomStringConvertible {
     /// Source cells that exist in the area that was read.
     public var cellsRead = 0
     /// Features read (pieces of the visible classes).
@@ -19,4 +19,9 @@ public struct LevelReport: Sendable, Equatable {
 
     /// Creates an empty report.
     public init() {}
+
+    public var description: String {
+        "\(cellsRead) source cells, \(featuresRead) features read; \(featuresWritten) features, \(verticesWritten) vertices in \(cellsWritten) cells written; "
+            + "\(linesJoined) lines joined, \(droppedAsSmall) dropped as small, \(openAreaChains) open area chains"
+    }
 }

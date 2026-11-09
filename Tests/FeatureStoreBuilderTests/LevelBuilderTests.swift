@@ -91,8 +91,8 @@ struct LevelBuilderTests {
     }
 
     /// The four quarters of a square around the common corner of four cells, as the clip cuts them.
-    private func squareQuarters(into w: inout FeatureStoreWriter, skip: Set<Int> = []) throws -> (lon: Int32, lat: Int32) {
-        let a = CellRect(tile: cell(0, 0)), d = CellRect(tile: cell(1, 1))
+    private func squareQuarters(into w: inout FeatureStoreWriter, skip: Set<Int> = []) throws -> (lon: Int32, lat: Int32, dLon: Int32, dLat: Int32) {
+        let a = CellRect(tile: cell(0, 0))
         let lonMid = a.east, latMid = a.south
         let dLon = Int32(Double(a.east - a.west) * 0.8), dLat = Int32(Double(a.north - a.south) * 0.8)
         func area(_ id: Int64, _ points: [PackedPoint], artificial: [Range<Int>], cell: TileID) throws {
@@ -102,7 +102,6 @@ struct LevelBuilderTests {
                     parts: [GeometryPart(points: points, artificialEdges: artificial)]),
                 band: .overview, cell: cell)
         }
-        _ = d
         let nw = pt(lonMid - dLon, latMid + dLat), ne = pt(lonMid + dLon, latMid + dLat)
         let se = pt(lonMid + dLon, latMid - dLat), sw = pt(lonMid - dLon, latMid - dLat)
         if !skip.contains(0) {
@@ -117,12 +116,12 @@ struct LevelBuilderTests {
         if !skip.contains(3) {
             try area(7, [pt(lonMid + dLon, latMid), se, pt(lonMid, latMid - dLat), pt(lonMid, latMid), pt(lonMid + dLon, latMid)], artificial: [2..<4], cell: cell(1, 1))
         }
-        return (lonMid, latMid)
+        return (lonMid, latMid, dLon, dLat)
     }
 
     @Test func aSquareCutIntoFourQuartersIsOneRing() throws {
         var w = writer()
-        let (lonMid, latMid) = try squareQuarters(into: &w)
+        let (lonMid, latMid, dLon, dLat) = try squareQuarters(into: &w)
         let (result, file) = try level(w)
         #expect(result?.report.openAreaChains == 0)
         let levelCell = try #require(TileID.containing(Coordinate(latitude: Double(latMid) / 1e7, longitude: Double(lonMid) / 1e7), zoom: 10))
@@ -131,8 +130,8 @@ struct LevelBuilderTests {
         let ring = features[0].parts[0]
         // Four corners, closed. The simplifier keeps the first vertex of a ring, which is a point on a cell border here.
         #expect(ring.points.first == ring.points.last && Set(ring.points).count <= 5)
-        let longitudes = Set(ring.points.map(\.longitude)), latitudes = Set(ring.points.map(\.latitude))
-        #expect(longitudes.count == 2 && latitudes.count == 3 || longitudes.count == 3 && latitudes.count == 2 || (longitudes.count == 2 && latitudes.count == 2))
+        #expect(ring.points.map(\.longitude).min() == lonMid - dLon && ring.points.map(\.longitude).max() == lonMid + dLon)
+        #expect(ring.points.map(\.latitude).min() == latMid - dLat && ring.points.map(\.latitude).max() == latMid + dLat)
         #expect(ring.artificialEdges.isEmpty)
         #expect(!features[0].flags.contains(.incomplete))
     }
@@ -149,9 +148,9 @@ struct LevelBuilderTests {
                 parts: [GeometryPart(points: [pt(b.west + 10, b.north - 10)])]),
             band: .overview, cell: cell(1, 0))
         let (result, file) = try level(w, spec: try LevelSpec(topZoom: 8, classes: [FeatureClass.waterArea.rawValue, FeatureClass.roadMajor.rawValue]))
-        #expect(try #require(result).report.openAreaChains >= 1)
-        let any = try #require(file)
-        let flagged = try any.cells().flatMap { try any.features(in: $0, band: .overview) }.filter { $0.kind == .area }
+        #expect(try #require(result).report.openAreaChains == 1)
+        let level = try #require(file)
+        let flagged = try level.cells().flatMap { try level.features(in: $0, band: .overview) }.filter { $0.kind == .area }
         #expect(!flagged.isEmpty && flagged.allSatisfy { $0.flags.contains(.incomplete) })
     }
 
@@ -164,6 +163,50 @@ struct LevelBuilderTests {
         try road(4, [pt(o.west, lat), pt(o.east, lat)], before: false, after: false, in: outside, to: &w)
         let (result, _) = try level(w)
         #expect(result == nil)
+
+        // A road that crosses the border of the block is cut at it: nothing of it is written east of the border.
+        var crossing = writer()
+        let west = TileID(zoom: 13, x: 32 * 4 + 31, y: baseRow)!, east = TileID(zoom: 13, x: 32 * 5, y: baseRow)!
+        let a = CellRect(tile: west), b = CellRect(tile: east)
+        let latitude = (a.north + a.south) / 2
+        try road(5, [pt(a.east - 200_000, latitude), pt(a.east, latitude)], before: false, after: true, in: west, to: &crossing)
+        try road(5, [pt(b.west, latitude), pt(b.west + 200_000, latitude)], before: true, after: false, in: east, to: &crossing)
+        let (_, file) = try level(crossing)
+        let written = try #require(file)
+        let cells = try written.cells()
+        #expect(cells.count == 1 && cells.allSatisfy { $0.x < 32 * 5 / 8 })
+        let line = try #require(try written.features(in: cells[0], band: .overview).first)
+        #expect(line.parts[0].points.last?.longitude == a.east, "cut exactly at the border of the block")
+        #expect(line.flags.contains(.continuesAfter), "the line goes on in the next block")
+    }
+
+    @Test func aPolygonWithAHoleKeepsBothRings() throws {
+        var w = writer()
+        let a = CellRect(tile: cell(2, 2))
+        let lonMid = a.west / 2 + a.east / 2, latMid = a.north / 2 + a.south / 2
+        let outer = Int32(Double(a.east - a.west) * 0.45), inner = Int32(Double(a.east - a.west) * 0.2)
+        func square(_ d: Int32) -> [PackedPoint] {
+            [pt(lonMid - d, latMid + d), pt(lonMid + d, latMid + d), pt(lonMid + d, latMid - d), pt(lonMid - d, latMid - d), pt(lonMid - d, latMid + d)]
+        }
+        try w.add(
+            StoredFeature(
+                classID: FeatureClass.waterArea.rawValue, kind: .area, objectType: .relation, objectID: 8,
+                parts: [GeometryPart(points: square(outer)), GeometryPart(points: square(inner))]),
+            band: .overview, cell: cell(2, 2))
+        let (result, file) = try level(w)
+        #expect(result?.report.openAreaChains == 0)
+        let built = try #require(file)
+        let features = try built.cells().flatMap { try built.features(in: $0, band: .overview) }
+        #expect(features.count == 1 && features[0].parts.count == 2, "the outer ring and the hole")
+    }
+
+    @Test func anAreaAtTheEdgeOfTheDataIsClosedByItsOwnBorderEdges() throws {
+        var w = writer()
+        // Only the north-west quarter exists: its artificial edges face cells that are not in the source, so they stay.
+        _ = try squareQuarters(into: &w, skip: [1, 2, 3])
+        let (result, file) = try level(w)
+        #expect(result?.report.openAreaChains == 0)
+        #expect(try #require(file).cells().count == 1)
     }
 
     @Test func invalidInputIsRefused() throws {
@@ -174,6 +217,9 @@ struct LevelBuilderTests {
         let source = try FeatureStoreFile(data: try w.data())
         // A block finer than the cells of the level.
         #expect(throws: LevelError.self) { try LevelBuilder.build(from: source, spec: spec, tile: TileID(zoom: 12, x: 1, y: 1)!) }
+        #expect(throws: LevelError.self) { try LevelBuilder.build(from: source, spec: spec, tile: block, margin: -1) }
+        // A block of zoom 0 would read the whole world.
+        #expect(throws: LevelError.self) { try LevelBuilder.build(from: source, spec: spec, tile: TileID(zoom: 0, x: 0, y: 0)!) }
     }
 
     @Test func aLevelFromTwoBlocksEqualsTheLevelFromOneFile() throws {
@@ -208,5 +254,40 @@ struct LevelBuilderTests {
             tile: TileID(zoom: 8, x: 4, y: 74)!)
         #expect(fromSet != nil && fromSet?.data == fromFile?.data)
         #expect(fromSet?.report.linesJoined == 1)
+    }
+
+    @Test func twoNeighbouringLevelBlocksMeetOnTheirBorder() throws {
+        // A long line with a bump close to the border, cut into cells by the builder's own splitter. With a small margin the two
+        // blocks read different parts of it, so a simplification before the cut would give them different crossing points.
+        let west = TileID(zoom: 13, x: 32 * 4 + 31, y: 32 * 74 + 5)!
+        let w = CellRect(tile: west)
+        let lat = (w.north + w.south) / 2
+        let width = w.east - w.west
+        let line = [
+            pt(w.east - 12 * width, lat), pt(w.east - 3 * width, lat + 4_000), pt(w.east - width / 3, lat - 9_000),
+            pt(w.east + width / 3, lat + 9_000), pt(w.east + 3 * width, lat - 4_000), pt(w.east + 12 * width, lat),
+        ]
+        var source = writer()
+        for (cell, piece) in CellSplitter.split(line: line, zoom: 13) {
+            try source.add(
+                StoredFeature(
+                    classID: FeatureClass.roadMajor.rawValue, kind: .line, objectType: .way, objectID: 21, flags: piece.flags,
+                    offsetAlongLine: piece.offsetCentimetres, parts: [GeometryPart(points: piece.points)]),
+                band: .overview, cell: cell)
+        }
+        let file = try FeatureStoreFile(data: try source.data())
+        let spec = try LevelSpec(topZoom: 8, classes: [FeatureClass.roadMajor.rawValue])
+        func crossing(_ tile: TileID, last: Bool) throws -> PackedPoint {
+            let result = try #require(try LevelBuilder.build(from: file, spec: spec, tile: tile, margin: 4))
+            let built = try FeatureStoreFile(data: result.data)
+            let cells = try built.cells().sorted { $0.x < $1.x }
+            let cell = try #require(last ? cells.last : cells.first)
+            let feature = try #require(try built.features(in: cell, band: .overview).first)
+            return try #require(last ? feature.parts[0].points.last : feature.parts[0].points.first)
+        }
+        let left = try crossing(TileID(zoom: 8, x: 4, y: 74)!, last: true)
+        let right = try crossing(TileID(zoom: 8, x: 5, y: 74)!, last: false)
+        #expect(left == right, "the line crosses the border of the blocks at the same point in both")
+        #expect(left.longitude == w.east)
     }
 }

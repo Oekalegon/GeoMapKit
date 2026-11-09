@@ -48,7 +48,11 @@ enum LevelDissolve {
         for (index, fragment) in fragments.enumerated() { starts[fragment[0], default: []].append(index) }
         var used = [Bool](repeating: false, count: fragments.count)
         var open = 0
-        for index in fragments.indices where !used[index] {
+        // Start with the fragments that no other fragment leads into, so that a chain is followed from its beginning and an open
+        // chain is counted once; what is left are closed loops of fragments.
+        let ends = Set(fragments.map { $0[$0.count - 1] })
+        let order = fragments.indices.filter { !ends.contains(fragments[$0][0]) } + fragments.indices.filter { ends.contains(fragments[$0][0]) }
+        for index in order where !used[index] {
             used[index] = true
             var chain = fragments[index]
             while let last = chain.last, last != chain[0] {
