@@ -110,7 +110,7 @@ An ordered rule table; the first match wins, so an object has one class, and the
 | Class | Tags | Lowest band | Watch |
 |---|---|---|---|
 | `peak` | `natural=peak`, `volcano` (named or not); `saddle` | mid | yes; saddle no |
-| `place` | city, town; village; hamlet, suburb, locality, isolated_dwelling (a town with a `population` tag under 35,000 is subclass 13, a small town, rule table 21, question 52) | overview; mid; detail | city, town, village |
+| `place` | city, town; village; hamlet, suburb, locality, isolated_dwelling (a place keeps its `population` tag in every band, question 52) | overview; mid; detail | city, town, village |
 | `poiAnchor` | `amenity=drinking_water`, `shelter`, `toilets`; `natural=spring`; `tourism=alpine_hut`, `wilderness_hut`, `viewpoint` | detail | all but toilets and viewpoint |
 | `path` | `highway=path`, `footway`, `bridleway`, `cycleway`, `steps`, `via_ferrata` (but a footway that is a sidewalk or crossing is `pavement`) | mid | yes |
 | `roadArea` | a road, track, path or pavement that is an area (checked after the rule table, from the class and the geometry kind) | detail | no |
