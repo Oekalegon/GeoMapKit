@@ -39,6 +39,17 @@ extension FeatureStoreBuilder {
                     classification = classifier.classify(ClassifierTagArray(plain), shape: isClosed ? .closedWay : .openWay)
                 }
             }
+            // The border of a country is often a relation whose ways carry no border tags of their own (most of the land border of
+            // Finland and Russia, and of Norway and Russia, is mapped so): a way with no class of its own that is a member of a
+            // national border relation is a border. A state border works in the same way.
+            if classification.featureClass == .other, tags.value(forKey: "boundary") == nil {
+                if borders == nil { borders = BorderNames(extract: extract, classifier: classifier) }
+                if let inherited = borders?.classOfUntaggedBorder(ofWay: id) {
+                    let plain = [OSMTag(key: "boundary", value: "administrative"), OSMTag(key: "admin_level", value: inherited == .countryBorder ? "2" : "4")]
+                    classification = classifier.classify(ClassifierTagArray(plain), shape: .openWay)
+                    emitter.report.waysTakingBorderFromRelation += 1
+                }
+            }
             // A footway beside a road is a sidewalk, tagged or not.
             if Self.mayBeASidewalk(tags, classification) {
                 if roads == nil { roads = RoadIndex(extract: extract, classifier: classifier) }

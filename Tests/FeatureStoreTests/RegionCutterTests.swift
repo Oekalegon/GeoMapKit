@@ -22,7 +22,7 @@ struct RegionCutterTests {
     private func makeSource() throws -> FeatureStoreFile {
         var writer = FeatureStoreWriter(
             boundingBox: BoundingBox(south: 59, west: 10, north: 60, east: 11), attribution: "© OpenStreetMap contributors, ODbL",
-            classifierVersion: 20)
+            classifierVersion: 21)
         for (number, cell) in cells.enumerated() {
             let name = writer.intern("Peak \(number)")
             let tag = StoredTag(key: writer.intern("ele"), value: writer.intern("\(number)"))
@@ -59,7 +59,7 @@ struct RegionCutterTests {
         let copy = try FeatureStoreFile(contentsOf: url)
         try copy.verify()
         #expect(try copy.cells() == [cells[0], cells[1]], "the cell outside the area is not in the copy")
-        #expect(copy.classifierVersion == 20 && copy.attribution == "© OpenStreetMap contributors, ODbL")
+        #expect(copy.classifierVersion == 21 && copy.attribution == "© OpenStreetMap contributors, ODbL")
         #expect(copy.bands == [.mid])
         let mid = try copy.features(in: cells[0], band: .mid)
         #expect(Set(mid.map(\.classID)) == [FeatureClass.peak.rawValue, FeatureClass.path.rawValue])
@@ -101,7 +101,7 @@ struct RegionCutterTests {
     }
 
     /// The same cells as two block files of the zoom 8 grid (cells 0 and 1 in one, cell 2 in the other), each with its own string table.
-    private func makeSet(version: [UInt16] = [20, 20]) throws -> (set: StoreSet, folder: URL) {
+    private func makeSet(version: [UInt16] = [21, 21]) throws -> (set: StoreSet, folder: URL) {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-cutset-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var blocks: [StoreManifest.Block] = []
@@ -153,7 +153,7 @@ struct RegionCutterTests {
     }
 
     @Test func filesWithDifferentClassTablesAreNotMixed() throws {
-        let (set, folder) = try makeSet(version: [20, 19])
+        let (set, folder) = try makeSet(version: [21, 20])
         defer { try? FileManager.default.removeItem(at: folder) }
         let url = output()
         let area = BoundingBox(

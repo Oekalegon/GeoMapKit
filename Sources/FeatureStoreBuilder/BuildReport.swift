@@ -11,6 +11,8 @@ public struct BuildReport: Sendable, Equatable {
     /// Untagged ways left out because a multipolygon relation holds their geometry, and ways whose tags a
     /// single-outer-way multipolygon adopted.
     public var waysSuppressed = 0
+    /// Ways with no class of their own that took the class of a national or state border from a border relation they belong to.
+    public var waysTakingBorderFromRelation = 0
     /// Ways with a node missing from the extract; they are split at the gap.
     public var waysWithMissingNodes = 0
     /// Ways with no usable geometry at all.

@@ -37,6 +37,14 @@ struct BorderNames {
         claimsByWay[.countryBorder]?[id]?.count ?? 0
     }
 
+    /// The class a way takes from the border relations it belongs to, for a way with no border tags of its own: `countryBorder`
+    /// if a national border relation has it as a member, else `boundary` if a state border relation has it, else `nil`.
+    func classOfUntaggedBorder(ofWay id: Int64) -> FeatureClass? {
+        if countryRelationCount(ofWay: id) >= 1 { return .countryBorder }
+        if !(claimsByWay[.boundary]?[id]?.isEmpty ?? true) { return .boundary }
+        return nil
+    }
+
     /// The name of a border way: the regions it separates, each on its side.
     ///
     /// The result is a ``SidedName`` in text form: the names of the regions on the left of the way, looking along its stored
