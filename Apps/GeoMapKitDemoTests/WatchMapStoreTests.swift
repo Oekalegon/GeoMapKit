@@ -75,6 +75,43 @@ struct WatchMapStoreTests {
         #expect(throws: WatchMapStoreError.self) { try store.accept(text, named: "Text") }
     }
 
+    @Test func aNameIsCutByBytesNotCharacters() {
+        let name = WatchMapStore.fileName(for: String(repeating: "🏔", count: 80))
+        #expect(name.utf8.count <= 84 && name.hasSuffix(".gmk"))
+    }
+
+    @Test func mapsThatWouldTakeTooMuchRoomAreRefused() throws {
+        let root = folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = try makeStore(in: root.appendingPathComponent("a"))
+        let size = Int64(try #require(try first.resourceValues(forKeys: [.fileSizeKey]).fileSize))
+        // Room for one map and a half.
+        let store = WatchMapStore(directory: root.appendingPathComponent("Maps"), totalLimit: size + size / 2)
+        try store.accept(first, named: "One")
+        let second = try makeStore(in: root.appendingPathComponent("b"))
+        #expect(throws: WatchMapStoreError.self) { try store.accept(second, named: "Two") }
+        #expect(!FileManager.default.fileExists(atPath: second.path) && store.list().map(\.name) == ["One"])
+        // A new copy of the same map does not count twice.
+        let again = try makeStore(in: root.appendingPathComponent("c"))
+        try store.accept(again, named: "One")
+        #expect(store.list().count == 1)
+    }
+
+    @Test func theWatchOpensAFileWithoutReadingAllOfIt() throws {
+        let root = folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WatchMapStore(directory: root.appendingPathComponent("Maps"))
+        let incoming = try makeStore(in: root.appendingPathComponent("tmp"))
+        var bytes = try Data(contentsOf: incoming)
+        bytes[bytes.count / 2] ^= 0xFF
+        try bytes.write(to: incoming)
+        // The checksum is the phone's check: the full check refuses this file, the light one does not read the body.
+        #expect(throws: WatchMapStoreError.self) { try store.accept(incoming, named: "Full") }
+        let second = try makeStore(in: root.appendingPathComponent("tmp2"))
+        try store.accept(second, named: "Light", fullCheck: false)
+        #expect(store.list().map(\.name) == ["Light"])
+    }
+
     @Test func aMapCanBeDeleted() throws {
         let root = folder()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -94,6 +131,7 @@ struct WatchLinkTests {
         #expect(link.status != .ready)
         #expect(throws: WatchSendError.self) { try link.send(URL(fileURLWithPath: "/nonexistent.gmk"), named: "M") }
         #expect(WatchSendError.notReady(.notPaired).localizedDescription == "No Apple Watch is paired.")
-        #expect(WatchSendError.tooLarge(bytes: 200_000_000, limit: 100_000_000).localizedDescription.contains("Cut a smaller area"))
+        #expect(WatchSendError.notAMap("checksum").localizedDescription.contains("not a map"))
+        #expect(WatchSendError.tooLarge(bytes: 200_000_000, limit: 20_000_000).localizedDescription.contains("Cut a smaller area"))
     }
 }

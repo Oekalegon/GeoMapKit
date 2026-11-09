@@ -24,7 +24,9 @@ struct WatchMapList: View {
                     }
                 }
                 .onDelete { offsets in
-                    for index in offsets { try? link.store.delete(maps[index]) }
+                    for index in offsets {
+                        do { try link.store.delete(maps[index]) } catch { problem = "The map could not be removed: \(error.localizedDescription)" }
+                    }
                     reload()
                 }
                 if let message = problem ?? link.lastProblem {

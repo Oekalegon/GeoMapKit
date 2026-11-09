@@ -26,7 +26,7 @@ struct WatchMapScreen: View {
         }
         .navigationTitle(map.name)
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: map.id) { open() }
+        .task(id: "\(map.id) \(map.date.timeIntervalSince1970)") { open() }
     }
 
     private func open() {

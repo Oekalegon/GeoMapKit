@@ -16,10 +16,15 @@ struct WatchMapEntry: Identifiable, Hashable, Sendable {
 /// Why a map that arrived could not be kept.
 enum WatchMapStoreError: Error, Equatable, LocalizedError {
     case notAStore(String)
+    /// The maps would take more room than the Watch keeps for them.
+    case noRoom(bytes: Int64, limit: Int64)
 
     var errorDescription: String? {
         switch self {
         case .notAStore(let reason): "The file that arrived is not a map the Watch can use: \(reason)"
+        case .noRoom(let bytes, let limit):
+            "The maps would be \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)), more than the Watch keeps "
+                + "(\(ByteCountFormatter.string(fromByteCount: limit, countStyle: .file))). Remove a map first."
         }
     }
 }
@@ -28,12 +33,21 @@ enum WatchMapStoreError: Error, Equatable, LocalizedError {
 ///
 /// The type is plain Foundation, so that the phone's test target can test it too.
 struct WatchMapStore: Sendable {
+    /// The most bytes all maps together may take on the Watch. Provisional, until the Watch storage ceiling is known (question 39).
+    static let totalLimit: Int64 = 60_000_000
+
     let directory: URL
+    let totalLimit: Int64
 
     /// Creates a store.
     ///
-    /// - Parameter directory: The folder of the maps; created when the first map arrives.
-    init(directory: URL) { self.directory = directory }
+    /// - Parameters:
+    ///   - directory: The folder of the maps; created when the first map arrives.
+    ///   - totalLimit: The most bytes all maps together may take.
+    init(directory: URL, totalLimit: Int64 = WatchMapStore.totalLimit) {
+        self.directory = directory
+        self.totalLimit = totalLimit
+    }
 
     /// The store in the Documents of the app.
     static var standard: WatchMapStore {
@@ -41,39 +55,57 @@ struct WatchMapStore: Sendable {
         return WatchMapStore(directory: documents.appendingPathComponent("Maps", isDirectory: true))
     }
 
-    /// A name that is a file name here: no folders, no hidden file, the `.gmk` extension.
+    /// A name that is a file name here: no folders, no hidden file, the `.gmk` extension, at most 80 bytes before the extension.
+    /// Two names that differ only in `/`, `:` or what was cut off give the same file name, and the later map replaces the earlier.
     static func fileName(for name: String) -> String {
         var base = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
         if base.lowercased().hasSuffix(".gmk") { base.removeLast(4) }
         base = base.trimmingCharacters(in: .whitespacesAndNewlines)
         while base.hasPrefix(".") { base.removeFirst() }
         if base.isEmpty { base = "Map" }
-        return String(base.prefix(80)) + ".gmk"
+        var cut = ""
+        for character in base {
+            if cut.utf8.count + String(character).utf8.count > 80 { break }
+            cut.append(character)
+        }
+        return cut + ".gmk"
     }
 
     /// Checks a file that arrived and moves it into the store.
     ///
-    /// The file is read completely (its checksum is checked), so that a damaged file is refused here and not when the map is opened.
-    /// A file with the same name is replaced, since the phone sends a new copy of a map under the same name.
+    /// A file with the same name is replaced (in one step, so the old map stays if the new one cannot be put in place), since the
+    /// phone sends a new copy of a map under the same name.
     ///
     /// - Parameters:
     ///   - file: The file that arrived. It is moved, and gone from where it was.
     ///   - name: The name the phone gave it.
+    ///   - fullCheck: Whether the file is read completely (checksum and every cell). The Watch passes `false`: it opens the file and
+    ///     checks its structure, and the phone has checked the whole file before it sent it.
     /// - Returns: The entry of the map.
-    /// - Throws: ``WatchMapStoreError/notAStore(_:)`` if the file is not a valid store; the file is deleted then.
+    /// - Throws: ``WatchMapStoreError/notAStore(_:)`` if the file is not a valid store (the file is deleted then), and
+    ///   ``WatchMapStoreError/noRoom(bytes:limit:)`` if the maps would take more than the limit.
     @discardableResult
-    func accept(_ file: URL, named name: String) throws -> WatchMapEntry {
+    func accept(_ file: URL, named name: String, fullCheck: Bool = true) throws -> WatchMapEntry {
         do {
             let store = try FeatureStoreFile(contentsOf: file)
-            try store.verify()
+            if fullCheck { try store.verify() }
         } catch {
             try? FileManager.default.removeItem(at: file)
             throw WatchMapStoreError.notAStore("\(error)")
         }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let target = directory.appendingPathComponent(Self.fileName(for: name))
-        if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
-        try FileManager.default.moveItem(at: file, to: target)
+        let incoming = Int64((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+        let others = list().filter { $0.url.lastPathComponent != target.lastPathComponent }.reduce(Int64(0)) { $0 + $1.bytes }
+        guard others + incoming <= totalLimit else {
+            try? FileManager.default.removeItem(at: file)
+            throw WatchMapStoreError.noRoom(bytes: others + incoming, limit: totalLimit)
+        }
+        if FileManager.default.fileExists(atPath: target.path) {
+            _ = try FileManager.default.replaceItemAt(target, withItemAt: file)
+        } else {
+            try FileManager.default.moveItem(at: file, to: target)
+        }
         return try entry(at: target)
     }
 

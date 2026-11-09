@@ -1,3 +1,4 @@
+import FeatureStore
 import Foundation
 import Observation
 
@@ -33,10 +34,12 @@ enum WatchLinkStatus: Equatable, Sendable {
 enum WatchSendError: Error, Equatable, LocalizedError {
     case notReady(WatchLinkStatus)
     case tooLarge(bytes: Int64, limit: Int64)
+    case notAMap(String)
 
     var errorDescription: String? {
         switch self {
         case .notReady(let status): status.sentence
+        case .notAMap(let reason): "The file is not a map that can be sent: \(reason)"
         case .tooLarge(let bytes, let limit):
             "The map is \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)), more than the Watch gets "
                 + "(\(ByteCountFormatter.string(fromByteCount: limit, countStyle: .file))). Cut a smaller area for the Watch."
@@ -46,14 +49,16 @@ enum WatchSendError: Error, Equatable, LocalizedError {
 
 /// The link to the other device by WatchConnectivity: the phone sends map files, the Watch receives them.
 ///
-/// Files go by `transferFile`, which the system queues and delivers in the background, also when the app is not running. The Watch
-/// moves each file into its ``WatchMapStore`` while the delegate call runs (the system deletes the file after it). The link starts no
-/// location updates and no timers.
+/// Files go by `transferFile`, which the system queues and delivers in the background, also when the app is not running. The phone
+/// checks the whole file and sends a copy of it (so removing the map from the library cannot break a transfer on the way; the
+/// copy is deleted when the transfer is done). The Watch moves each file into its ``WatchMapStore`` while the delegate call runs
+/// (the system deletes the file after it). The link starts no location updates and no timers.
 @MainActor
 @Observable
 final class WatchLink: NSObject {
-    /// The most bytes a map may have to be sent; the same as the library copies of maps.
-    static let sendLimit: Int64 = 100_000_000
+    /// The most bytes a map may have to be sent. A Watch copy of 16 cells is about 1.4 MB; provisional, until the Watch storage
+    /// ceiling is known (question 39).
+    static let sendLimit: Int64 = 20_000_000
 
     private(set) var status: WatchLinkStatus = .unsupported
     /// Files that are on their way (on the phone).
@@ -78,24 +83,43 @@ final class WatchLink: NSObject {
 
     /// Sends a map file to the Watch.
     ///
+    /// The file is read completely first (checksum and cells), then copied for the transfer. A transfer of a map with the same
+    /// name that is still on the way is cancelled, since the Watch would replace it anyway.
+    ///
     /// - Parameters:
-    ///   - url: The `.gmk` file; it must stay where it is until the transfer is done.
+    ///   - url: The `.gmk` file.
     ///   - name: The name the Watch shows.
-    /// - Throws: ``WatchSendError`` if the link is not ready or the file is too big.
+    /// - Throws: ``WatchSendError`` if the link is not ready, the file is too big or is not a map; file errors if the copy fails.
     func send(_ url: URL, named name: String) throws {
         guard status == .ready else { throw WatchSendError.notReady(status) }
         let bytes = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
         guard bytes <= Self.sendLimit else { throw WatchSendError.tooLarge(bytes: bytes, limit: Self.sendLimit) }
+        do {
+            try FeatureStoreFile(contentsOf: url).verify()
+        } catch {
+            throw WatchSendError.notAMap("\(error)")
+        }
         #if os(iOS) && canImport(WatchConnectivity)
-        WCSession.default.transferFile(url, metadata: ["name": name])
-        pending = WCSession.default.outstandingFileTransfers.count
+        let session = WCSession.default
+        for transfer in session.outstandingFileTransfers where (transfer.file.metadata?["name"] as? String) == name {
+            transfer.cancel()
+        }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("WatchOutbox-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let copy = folder.appendingPathComponent(WatchMapStore.fileName(for: name))
+        try FileManager.default.copyItem(at: url, to: copy)
+        session.transferFile(copy, metadata: ["name": name])
+        pending = session.outstandingFileTransfers.count
         lastProblem = nil
         #endif
     }
 
-    fileprivate func update(status: WatchLinkStatus, pending: Int? = nil) {
-        self.status = status
-        if let pending { self.pending = pending }
+    /// Reads the state of the session again; what a delegate call reports may be old by the time it gets here.
+    fileprivate func refresh(problem: String? = nil) {
+        #if canImport(WatchConnectivity)
+        status = Self.status(of: WCSession.default)
+        #endif
+        if let problem { lastProblem = problem }
     }
 
     fileprivate func finished(pending: Int, problem: String?) {
@@ -120,8 +144,8 @@ extension WatchLink: WCSessionDelegate {
     }
 
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
-        let status = Self.status(of: session)
-        Task { @MainActor in self.update(status: status) }
+        let problem = error.map { "The link to the Watch could not start: \($0.localizedDescription)" }
+        Task { @MainActor in self.refresh(problem: problem) }
     }
 
     #if os(iOS)
@@ -133,13 +157,15 @@ extension WatchLink: WCSessionDelegate {
     }
 
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
-        let status = Self.status(of: session)
-        Task { @MainActor in self.update(status: status) }
+        Task { @MainActor in self.refresh() }
     }
 
     nonisolated func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
         let pending = session.outstandingFileTransfers.count
-        let problem = error.map { "The map could not be sent to the Watch: \($0.localizedDescription)" }
+        // The copy made for the transfer is not needed any more.
+        try? FileManager.default.removeItem(at: fileTransfer.file.fileURL.deletingLastPathComponent())
+        // A transfer that was cancelled because a newer copy replaces it is no problem.
+        let problem = fileTransfer.progress.isCancelled ? nil : error.map { "The map could not be sent to the Watch: \($0.localizedDescription)" }
         Task { @MainActor in self.finished(pending: pending, problem: problem) }
     }
     #endif
@@ -151,7 +177,7 @@ extension WatchLink: WCSessionDelegate {
         let store = self.store
         let problem: String?
         do {
-            try store.accept(file.fileURL, named: name)
+            try store.accept(file.fileURL, named: name, fullCheck: false)
             problem = nil
         } catch {
             problem = error.localizedDescription
