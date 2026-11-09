@@ -14,6 +14,11 @@ extension MapStyle {
                 fill: FillStyle(color: .color(0xFFFFFF)), stroke: .line(0xB0B0B0, .constant(0.5)), visibleZoom: 14...24, layer: 13),
             .landuseUrban: ClassStyle(fill: FillStyle(color: .color(0xE6E0D8)), visibleZoom: 9...24, layer: 10),
             .landcover: ClassStyle(fill: FillStyle(color: .color(0xDDE8C8)), visibleZoom: 10...24, layer: 11),
+            // Military land, an area to keep out of: a dashed red outline and a faint red tint (26 of 255, a value that survives the JSON round trip). The tint is translucent and drawn above the
+            // water, so a military area at sea (a radar sector, a firing range) shows the water and the land under it.
+            .militaryArea: ClassStyle(
+                fill: FillStyle(color: .color(0xD03030, alpha: 26.0 / 255)),
+                stroke: .line(0xC02020, ZoomValue((9, 0.8), (16, 1.5)), dash: [6, 3]), visibleZoom: 9...24, layer: 16),
             .forest: ClassStyle(fill: FillStyle(color: .color(0xC5DDB0)), layer: 12),
             .waterArea: ClassStyle(fill: FillStyle(color: .color(0xAAD3EA)), layer: 13),
             // Buildings from zoom 14 as a fill, which shows where a town is built; the outline fades in by zoom 15.

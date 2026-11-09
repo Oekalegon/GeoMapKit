@@ -182,15 +182,20 @@ struct StyleJSONTests {
             "other", "path", "track", "roadMajor", "roadMinor", "railway", "waterLine", "waterArea", "forest", "landcover",
             "landuseUrban", "building", "peak", "place", "poiAnchor", "poi", "boundary", "powerLine", "piste", "aerialway",
             "tree", "barrier", "transportStop", "roadPoint", "countryBorder", "address", "pavement", "cliff", "sea", "coastline", "roadArea", "roadService",
-            "waterEdge", "parkBorder", "parkBorderSea", "pier",
+            "waterEdge", "parkBorder", "parkBorderSea", "pier", "militaryArea",
         ]
         #expect(FeatureClass.allCases.map { String(describing: $0) } == names)
         for name in names {
             let json = document().replacingOccurrences(of: "roadMajor", with: name)
-            // `boundary`, `roadMinor` and `parkBorder` also fill in the classes that were added after them, for old style files.
-            let expected = ["boundary": 4, "roadMinor": 2, "parkBorder": 2][name] ?? 1
+            // `boundary`, `roadMinor`, `parkBorder` and `landuseUrban` also fill in the classes that were added after them, for old style files.
+            let expected = ["boundary": 4, "roadMinor": 2, "parkBorder": 2, "landuseUrban": 2][name] ?? 1
             #expect(try parse(json).classes.count == expected, "class \(name)")
         }
+    }
+
+    @Test func aStyleFileWithoutMilitaryLandDrawsItLikeUrbanLand() throws {
+        let style = try parse(document().replacingOccurrences(of: "roadMajor", with: "landuseUrban"))
+        #expect(style.classes[.militaryArea] != nil && style.classes[.militaryArea] == style.classes[.landuseUrban])
     }
 
     @Test func malformedZoomValuesAreRejected() {

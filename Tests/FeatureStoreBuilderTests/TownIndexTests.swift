@@ -95,4 +95,31 @@ struct TownIndexTests {
         #expect(try classID(of: 611, in: file) == FeatureClass.pavement.rawValue)
         #expect(try classID(of: 612, in: file) == FeatureClass.path.rawValue, "the hole is outside the area")
     }
+
+    @Test("A military area mapped as a multipolygon relation is militaryArea too")
+    func militaryRelation() throws {
+        var world = SyntheticWorld()
+        world.way(560, world.rectangle(first: 560, 0.3, 0.3, 2.7, 2.7))
+        world.way(570, world.rectangle(first: 570, 1.0, 1.0, 2.0, 2.0))
+        world.relation(3_000, [(560, "outer", 1), (570, "inner", 1)], [("type", "multipolygon"), ("landuse", "military")])
+        let result = try FeatureStoreBuilder().build(from: try world.extract())
+        let file = try FeatureStoreFile(data: result.data)
+        var classes = Set<UInt8>()
+        for cell in try file.cells() {
+            for feature in try file.features(in: cell, band: .overview) where feature.objectID == 3_000 { classes.insert(feature.classID) }
+        }
+        #expect(classes == [FeatureClass.militaryArea.rawValue])
+    }
+
+    @Test("Military land is its own class, and still counts as built-up for the footway rule")
+    func militaryLand() throws {
+        var world = SyntheticWorld()
+        world.way(540, world.rectangle(first: 540, 0.3, 0.3, 2.7, 2.7), [("landuse", "military")])
+        walk(&world, 621, (0.5, 1.0), (2.5, 1.0))
+        let result = try FeatureStoreBuilder().build(from: try world.extract())
+        let file = try FeatureStoreFile(data: result.data)
+        #expect(try classID(of: 540, in: file) == FeatureClass.militaryArea.rawValue)
+        #expect(try classID(of: 621, in: file) == FeatureClass.pavement.rawValue, "in built-up land, as before rule table 17")
+        #expect(result.report.townAreas == 1)
+    }
 }

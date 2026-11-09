@@ -107,8 +107,11 @@ extension FeatureClassifier {
                 [("grass", 21), ("allotments", 25), ("village_green", 27), ("recreation_ground", 28), ("flowerbed", 29)]))))
         rules.append(ClassifierRule("leisure", make(.landcover, .mid, watch: true,
             [("park", 30), ("garden", 31), ("golf_course", 32), ("pitch", 33), ("playground", 34)])))
+        // Military land is a class of its own (rule table version 17): an area to avoid, not a built-up one (it stays "built-up" for
+        // the footway test, see `TownIndex`). Not on the Watch.
+        rules.append(ClassifierRule("landuse", make(.militaryArea, .overview, watch: false, [("military", 1)])))
         rules.append(ClassifierRule("landuse", make(.landuseUrban, .overview, watch: false,
-            [("residential", 1), ("industrial", 2), ("commercial", 3), ("retail", 4), ("construction", 5), ("military", 6),
+            [("residential", 1), ("industrial", 2), ("commercial", 3), ("retail", 4), ("construction", 5),
              ("farmyard", 7), ("garages", 8), ("railway", 9)])))
         rules.append(ClassifierRule("natural", make(.cliff, .mid, watch: false, [("cliff", 1)])))
         rules.append(ClassifierRule("natural", make(.coastline, .overview, watch: false, [("coastline", 1)])))
