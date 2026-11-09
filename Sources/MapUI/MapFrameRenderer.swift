@@ -8,8 +8,8 @@ import MapStyle
 /// It is a plain value: the store file is memory-mapped and read-only, so each call builds its own scene without
 /// shared state, and two calls can run at once.
 struct MapFrameRenderer: Sendable {
-    /// The store to read.
-    let file: FeatureStoreFile
+    /// The store to read: one file, or a set of block files.
+    let source: any CellSource
     /// The style to draw with.
     let style: MapStyle
     /// Identifies the style for ``MapFrame/styleID``.
@@ -23,7 +23,7 @@ struct MapFrameRenderer: Sendable {
     /// - Throws: ``MapRenderError`` if no band can be read or the image cannot be created, and the store errors.
     func frame(for viewport: MapViewport, scale: Double) throws -> MapFrame {
         let scale = min(max(scale, 1), 3)
-        let scene = try MapSceneBuilder(file: file, style: style).scene(for: viewport)
+        let scene = try MapSceneBuilder(source: source, style: style).scene(for: viewport)
         // The credit is not part of the image: the image is larger than the view and turns, so its corner is not the view's.
         // `MapView` shows the credit itself, in the corner of the view.
         var drawn = style

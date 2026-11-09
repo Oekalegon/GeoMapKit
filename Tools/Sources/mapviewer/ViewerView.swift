@@ -20,7 +20,7 @@ struct ViewerView: View {
 
     let options: ViewerOptions
 
-    @State private var store: FeatureStoreFile?
+    @State private var store: (any CellSource)?
     @State private var storeName = ""
     @State private var center = Coordinate(latitude: 47.14, longitude: 9.52)
     @State private var zoom = 14.0
@@ -54,7 +54,7 @@ struct ViewerView: View {
             Divider()
             ZStack {
                 if let store {
-                    MapView(file: store, style: style, center: $center, zoom: $zoom, bearing: $bearing)
+                    MapView(source: store, style: style, center: $center, zoom: $zoom, bearing: $bearing)
                         .id(storeName)
                         .frame(width: watchSize ? 184 : nil, height: watchSize ? 224 : nil)
                         .border(watchSize ? Color.secondary : .clear)
@@ -71,7 +71,7 @@ struct ViewerView: View {
                             }
                         }
                 } else {
-                    Text(message ?? "Open a .gmk feature store file").foregroundStyle(.secondary).padding()
+                    Text(message ?? "Open a .gmk feature store file, or the manifest.json of a set of blocks").foregroundStyle(.secondary).padding()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -80,7 +80,7 @@ struct ViewerView: View {
         .frame(minWidth: 520, minHeight: 420)
         .fileImporter(
             isPresented: Binding(get: { importing != nil }, set: { if !$0 { importing = nil } }),
-            allowedContentTypes: importing == .style ? [.json] : [UTType(filenameExtension: "gmk") ?? .data]
+            allowedContentTypes: importing == .style ? [.json] : [UTType(filenameExtension: "gmk") ?? .data, .json, .folder]
         ) { result in
             guard case .success(let url) = result else { return }
             if importing == .style { loadStyle(url.path) } else { loadStore(url.path) }
@@ -152,16 +152,36 @@ struct ViewerView: View {
         NSApp.terminate(nil)
     }
 
+    /// Opens a store: a `.gmk` file, a `manifest.json` of blocks, or a folder that holds a `manifest.json`.
     private func loadStore(_ path: String) {
         do {
-            let file = try FeatureStoreFile(contentsOf: URL(fileURLWithPath: path))
-            let box = file.boundingBox
+            var url = URL(fileURLWithPath: path)
+            if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                url = url.appendingPathComponent("manifest.json")
+            }
+            let source: any CellSource
+            let box: BoundingBox
+            let built: Int
+            if url.pathExtension.lowercased() == "json" {
+                let set = try StoreSet(manifestURL: url)
+                guard let area = set.boundingBox else { throw StoreSetError.invalidManifest("the manifest lists no blocks") }
+                source = set
+                box = area
+                built = set.manifest.classifierVersion
+                zoom = 11
+            } else {
+                let file = try FeatureStoreFile(contentsOf: url)
+                source = file
+                box = file.boundingBox
+                built = file.classifierVersion
+                zoom = 14
+            }
             center = Coordinate(latitude: (box.south + box.north) / 2, longitude: (box.west + box.east) / 2)
-            zoom = 14
+            if let set = source as? StoreSet, let start = Self.startCoordinate(in: set, near: center) { center = start }
             storeName = path
-            store = file
+            store = source
             message = nil
-            let built = file.classifierVersion, current = Int(FeatureClassifier.version)
+            let current = Int(FeatureClassifier.version)
             outdatedNote = built < current
                 ? "Built with rule table \(built), current is \(current): rebuild to get the newest map classes and bands."
                 : nil
@@ -169,6 +189,20 @@ struct ViewerView: View {
             store = nil
             message = "Cannot open \(path): \(error)"
         }
+    }
+
+    /// The middle of the block nearest to `point`: the middle of a large set may lie in the sea or in a tile with no block.
+    private static func startCoordinate(in set: StoreSet, near point: Coordinate) -> Coordinate? {
+        var best: (distance: Double, coordinate: Coordinate)?
+        for block in set.manifest.blocks {
+            guard let tile = TileID(zoom: set.manifest.blockZoom, x: block.x, y: block.y) else { continue }
+            let middle = Coordinate(
+                latitude: (tile.northWest.latitude + tile.southEast.latitude) / 2,
+                longitude: (tile.northWest.longitude + tile.southEast.longitude) / 2)
+            let d = pow(middle.latitude - point.latitude, 2) + pow((middle.longitude - point.longitude) * cos(point.latitude * .pi / 180), 2)
+            if best == nil || d < best!.distance { best = (d, middle) }
+        }
+        return best?.coordinate
     }
 
     private func loadStyle(_ path: String) {

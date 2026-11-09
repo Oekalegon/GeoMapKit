@@ -4,7 +4,7 @@ import MapRender
 import MapStyle
 import SwiftUI
 
-/// A map from a feature store file, with pan and zoom.
+/// A map from a feature store (one file, or a set of block files), with pan, zoom and rotation.
 ///
 /// The view draws the map into an image that is a little larger than the view and shows that image moved and scaled
 /// while the user pans or zooms. A new image is drawn only when the view has moved far from the image's centre (half the
@@ -21,7 +21,7 @@ import SwiftUI
 ///
 /// The data credit is drawn over the map, in the corner of the view, as the style's `attribution` setting says.
 public struct MapView: View {
-    private let file: FeatureStoreFile
+    private let source: any CellSource
     private let style: MapStyle
     @Binding private var center: Coordinate
     @Binding private var zoom: Double
@@ -51,28 +51,46 @@ public struct MapView: View {
     ///   - center: The coordinate in the middle of the view. The view changes it when the user pans.
     ///   - zoom: The fractional zoom level (256-point tiles). The view changes it when the user zooms.
     public init(file: FeatureStoreFile, style: MapStyle = .standard, center: Binding<Coordinate>, zoom: Binding<Double>) {
-        self.init(file: file, style: style, center: center, zoom: zoom, bearing: .constant(0))
+        self.init(source: file, style: style, center: center, zoom: zoom, bearing: .constant(0))
     }
 
-    /// Creates a map view that can be turned.
+    /// Creates a map view that can be turned, from one store file.
     ///
     /// - Parameters:
     ///   - file: The store to draw. Read-only; the view never writes.
     ///   - style: The style. Changing it draws a new image.
     ///   - center: The coordinate in the middle of the view. The view changes it when the user pans.
     ///   - zoom: The fractional zoom level (256-point tiles). The view changes it when the user zooms.
-    ///   - bearing: The compass direction at the top of the view, in degrees clockwise from north (0 is north up). The view
-    ///     changes it when the user turns the map; labels stay upright at every bearing.
+    ///   - bearing: The compass direction at the top of the view, in degrees clockwise from north (0 is north up).
     public init(
         file: FeatureStoreFile, style: MapStyle = .standard, center: Binding<Coordinate>, zoom: Binding<Double>,
         bearing: Binding<Double>
     ) {
-        self.file = file
+        self.init(source: file, style: style, center: center, zoom: zoom, bearing: bearing)
+    }
+
+    /// Creates a map view that can be turned, from a store: one file, or a set of block files (a `StoreSet`).
+    ///
+    /// - Parameters:
+    ///   - source: The store to draw. Read-only; the view never writes. A set opens its block files when the view first needs
+    ///     them, and a damaged or missing block shows as the error text (over the map when a frame is already on screen).
+    ///     The view reads the store once, when it is created: to show another store, give the view a new identity
+    ///     (`.id(…)`); only a change of style is picked up.
+    ///   - style: The style. Changing it draws a new image.
+    ///   - center: The coordinate in the middle of the view. The view changes it when the user pans.
+    ///   - zoom: The fractional zoom level (256-point tiles). The view changes it when the user zooms.
+    ///   - bearing: The compass direction at the top of the view, in degrees clockwise from north (0 is north up). The view
+    ///     changes it when the user turns the map; labels stay upright at every bearing.
+    public init(
+        source: any CellSource, style: MapStyle = .standard, center: Binding<Coordinate>, zoom: Binding<Double>,
+        bearing: Binding<Double>
+    ) {
+        self.source = source
         self.style = style
         _center = center
         _zoom = zoom
         _bearing = bearing
-        _model = State(initialValue: MapModel(file: file, style: style))
+        _model = State(initialValue: MapModel(source: source, style: style))
     }
 
     public var body: some View {
@@ -90,6 +108,14 @@ public struct MapView: View {
                         .position(x: plan.centre.x, y: plan.centre.y)
                 } else if let message = model.errorDescription {
                     Text(message).font(.footnote).multilineTextAlignment(.center).padding()
+                }
+            }
+            .overlay(alignment: .top) {
+                // A failed draw while a frame is on screen (a block that is missing or damaged) must not go unnoticed: the old
+                // frame would otherwise stay, moved and scaled, as if it were the map.
+                if model.frame != nil, let message = model.errorDescription {
+                    Text(message).font(.footnote).multilineTextAlignment(.center)
+                        .padding(6).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8)).padding(8)
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -126,7 +152,7 @@ public struct MapView: View {
                 if !now { model.request(viewport: viewport, scale: displayScale, interacting: false) }
             }
             .onChange(of: style) { _, new in
-                model.update(file: file, style: new)
+                model.update(source: source, style: new)
                 model.request(viewport: viewport, scale: displayScale, interacting: false)
             }
             .task { model.request(viewport: viewport, scale: displayScale, interacting: false) }
@@ -241,14 +267,14 @@ public struct MapView: View {
 
     /// The data credit in the corner of the view, or nothing when the style hides it (the app then shows it elsewhere).
     @ViewBuilder private var attributionLabel: some View {
-        if let text = style.attribution.text(for: file.attribution) {
+        if let text = style.attribution.text(for: source.attribution) {
             Text(text)
                 .font(.system(size: 8))
                 .foregroundStyle(Color.black.opacity(0.8))
                 .padding(.horizontal, 3)
                 .background(Color.white.opacity(0.7))
                 .allowsHitTesting(false)
-                .accessibilityLabel(file.attribution)
+                .accessibilityLabel(source.attribution)
         }
     }
 }
