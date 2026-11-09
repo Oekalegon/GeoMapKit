@@ -83,7 +83,7 @@
 		EE501F300C05598F1FAEAE6F /* GeoMapKitDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoMapKitDemoApp.swift; sourceTree = "<group>"; };
 		F0877FCC5C94C2B18FE723F6 /* StyleItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleItem.swift; sourceTree = "<group>"; };
 		FC772F2A0A656DE857078DBA /* GeoMapKitDemoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GeoMapKitDemoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		"TEMP_9068B4B4-5E4B-425D-A2C3-F14815376815" /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		"TEMP_8CA669EC-4467-486B-9606-832667D6B659" /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -203,10 +203,10 @@
 			path = GeoMapKitDemoWatch;
 			sourceTree = "<group>";
 		};
-		"TEMP_D793277B-C967-4CC5-B2D0-74E9AF509A0E" /* Apps */ = {
+		"TEMP_41F983DC-5DD2-4104-A34A-4C11F4D427A6" /* Apps */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_9068B4B4-5E4B-425D-A2C3-F14815376815" /* Config.xcconfig */,
+				"TEMP_8CA669EC-4467-486B-9606-832667D6B659" /* Config.xcconfig */,
 			);
 			path = Apps;
 			sourceTree = "<group>";
@@ -381,6 +381,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				"BUNDLE_LOADER[sdk=macosx*]" = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -388,9 +389,14 @@
 					"@loader_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_PREFIX).GeoMapKitDemoTests";
-				SDKROOT = iphoneos;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GeoMapKitDemo.app/GeoMapKitDemo";
+				"TEST_HOST[sdk=macosx*]" = "$(BUILT_PRODUCTS_DIR)/GeoMapKitDemo.app/Contents/MacOS/GeoMapKitDemo";
 			};
 			name = Release;
 		};
@@ -466,7 +472,7 @@
 		};
 		BDCADAD5C2E4D45BC51AFB17 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_9068B4B4-5E4B-425D-A2C3-F14815376815" /* Config.xcconfig */;
+			baseConfigurationReference = "TEMP_8CA669EC-4467-486B-9606-832667D6B659" /* Config.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -535,7 +541,7 @@
 		};
 		E8DADC79AC588C4379677925 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_9068B4B4-5E4B-425D-A2C3-F14815376815" /* Config.xcconfig */;
+			baseConfigurationReference = "TEMP_8CA669EC-4467-486B-9606-832667D6B659" /* Config.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -599,6 +605,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				"BUNDLE_LOADER[sdk=macosx*]" = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -606,9 +613,14 @@
 					"@loader_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_PREFIX).GeoMapKitDemoTests";
-				SDKROOT = iphoneos;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GeoMapKitDemo.app/GeoMapKitDemo";
+				"TEST_HOST[sdk=macosx*]" = "$(BUILT_PRODUCTS_DIR)/GeoMapKitDemo.app/Contents/MacOS/GeoMapKitDemo";
 			};
 			name = Debug;
 		};

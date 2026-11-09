@@ -75,9 +75,12 @@ struct LibraryScreen: View {
             ) { result in
                 guard case .success(let urls) = result else { return }
                 let added = library.add(urls)
-                errors = added
-                if added.isEmpty, importing == .maps, urls.count == 1, let map = library.maps.first(where: { $0.date >= Date().addingTimeInterval(-5) }) {
-                    library.selectedMapID = map.id
+                errors = added.errors
+                // What was just added is what the user wants: a map is opened, a style is applied to the map that is open.
+                if let id = added.maps.first {
+                    library.selectedMapID = id
+                } else if let id = added.styles.first, let map = library.selectedMapID {
+                    library.setStyleChoice(.user(id), forMap: map)
                 }
             }
             .alert("Could not add", isPresented: Binding(get: { !errors.isEmpty }, set: { if !$0 { errors = [] } })) {
@@ -128,6 +131,7 @@ struct LibraryScreen: View {
         switch map.kind {
         case .file: map.bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? ""
         case .blocks: "A folder of blocks, where it is"
+        case .linkedFile: "A big file, where it is"
         }
     }
 

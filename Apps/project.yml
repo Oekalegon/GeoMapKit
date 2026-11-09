@@ -79,9 +79,6 @@ targets:
           - CFBundleTypeName: GeoMapKit feature store
             CFBundleTypeRole: Viewer
             LSItemContentTypes: [org.oekalegon.geomapkit.store]
-          - CFBundleTypeName: GeoMapKit style
-            CFBundleTypeRole: Viewer
-            LSItemContentTypes: [public.json]
 
   # The Watch app: a placeholder in this step; the map and the transfer from the phone come in a later one.
   GeoMapKitDemoWatch:
@@ -113,7 +110,7 @@ targets:
 
   GeoMapKitDemoTests:
     type: bundle.unit-test
-    platform: iOS
+    supportedDestinations: [iOS, macOS]
     sources:
       - GeoMapKitDemoTests
     dependencies:
@@ -126,6 +123,10 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_PREFIX).GeoMapKitDemoTests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/GeoMapKitDemo.app/GeoMapKitDemo
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST[sdk=macosx*]: $(BUILT_PRODUCTS_DIR)/GeoMapKitDemo.app/Contents/MacOS/GeoMapKitDemo
+        BUNDLE_LOADER[sdk=macosx*]: $(TEST_HOST)
 
 schemes:
   GeoMapKitDemo:

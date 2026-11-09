@@ -10,6 +10,8 @@ final class LocationModel: NSObject, CLLocationManagerDelegate {
     private(set) var coordinate: Coordinate?
     /// Whether the user said no, so the button can say what to do.
     private(set) var denied = false
+    /// Whether the user asked to be found: the position is followed while the app is active.
+    private(set) var following = false
 
     private let manager = CLLocationManager()
 
@@ -21,6 +23,7 @@ final class LocationModel: NSObject, CLLocationManagerDelegate {
 
     /// Asks for permission the first time (when the user asks to be found), and then follows the position.
     func start() {
+        following = true
         switch manager.authorizationStatus {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
@@ -42,7 +45,10 @@ final class LocationModel: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    /// Stops following (when the app is no longer active, to save the battery); `resume()` starts again if the user had asked.
     func stop() { manager.stopUpdatingLocation() }
+
+    func resume() { if following { followIfAllowed() } }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in self.followIfAllowed() }

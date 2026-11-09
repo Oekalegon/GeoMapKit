@@ -15,6 +15,9 @@ struct MapScreen: View {
     @State private var message: String?
     @State private var showLibrary = false
     @State private var location = LocationModel()
+    /// The user pressed "centre on me" before there was a position: the first one that comes is where the map goes.
+    @State private var centreWhenFound = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -61,6 +64,16 @@ struct MapScreen: View {
         .task(id: library.selectedMapID) { loadMap() }
         .onChange(of: library.revision) { _, _ in loadStyle() }
         .onDisappear { location.stop() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { location.resume() } else { location.stop() }
+        }
+        .onChange(of: location.coordinate) { _, found in
+            guard centreWhenFound, let found else { return }
+            centreWhenFound = false
+            message = nil
+            center = found
+            zoom = max(zoom, 13)
+        }
     }
 
     // MARK: Toolbar
@@ -119,6 +132,7 @@ struct MapScreen: View {
             center = coordinate
             zoom = max(zoom, 13)
         } else if !location.denied {
+            centreWhenFound = true
             message = "Waiting for your position…"
         } else {
             message = "Location is off for this app: turn it on in the settings."

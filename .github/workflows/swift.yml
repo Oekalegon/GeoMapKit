@@ -33,3 +33,31 @@ jobs:
 
     - name: Test tools
       run: swift test --package-path Tools
+
+  # The test apps in Apps/ use the package by path: a change in the kit must not break them.
+  apps:
+    name: Build the apps
+    runs-on: macos-26
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install XcodeGen
+      run: brew install xcodegen
+
+    # The project in Apps/ is generated from project.yml and committed: they must agree.
+    - name: The committed project is what project.yml generates
+      working-directory: Apps
+      run: |
+        xcodegen generate
+        git diff --exit-code -- .
+
+    - name: Test the library on the Mac
+      run: xcodebuild test -project Apps/GeoMapKitDemo.xcodeproj -scheme GeoMapKitDemo -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
+
+    - name: Build the app for the iOS Simulator
+      run: xcodebuild build -project Apps/GeoMapKitDemo.xcodeproj -scheme GeoMapKitDemo -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+
+    - name: Build the Watch app for the Watch Simulator
+      run: xcodebuild build -project Apps/GeoMapKitDemo.xcodeproj -scheme GeoMapKitDemoWatch -destination 'generic/platform=watchOS Simulator' CODE_SIGNING_ALLOWED=NO

@@ -35,8 +35,22 @@ final class MapLibrary {
         static let fallbackStyle = "style"
     }
 
-    /// The extension of the files that link to a folder of blocks.
+    /// The extension of the files that link to a folder of blocks or to a big file.
     static let linkExtension = "maplink"
+
+    /// A store file bigger than this is linked and not copied: a copy would take long on the main thread and use the space twice.
+    /// Smaller files (the maps of one run are some ten megabytes) are copied, which is quick.
+    var copyLimit: Int64 = 100_000_000
+
+    /// What `add(_:)` did.
+    struct AddResult {
+        /// The ids of the maps that were added, in the order of the items given.
+        var maps: [String] = []
+        /// The ids of the styles that were added.
+        var styles: [String] = []
+        /// One error for each item that could not be added.
+        var errors: [LibraryError] = []
+    }
 
     /// Opens the library in a folder: the Documents of the app, or another folder (tests use a new one).
     init(root: URL = URL.documentsDirectory, defaults: UserDefaults = .standard) {
@@ -57,8 +71,9 @@ final class MapLibrary {
         maps = Self.items(in: mapsDirectory).compactMap { url, values in
             let ext = url.pathExtension.lowercased()
             guard ext == "gmk" || ext == Self.linkExtension else { return nil }
+            let kind: MapItem.Kind = ext == "gmk" ? .file : (Self.linkKind(at: url) == .file ? .linkedFile : .blocks)
             return MapItem(
-                id: url.lastPathComponent, name: url.deletingPathExtension().lastPathComponent, kind: ext == "gmk" ? .file : .blocks,
+                id: url.lastPathComponent, name: url.deletingPathExtension().lastPathComponent, kind: kind,
                 bytes: ext == "gmk" ? Int64(values.fileSize ?? 0) : nil, date: values.contentModificationDate ?? .distantPast)
         }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         styles = Self.items(in: stylesDirectory).compactMap { url, values in
@@ -85,26 +100,28 @@ final class MapLibrary {
     /// Adds what the user picked: a `.gmk` store file (copied), a folder of blocks (linked, not copied) or a style (copied, after it was
     /// read as a style).
     ///
-    /// - Returns: One error for each item that could not be added; the others were added.
+    /// - Returns: The ids of what was added and one error for each item that could not be added; the others were added.
     @discardableResult
-    func add(_ urls: [URL]) -> [LibraryError] {
-        var errors: [LibraryError] = []
+    func add(_ urls: [URL]) -> AddResult {
+        var result = AddResult()
         for url in urls {
             let accessing = url.startAccessingSecurityScopedResource()
             defer { if accessing { url.stopAccessingSecurityScopedResource() } }
             do {
-                try add(url)
+                let added = try add(url)
+                if added.hasSuffix(".json") { result.styles.append(added) } else { result.maps.append(added) }
             } catch let error as LibraryError {
-                errors.append(error)
+                result.errors.append(error)
             } catch {
-                errors.append(.failed(url.lastPathComponent, error.localizedDescription))
+                result.errors.append(.failed(url.lastPathComponent, error.localizedDescription))
             }
         }
         reload()
-        return errors
+        return result
     }
 
-    private func add(_ url: URL) throws {
+    /// Adds one item and returns the file name it has in the library.
+    private func add(_ url: URL) throws -> String {
         let name = url.lastPathComponent
         let isFolder = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
         if isFolder {
@@ -113,14 +130,22 @@ final class MapLibrary {
             do { _ = try StoreSet(manifestURL: manifest) } catch { throw LibraryError.failed(name, "\(error)") }
             let bookmark = try Self.bookmark(for: url)
             let target = uniqueURL(in: mapsDirectory, name: url.lastPathComponent, ext: Self.linkExtension)
-            try JSONEncoder().encode(Link(bookmark: bookmark)).write(to: target, options: .atomic)
-            return
+            try JSONEncoder().encode(Link(bookmark: bookmark, kind: .folder)).write(to: target, options: .atomic)
+            return target.lastPathComponent
         }
         switch url.pathExtension.lowercased() {
         case "gmk":
             do { _ = try FeatureStoreFile(contentsOf: url) } catch { throw LibraryError.failed(name, "it is not a readable store file (\(error))") }
+            let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+            if size > copyLimit {
+                // Too big to copy: the file stays where it is and the library keeps a bookmark to it.
+                let target = uniqueURL(in: mapsDirectory, name: url.deletingPathExtension().lastPathComponent, ext: Self.linkExtension)
+                try JSONEncoder().encode(Link(bookmark: try Self.bookmark(for: url), kind: .file)).write(to: target, options: .atomic)
+                return target.lastPathComponent
+            }
             let target = uniqueURL(in: mapsDirectory, name: url.deletingPathExtension().lastPathComponent, ext: "gmk")
             try FileManager.default.copyItem(at: url, to: target)
+            return target.lastPathComponent
         case "json":
             let data = try Data(contentsOf: url)
             do { _ = try MapStyle(json: data) } catch {
@@ -130,6 +155,7 @@ final class MapLibrary {
             }
             let target = uniqueURL(in: stylesDirectory, name: url.deletingPathExtension().lastPathComponent, ext: "json")
             try data.write(to: target, options: .atomic)
+            return target.lastPathComponent
         default:
             throw LibraryError.notAMap(name)
         }
@@ -146,7 +172,16 @@ final class MapLibrary {
         return candidate
     }
 
-    private struct Link: Codable { var bookmark: Data }
+    private struct Link: Codable {
+        enum Kind: String, Codable { case folder, file }
+        var bookmark: Data
+        /// What the bookmark leads to; a link written before big files were linked has none and is a folder.
+        var kind: Kind?
+    }
+
+    private static func linkKind(at url: URL) -> Link.Kind {
+        ((try? JSONDecoder().decode(Link.self, from: Data(contentsOf: url)))?.kind) ?? .folder
+    }
 
     private static func bookmark(for folder: URL) throws -> Data {
         #if os(macOS)
@@ -259,7 +294,7 @@ final class MapLibrary {
             let file = try FeatureStoreFile(contentsOf: url(of: map))
             let box = file.boundingBox
             return OpenedMap(id: map.id, source: file, center: Self.middle(of: box), zoom: Self.zoom(fitting: box, limits: 4...16))
-        case .blocks:
+        case .blocks, .linkedFile:
             let link = try JSONDecoder().decode(Link.self, from: Data(contentsOf: url(of: map)))
             var stale = false
             #if os(macOS)
@@ -267,20 +302,28 @@ final class MapLibrary {
             #else
             let options: URL.BookmarkResolutionOptions = []
             #endif
-            guard let folder = try? URL(resolvingBookmarkData: link.bookmark, options: options, relativeTo: nil, bookmarkDataIsStale: &stale), !stale else {
+            guard let target = try? URL(resolvingBookmarkData: link.bookmark, options: options, relativeTo: nil, bookmarkDataIsStale: &stale), !stale else {
                 throw LibraryError.staleLink(map.name)
             }
-            let accessing = folder.startAccessingSecurityScopedResource()
+            // The access is held while the map is open (it is given back when the `OpenedMap` goes).
+            let accessing = target.startAccessingSecurityScopedResource()
             do {
-                let set = try StoreSet(manifestURL: folder.appendingPathComponent("manifest.json"))
+                if map.kind == .linkedFile {
+                    let file = try FeatureStoreFile(contentsOf: target)
+                    let box = file.boundingBox
+                    return OpenedMap(
+                        id: map.id, source: file, center: Self.middle(of: box), zoom: Self.zoom(fitting: box, limits: 4...16),
+                        accessed: accessing ? [target] : [])
+                }
+                let set = try StoreSet(manifestURL: target.appendingPathComponent("manifest.json"))
                 guard let box = set.boundingBox else { throw StoreSetError.invalidManifest("the manifest lists no blocks") }
                 // The middle of a big set can be in the sea: start in the block nearest to it.
                 let centre = Self.middle(of: box)
                 let start = Self.nearestBlockCentre(in: set, to: centre) ?? centre
                 return OpenedMap(
-                    id: map.id, source: set, center: start, zoom: Self.zoom(fitting: box, limits: 9...11), accessed: accessing ? [folder] : [])
+                    id: map.id, source: set, center: start, zoom: Self.zoom(fitting: box, limits: 9...11), accessed: accessing ? [target] : [])
             } catch {
-                if accessing { folder.stopAccessingSecurityScopedResource() }
+                if accessing { target.stopAccessingSecurityScopedResource() }
                 throw error
             }
         }

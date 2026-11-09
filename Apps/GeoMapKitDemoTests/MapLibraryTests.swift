@@ -41,11 +41,12 @@ struct MapLibraryTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let library = library(root)
         let source = try storeFile(named: "Halden.gmk", in: root)
-        #expect(library.add([source]).isEmpty)
+        #expect(library.add([source]).errors.isEmpty)
         #expect(library.maps.map(\.name) == ["Halden"] && library.maps[0].kind == .file && (library.maps[0].bytes ?? 0) > 0)
         #expect(FileManager.default.fileExists(atPath: library.url(of: library.maps[0]).path), "a copy in the app's folder")
-        // The same name again gets a number.
-        #expect(library.add([source]).isEmpty)
+        // The same name again gets a number, and what was added is named, so that the app can open it.
+        let again = library.add([source])
+        #expect(again.errors.isEmpty && again.maps == ["Halden 2.gmk"])
         #expect(library.maps.map(\.name) == ["Halden", "Halden 2"])
     }
 
@@ -59,7 +60,7 @@ struct MapLibraryTests {
         try Data("hello".utf8).write(to: text)
         let badStyle = root.appendingPathComponent("bad.json")
         try Data("{\"hello\": 1}".utf8).write(to: badStyle)
-        let errors = library.add([junk, text, badStyle])
+        let errors = library.add([junk, text, badStyle]).errors
         #expect(errors.count == 3 && library.maps.isEmpty && library.styles.isEmpty)
         #expect(errors.allSatisfy { ($0.errorDescription ?? "").isEmpty == false })
     }
@@ -71,7 +72,8 @@ struct MapLibraryTests {
         let styleFile = root.appendingPathComponent("Night.json")
         try MapStyle.watch.jsonData().write(to: styleFile)
         let store = try storeFile(named: "A.gmk", in: root)
-        #expect(library.add([styleFile, store]).isEmpty)
+        let added = library.add([styleFile, store])
+        #expect(added.errors.isEmpty && added.maps == ["A.gmk"] && added.styles == ["Night.json"])
         let map = try #require(library.maps.first), style = try #require(library.styles.first)
         #expect(library.styleChoice(forMap: map.id) == .standard, "no choice yet")
         library.setStyleChoice(.user(style.id), forMap: map.id)
@@ -125,7 +127,7 @@ struct MapLibraryTests {
             blocks: [StoreManifest.Block(x: 136, y: 75, file: "blocks/8-136-75.gmk", bytes: Int64(data.count), builtAt: Date())])
         try manifest.jsonData().write(to: blocks.appendingPathComponent("manifest.json"))
         let library = library(root)
-        #expect(library.add([blocks]).isEmpty)
+        #expect(library.add([blocks]).errors.isEmpty)
         let map = try #require(library.maps.first)
         #expect(map.kind == .blocks && map.name == "Set" && map.bytes == nil)
         #expect(!FileManager.default.fileExists(atPath: library.mapsDirectory.appendingPathComponent("blocks").path), "nothing was copied")
@@ -134,7 +136,7 @@ struct MapLibraryTests {
         // A folder without a manifest, and the manifest alone, are refused.
         let empty = root.appendingPathComponent("Empty")
         try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
-        #expect(library.add([empty, blocks.appendingPathComponent("manifest.json")]).count == 2)
+        #expect(library.add([empty, blocks.appendingPathComponent("manifest.json")]).errors.count == 2)
     }
 
     @Test func theSelectionIsRememberedAndAFileThatIsGoneFallsAway() throws {
@@ -149,5 +151,23 @@ struct MapLibraryTests {
         try FileManager.default.removeItem(at: second.mapsDirectory.appendingPathComponent("Keep.gmk"))
         second.reload()
         #expect(second.selectedMapID == nil && second.maps.isEmpty, "nothing to select")
+    }
+
+    @Test func aStoreFileOverTheCopyLimitIsLinkedAndStillOpens() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = library(root)
+        library.copyLimit = 10   // every file is "big"
+        let source = try storeFile(named: "Big.gmk", in: root)
+        let added = library.add([source])
+        #expect(added.errors.isEmpty && added.maps == ["Big.maplink"])
+        let map = try #require(library.maps.first)
+        #expect(map.kind == .linkedFile && map.name == "Big")
+        #expect(!FileManager.default.fileExists(atPath: library.mapsDirectory.appendingPathComponent("Big.gmk").path), "not copied")
+        let opened = try library.open(map)
+        #expect(opened.source.storageZoom == 13 && abs(opened.center.latitude - 59.15) < 0.01)
+        // The file goes away: the link cannot be opened any more, with a reason.
+        try FileManager.default.removeItem(at: source)
+        #expect(throws: (any Error).self) { try library.open(map) }
     }
 }

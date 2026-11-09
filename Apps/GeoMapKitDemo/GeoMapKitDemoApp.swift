@@ -11,10 +11,8 @@ struct GeoMapKitDemoApp: App {
                 .environment(library)
                 // A store or a style that was opened with this app from the Files app, AirDrop or Finder.
                 .onOpenURL { url in
-                    let errors = library.add([url])
-                    if errors.isEmpty, let map = library.maps.first(where: { $0.id.hasPrefix(url.deletingPathExtension().lastPathComponent) }) {
-                        library.selectedMapID = map.id
-                    }
+                    // The map that was just added is the one to look at.
+                    if let id = library.add([url]).maps.first { library.selectedMapID = id }
                 }
         }
     }
