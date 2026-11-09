@@ -48,3 +48,26 @@ struct WaterSizeTests {
         #expect(WaterSize.isSmall([]))
     }
 }
+
+@Suite("Park size")
+struct ParkSizeTests {
+    private func square(sideKilometres: Double) -> [PackedPoint] {
+        let dLon = Int32(sideKilometres * 1000 / (111_320 * 0.6157) * 1e7), dLat = Int32(sideKilometres * 1000 / 110_574 * 1e7)
+        let lon: Int32 = 50_000_000, lat: Int32 = 520_000_000
+        return [
+            PackedPoint(longitude: lon, latitude: lat), PackedPoint(longitude: lon + dLon, latitude: lat),
+            PackedPoint(longitude: lon + dLon, latitude: lat + dLat), PackedPoint(longitude: lon, latitude: lat + dLat),
+            PackedPoint(longitude: lon, latitude: lat),
+        ]
+    }
+
+    @Test func aSmallReserveIsSmallAndANationalParkIsNot() {
+        #expect(ParkSize.isSmall([square(sideKilometres: 3)]), "9 km²")
+        #expect(!ParkSize.isSmall([square(sideKilometres: 8)]), "64 km²")
+    }
+
+    @Test func anOutlineThatIsNotClosedIsKeptBecauseItsSizeIsNotKnown() {
+        #expect(!ParkSize.isSmall([Array(square(sideKilometres: 1).dropLast())]))
+        #expect(!ParkSize.isSmall([]))
+    }
+}

@@ -12,12 +12,14 @@ extension FeatureStoreBuilder {
         _ classification: Classification, objectType: StoredObjectType, objectID: Int64, tags: [OSMTag], lines: [[PackedPoint]],
         extraFlags: FeatureFlags = [], shore: ShoreContext, into emitter: inout FeatureEmitter
     ) throws {
+        // A small park has its border from the mid band only (`ParkSize`).
+        let band = classification.minimumBand == .overview && ParkSize.isSmall(lines) ? ZoomBand.mid : classification.minimumBand
         let (land, inSea) = shore.parkBorder(lines)
         emitter.report.parkBorderStretchesInSea += inSea.count
         for (featureClass, stretches) in [(FeatureClass.parkBorder, land), (FeatureClass.parkBorderSea, inSea)] where !stretches.isEmpty {
             let part = Classification(
                 featureClass: featureClass, subclass: classification.subclass, kind: .line,
-                minimumBand: classification.minimumBand, showsOnWatch: classification.showsOnWatch)
+                minimumBand: band, showsOnWatch: classification.showsOnWatch)
             try emitter.emit(FeatureSpec(
                 classification: part, objectType: objectType, objectID: objectID, tags: tags, geometry: .lines(stretches),
                 extraFlags: extraFlags))

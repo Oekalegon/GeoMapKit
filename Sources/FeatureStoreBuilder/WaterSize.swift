@@ -12,8 +12,8 @@ enum WaterSize {
     /// The smallest size in square metres: 20 hectares, a bit under 7 pixels square at zoom 11 at 60° N.
     static let minimumArea = 200_000.0
 
-    /// Whether the rings (outer rings and holes together, each counted with its absolute area) are too thin or too small for the overview band.
-    static func isSmall(_ rings: [[PackedPoint]]) -> Bool {
+    /// The area (square metres, every ring with its absolute area) and the perimeter (metres) of closed rings.
+    static func measure(_ rings: [[PackedPoint]]) -> (area: Double, perimeter: Double) {
         var area = 0.0, perimeter = 0.0
         for ring in rings where ring.count >= 4 {
             let metresPerDegreeLongitude = 111_320.0 * cos(Double(ring[0].latitude) / 1e7 * .pi / 180)
@@ -29,6 +29,12 @@ enum WaterSize {
             }
             area += abs(twiceArea) / 2
         }
+        return (area, perimeter)
+    }
+
+    /// Whether the rings (outer rings and holes together, each counted with its absolute area) are too thin or too small for the overview band.
+    static func isSmall(_ rings: [[PackedPoint]]) -> Bool {
+        let (area, perimeter) = measure(rings)
         guard perimeter > 0 else { return true }
         return area < minimumArea || 2 * area / perimeter < minimumWidth
     }
@@ -41,5 +47,21 @@ enum WaterSize {
         return Classification(
             featureClass: classification.featureClass, subclass: classification.subclass, kind: classification.kind, minimumBand: .mid,
             showsOnWatch: classification.showsOnWatch)
+    }
+}
+
+/// Which protected areas have their border in the overview band (rule table version 21).
+///
+/// The border of every nature reserve and every Natura 2000 site is a dashed green line; in a country with many small ones (the
+/// Veluwe, the dunes) they cover the map at zoom 9. A park whose outline is closed and encloses less than `minimumArea` is stored from
+/// the mid band; one whose outline is not closed (so its size is not known) stays in the overview band.
+enum ParkSize {
+    /// 30 square kilometres: about 25 pixels across at zoom 9 at 52° N.
+    static let minimumArea = 30_000_000.0
+
+    static func isSmall(_ lines: [[PackedPoint]]) -> Bool {
+        let closed = lines.filter { $0.count >= 4 && $0.first == $0.last }
+        guard !closed.isEmpty else { return false }
+        return WaterSize.measure(closed).area < minimumArea
     }
 }
