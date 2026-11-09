@@ -18,6 +18,20 @@ public protocol CellSource: Sendable {
     /// - Returns: The file, or `nil` if no file holds the cell (outside the stored area, or a cell that is empty).
     /// - Throws: A ``FeatureStoreError`` or ``StoreSetError`` if the file cannot be read.
     func file(containing cell: TileID) throws -> FeatureStoreFile?
+
+    /// The source to read for a view at a zoom: a set with coarse levels hands out the level that serves the zoom, so that a view
+    /// of hundreds of kilometres touches a few thousand cells and not hundreds of thousands. The default is the source itself.
+    ///
+    /// The result is a source of its own: it has its own cell zoom (``storageZoom``) and bands, and the caller reads the cells of
+    /// the view from it.
+    ///
+    /// - Parameter zoom: The fractional zoom of the view (256-point tiles).
+    func source(atZoom zoom: Double) -> any CellSource
+}
+
+extension CellSource {
+    /// A source without levels is the source for every zoom.
+    public func source(atZoom zoom: Double) -> any CellSource { self }
 }
 
 extension FeatureStoreFile: CellSource {

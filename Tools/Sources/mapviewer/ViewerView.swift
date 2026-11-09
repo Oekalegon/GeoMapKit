@@ -40,6 +40,9 @@ struct ViewerView: View {
     /// The Watch style draws nothing below this zoom (the Watch holds the mid and detail bands only).
     private static let watchMinimumZoom = 12.0
 
+    /// What serves the view at this zoom, for a set of blocks that has levels: `level 6` or `blocks`.
+    private var servedBy: String? { (store as? StoreSet).map { $0.levelName(forZoom: zoom) } }
+
     private var style: MapStyle {
         switch choice {
         case .standard: return .standard
@@ -113,6 +116,7 @@ struct ViewerView: View {
                 zoom = max(zoom - 1, choice == .watch ? Self.watchMinimumZoom : MapView.zoomRange.lowerBound)
             }
             Text(String(format: "z%.2f", zoom)).monospacedDigit()
+            if let servedBy { Text(servedBy).foregroundStyle(.secondary) }
             Button("+") { zoom = min(zoom + 1, MapView.zoomRange.upperBound) }
             Text(String(format: "%.5f, %.5f", center.latitude, center.longitude)).monospacedDigit().foregroundStyle(.secondary)
         }

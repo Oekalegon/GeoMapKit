@@ -18,6 +18,7 @@ public struct StoreSet: CellSource {
 
     private let blocksByTile: [Int: StoreManifest.Block]
     private let cache: BlockCache
+    private let levels: [LevelSource]
 
     /// Opens a set from its manifest file.
     ///
@@ -49,6 +50,10 @@ public struct StoreSet: CellSource {
         let side = 1 << manifest.blockZoom
         blocksByTile = Dictionary(uniqueKeysWithValues: manifest.blocks.map { ($0.y * side + $0.x, $0) })
         cache = BlockCache(limit: self.maximumOpenBlocks)
+        let stale = manifest.staleLevelBlocks()
+        levels = manifest.levels.sorted { $0.topZoom < $1.topZoom }.map {
+            LevelSource(level: $0, manifest: manifest, stale: stale, directory: directory, maximumOpenBlocks: maximumOpenBlocks)
+        }
     }
 
     // MARK: CellSource
@@ -95,72 +100,37 @@ public struct StoreSet: CellSource {
     /// The number of block files that are open now (for tests and measurements).
     public var openBlockCount: Int { cache.count }
 
+    // MARK: Levels
+
+    /// The level that serves a zoom: the one with the smallest top zoom that is at least the zoom. A zoom above the finest level
+    /// is read from the blocks (the cells of zoom 13), a zoom below the coarsest level from the coarsest, and a level that is
+    /// missing is replaced by the next finer one, so there is no zoom without a source.
+    ///
+    /// - Parameter zoom: The fractional zoom of the view.
+    /// - Returns: The level, or `nil` when the blocks serve the zoom (also when the set has no levels).
+    public func level(forZoom zoom: Double) -> LevelSource? {
+        levels.first { Double($0.level.topZoom) >= zoom }
+    }
+
+    /// The source to read for a view at a zoom: the level that serves it (see ``level(forZoom:)``), or the set itself.
+    public func source(atZoom zoom: Double) -> any CellSource {
+        level(forZoom: zoom).map { $0 as any CellSource } ?? self
+    }
+
+    /// A short name of what serves a zoom, for a label: `level 6` or `blocks`.
+    public func levelName(forZoom zoom: Double) -> String {
+        level(forZoom: zoom).map { "level \($0.level.topZoom)" } ?? "blocks"
+    }
+
     // MARK: Opening blocks
 
     private func openBlock(_ block: StoreManifest.Block, key: Int) throws -> FeatureStoreFile {
         if let open = cache.file(for: key) { return open }
-        let url = directory.appendingPathComponent(block.file)
-        // A block must be inside the folder even when a link in it points elsewhere.
-        let folder = directory.standardizedFileURL.resolvingSymlinksInPath().path
-        guard url.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(folder + "/") else {
-            throw StoreSetError.blockMismatch(file: block.file, reason: "the file is not inside the folder of the manifest")
-        }
-        guard FileManager.default.fileExists(atPath: url.path) else { throw StoreSetError.blockMissing(block.file) }
-        let file: FeatureStoreFile
-        do {
-            file = try FeatureStoreFile(contentsOf: url)
-        } catch {
-            throw StoreSetError.blockMismatch(file: block.file, reason: "it is not a readable store file (\(error))")
-        }
-        guard file.storageZoom == manifest.storageZoom else {
-            throw StoreSetError.blockMismatch(file: block.file, reason: "storage zoom \(file.storageZoom), the manifest says \(manifest.storageZoom)")
-        }
-        guard file.formatVersion == manifest.formatVersion, file.classifierVersion == manifest.classifierVersion else {
-            throw StoreSetError.blockMismatch(
-                file: block.file,
-                reason: "format \(file.formatVersion) and rule table \(file.classifierVersion), the manifest says \(manifest.formatVersion) and \(manifest.classifierVersion)")
-        }
-        // A file only has the bands that hold a feature, so a sparse block (sea, bare land) has fewer than the manifest lists;
-        // a band the manifest does not list means another build. (This no longer separates profiles: a Watch block with the mid and
-        // detail bands passes in a full manifest; the other checks and the producer, which replaces a manifest of another profile, remain.)
-        guard Set(file.bands.map { Int($0.rawValue) }).isSubset(of: manifest.bands) else {
-            throw StoreSetError.blockMismatch(file: block.file, reason: "it holds bands that the manifest does not list")
-        }
-        // The manifest says which build each block is from; a file of another size is another build, or a half-written one.
-        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize.map(Int64.init) ?? -1
-        guard size == block.bytes else {
-            throw StoreSetError.blockMismatch(file: block.file, reason: "the file has \(size) bytes, the manifest says \(block.bytes)")
-        }
+        let file = try BlockOpening.open(
+            file: block.file, bytes: block.bytes, in: directory, storageZoom: manifest.storageZoom, manifest: manifest, bands: manifest.bands)
         cache.store(file, for: key)
         return file
     }
 }
 
 /// The block files that are open, least recently used first out. It has a lock because a map can be built on several threads.
-private final class BlockCache: @unchecked Sendable {
-    private let limit: Int
-    private let lock = NSLock()
-    private var files: [Int: FeatureStoreFile] = [:]
-    private var order: [Int] = []
-
-    init(limit: Int) { self.limit = limit }
-
-    var count: Int { lock.lock(); defer { lock.unlock() }; return files.count }
-
-    func file(for key: Int) -> FeatureStoreFile? {
-        lock.lock(); defer { lock.unlock() }
-        guard let file = files[key] else { return nil }
-        order.removeAll { $0 == key }
-        order.append(key)
-        return file
-    }
-
-    func store(_ file: FeatureStoreFile, for key: Int) {
-        lock.lock(); defer { lock.unlock() }
-        if files.updateValue(file, forKey: key) == nil { order.append(key) } else { order.removeAll { $0 == key }; order.append(key) }
-        while files.count > limit, let oldest = order.first {
-            order.removeFirst()
-            files[oldest] = nil
-        }
-    }
-}

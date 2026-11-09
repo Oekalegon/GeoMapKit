@@ -82,6 +82,7 @@ struct BuildLevelsTests {
         var seen: [LevelOutcome] = []
         let report = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]), progress: { seen.append($0) })
         #expect(report.outcomes.count == 2 && built(report) == 2 && seen.count == 2)
+        #expect(report.openAreaChains == 0 && report.areaEndsJoined == 0 && report.outcomes.allSatisfy { $0.openAreaChains == 0 })
         let manifest = try read(folder)
         #expect(manifest.version == 2 && manifest.levels.map(\.topZoom) == [8, 6])
         #expect(manifest.levels.map(\.storageZoom) == [10, 8] && manifest.levels.map(\.blockZoom) == [8, 8])
@@ -126,6 +127,17 @@ struct BuildLevelsTests {
         #expect(try read(folder).levels.map(\.topZoom) == [6], "the level that was not asked for stays")
     }
 
+    @Test("The default levels are 9 down to 3, each with the cells and blocks of the design")
+    func defaultLevels() async throws {
+        let folder = try blocks()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        #expect(LevelRequest(directory: folder).topZooms == [9, 8, 7, 6, 5, 4, 3])
+        _ = try await ToolRunner.buildLevels(LevelRequest(directory: folder))
+        let levels = try read(folder).levels
+        // The road of the test set is 0.13 degree long: three pixels at the top zoom 5 are 0.1318 degree, so the levels 5 to 3 hold nothing.
+        #expect(levels.map(\.topZoom) == [9, 8, 7, 6] && levels.map(\.storageZoom) == [11, 10, 9, 8] && levels.map(\.blockZoom) == [8, 8, 8, 8])
+    }
+
     @Test("Folders and arguments that do not fit are refused")
     func refuses() async throws {
         let folder = try blocks()
@@ -149,6 +161,7 @@ struct BuildLevelsTests {
         let report = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8]))
         let text = ReportFormatter.text(for: report)
         #expect(text.contains("Level blocks: 1, 1 built") && text.contains("level 8 (cells of zoom 10): 1 block,"))
+        #expect(text.contains("Area chains that did not close (drawn as outlines): 0"))
         #expect(ReportFormatter.line(for: report.outcomes[0]).hasPrefix("level 8 block 140/75: built"))
     }
 

@@ -4,15 +4,14 @@ import GeoCore
 extension LevelOutput {
     /// Dissolves the rings of every area feature, drops the small ones, cuts them at the border of the block, simplifies
     /// what lies in the block (the edges along the border of the block are kept as they are) and cuts that into level cells.
+    /// The chains that stay open are written apart, as an incomplete feature.
     mutating func writeAreas(_ collected: LevelCollection, region: LevelRegion) throws {
         let blockRect = CellRect(tile: tile)
-        for key in collected.rings.keys.sorted() {
-            guard let rings = collected.rings[key], var attributes = collected.attributes[key] else { continue }
-            let dissolved = LevelDissolve.rings(of: rings, present: collected.present, region: region)
-            report.openAreaChains += dissolved.open
-            if dissolved.open > 0 { attributes.incomplete = true }
+
+        /// The parts of the rings in the cells of the level: dropped when small, cut at the block, simplified, cut into cells.
+        func parts(of rings: [[PackedPoint]]) -> [TileID: [GeometryPart]] {
             var partsByCell: [TileID: [GeometryPart]] = [:]
-            for ring in dissolved.rings {
+            for ring in rings {
                 guard extent(ring) >= spec.minimumExtent else { report.droppedAsSmall += 1; continue }
                 guard let clipped = RingClipper.clip(ring, to: blockRect) else { continue }
                 guard let simplified = Self.simplified(clipped, tolerance: spec.tolerance) else {
@@ -26,9 +25,30 @@ extension LevelOutput {
                     partsByCell[cell, default: []].append(part)
                 }
             }
-            for cell in partsByCell.keys.sorted(by: { ($0.y, $0.x) < ($1.y, $1.x) }) {
-                guard let parts = FeatureEmitter.withoutCancellingSquares(partsByCell[cell] ?? [], in: cell), !parts.isEmpty else { continue }
+            return partsByCell
+        }
+
+        for key in collected.rings.keys.sorted() {
+            guard let rings = collected.rings[key], let attributes = collected.attributes[key] else { continue }
+            let dissolved = LevelDissolve.rings(of: rings, region: region, snapRadians: 2 * spec.tolerance)
+            report.joinedBySnap += dissolved.joinedBySnap
+            report.joinedAlongBorder += dissolved.joinedAlongBorder
+            report.openAreaChains += dissolved.open.count
+
+            // The rings that closed are filled; a chain that did not close is written on its own, closed with a straight line and
+            // marked incomplete, so that it is drawn as an outline and the rest of the feature (the sea of the block) keeps its fill.
+            let closed = parts(of: dissolved.rings)
+            for cell in closed.keys.sorted(by: { ($0.y, $0.x) < ($1.y, $1.x) }) {
+                guard let parts = FeatureEmitter.withoutCancellingSquares(closed[cell] ?? [], in: cell), !parts.isEmpty else { continue }
                 try add(key, attributes, kind: .area, parts: parts, in: cell)
+            }
+            guard !dissolved.open.isEmpty else { continue }
+            var incomplete = attributes
+            incomplete.incomplete = true
+            let open = parts(of: dissolved.open.compactMap { chain in chain.first.map { chain + [$0] } })
+            for cell in open.keys.sorted(by: { ($0.y, $0.x) < ($1.y, $1.x) }) {
+                guard let parts = open[cell], !parts.isEmpty else { continue }
+                try add(key, incomplete, kind: .area, parts: parts, in: cell)
             }
         }
     }

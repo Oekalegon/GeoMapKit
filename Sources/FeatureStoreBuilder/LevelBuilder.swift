@@ -62,7 +62,6 @@ public enum LevelBuilder {
             for x in region.columns {
                 guard let cell = TileID(zoom: sourceZoom, x: x, y: y), let file = try source.file(containing: cell) else { continue }
                 firstFile = firstFile ?? file
-                collected.present.insert(cell)
                 report.cellsRead += 1
                 for feature in try file.features(in: cell, band: .overview, classes: spec.classes) {
                     report.featuresRead += 1

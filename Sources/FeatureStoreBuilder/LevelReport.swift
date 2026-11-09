@@ -12,16 +12,21 @@ public struct LevelReport: Sendable, Equatable, CustomStringConvertible {
     public var cellsWritten = 0
     /// Line chains and area rings dropped for being smaller than three pixels.
     public var droppedAsSmall = 0
-    /// Area chains that did not close and were closed with a straight line; their feature is marked incomplete.
+    /// Area chains that did not close and were closed with a straight line; they are written as an incomplete feature (outline only).
     public var openAreaChains = 0
     /// Lines whose pieces were joined into one.
     public var linesJoined = 0
+    /// Ends of area chains that were joined to a start within a pixel of the top zoom of the level.
+    public var joinedBySnap = 0
+    /// Ends of area chains that were joined to a start on the same line of a cell border.
+    public var joinedAlongBorder = 0
 
     /// Creates an empty report.
     public init() {}
 
     public var description: String {
         "\(cellsRead) source cells, \(featuresRead) features read; \(featuresWritten) features, \(verticesWritten) vertices in \(cellsWritten) cells written; "
-            + "\(linesJoined) lines joined, \(droppedAsSmall) dropped as small, \(openAreaChains) open area chains"
+            + "\(linesJoined) lines joined, \(droppedAsSmall) dropped as small, \(joinedBySnap + joinedAlongBorder) area ends joined (\(joinedAlongBorder) along a border), "
+            + "\(openAreaChains) open area chains"
     }
 }
