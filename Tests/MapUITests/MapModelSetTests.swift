@@ -88,11 +88,32 @@ struct MapModelSetTests {
 
     @Test func aNewSourceDropsTheOldFrame() async throws {
         let (set, centre, folder) = try blocks()
-        defer { try? FileManager.default.removeItem(at: folder) }
+        let (other, _, otherFolder) = try blocks()
+        defer {
+            try? FileManager.default.removeItem(at: folder)
+            try? FileManager.default.removeItem(at: otherFolder)
+        }
         let model = MapModel(source: set, style: .standard)
         model.request(viewport: MapViewport(center: centre, zoom: 17, width: 200, height: 100), scale: 1, interacting: false)
         _ = try await waitForFrame(model)
-        model.update(source: set, style: .watch)
-        #expect(model.frame == nil, "a frame of the old style is not shown")
+        model.update(source: other, style: .standard)
+        #expect(model.frame == nil, "a frame of the old source is not shown")
+    }
+
+    @Test func aBlockThatFailsAfterAFrameIsOnScreenSetsTheError() async throws {
+        let (set, centre, folder) = try blocks()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let model = MapModel(source: set, style: .standard)
+        // First a view inside the west block only, so the east block is not opened yet.
+        let inside = Coordinate(latitude: centre.latitude, longitude: centre.longitude - 0.02)
+        model.request(viewport: MapViewport(center: inside, zoom: 17, width: 200, height: 100), scale: 1, interacting: false)
+        _ = try await waitForFrame(model)
+        #expect(set.openBlockCount == 1)
+        try FileManager.default.removeItem(at: folder.appendingPathComponent("east.gmk"))
+        // The view moves to the seam, where the next frame needs the east block.
+        model.request(viewport: MapViewport(center: centre, zoom: 17, width: 200, height: 100), scale: 1, interacting: false)
+        for _ in 0..<200 where model.errorDescription == nil { try await Task.sleep(for: .milliseconds(25)) }
+        #expect(model.frame != nil, "the old frame is still there")
+        #expect(model.errorDescription?.contains("east.gmk") == true)
     }
 }

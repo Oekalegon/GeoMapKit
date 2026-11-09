@@ -80,7 +80,7 @@ struct ViewerView: View {
         .frame(minWidth: 520, minHeight: 420)
         .fileImporter(
             isPresented: Binding(get: { importing != nil }, set: { if !$0 { importing = nil } }),
-            allowedContentTypes: importing == .style ? [.json] : [UTType(filenameExtension: "gmk") ?? .data, .json]
+            allowedContentTypes: importing == .style ? [.json] : [UTType(filenameExtension: "gmk") ?? .data, .json, .folder]
         ) { result in
             guard case .success(let url) = result else { return }
             if importing == .style { loadStyle(url.path) } else { loadStore(url.path) }
@@ -177,6 +177,7 @@ struct ViewerView: View {
                 zoom = 14
             }
             center = Coordinate(latitude: (box.south + box.north) / 2, longitude: (box.west + box.east) / 2)
+            if let set = source as? StoreSet, let start = Self.startCoordinate(in: set, near: center) { center = start }
             storeName = path
             store = source
             message = nil
@@ -188,6 +189,20 @@ struct ViewerView: View {
             store = nil
             message = "Cannot open \(path): \(error)"
         }
+    }
+
+    /// The middle of the block nearest to `point`: the middle of a large set may lie in the sea or in a tile with no block.
+    private static func startCoordinate(in set: StoreSet, near point: Coordinate) -> Coordinate? {
+        var best: (distance: Double, coordinate: Coordinate)?
+        for block in set.manifest.blocks {
+            guard let tile = TileID(zoom: set.manifest.blockZoom, x: block.x, y: block.y) else { continue }
+            let middle = Coordinate(
+                latitude: (tile.northWest.latitude + tile.southEast.latitude) / 2,
+                longitude: (tile.northWest.longitude + tile.southEast.longitude) / 2)
+            let d = pow(middle.latitude - point.latitude, 2) + pow((middle.longitude - point.longitude) * cos(point.latitude * .pi / 180), 2)
+            if best == nil || d < best!.distance { best = (d, middle) }
+        }
+        return best?.coordinate
     }
 
     private func loadStyle(_ path: String) {

@@ -73,7 +73,9 @@ public struct MapView: View {
     ///
     /// - Parameters:
     ///   - source: The store to draw. Read-only; the view never writes. A set opens its block files when the view first needs
-    ///     them, and a damaged or missing block shows as the error text instead of the map.
+    ///     them, and a damaged or missing block shows as the error text (over the map when a frame is already on screen).
+    ///     The view reads the store once, when it is created: to show another store, give the view a new identity
+    ///     (`.id(…)`); only a change of style is picked up.
     ///   - style: The style. Changing it draws a new image.
     ///   - center: The coordinate in the middle of the view. The view changes it when the user pans.
     ///   - zoom: The fractional zoom level (256-point tiles). The view changes it when the user zooms.
@@ -106,6 +108,14 @@ public struct MapView: View {
                         .position(x: plan.centre.x, y: plan.centre.y)
                 } else if let message = model.errorDescription {
                     Text(message).font(.footnote).multilineTextAlignment(.center).padding()
+                }
+            }
+            .overlay(alignment: .top) {
+                // A failed draw while a frame is on screen (a block that is missing or damaged) must not go unnoticed: the old
+                // frame would otherwise stay, moved and scaled, as if it were the map.
+                if model.frame != nil, let message = model.errorDescription {
+                    Text(message).font(.footnote).multilineTextAlignment(.center)
+                        .padding(6).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8)).padding(8)
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
