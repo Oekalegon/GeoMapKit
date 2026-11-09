@@ -24,6 +24,16 @@ enum LabelCandidates {
         return candidates
     }
 
+    /// The population taken for a place that has no `population` tag: by its rank (1 city, 2 town, 3 village, the rest smaller).
+    static func assumedPopulation(of subclass: UInt8) -> Int {
+        switch subclass {
+        case 1: return 200_000
+        case 2: return 20_000
+        case 3: return 2_000
+        default: return 500
+        }
+    }
+
     static func collect(from scene: MapScene, style: MapStyle) -> [LabelCandidate] {
         let zoom = scene.viewport.zoom
         // The part of the viewport that is seen: a frame is drawn with a margin, and a name in the margin is never seen.
@@ -50,8 +60,12 @@ enum LabelCandidates {
                     named.append(point)
                 }
                 let symbolRadius = classStyle.point?.radius.value(atZoom: zoom) ?? 0
+                var pointSize = size
+                if let scale = label.populationScale {
+                    pointSize *= scale.scale(population: point.population ?? Self.assumedPopulation(of: point.subclass), atZoom: zoom)
+                }
                 candidates.append(LabelCandidate(
-                    objectID: point.objectID, text: name, anchor: point.position, symbolRadius: symbolRadius, fontSize: size, style: label))
+                    objectID: point.objectID, text: name, anchor: point.position, symbolRadius: symbolRadius, fontSize: pointSize, style: label))
             }
             // One label per area, for the area as a whole: the pieces that the cells cut it into are taken together. The name goes at the
             // point of the part in view that is farthest from the real shore (the edges that the clip made along the cell borders are no

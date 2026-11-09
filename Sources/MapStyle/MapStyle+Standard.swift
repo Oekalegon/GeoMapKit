@@ -174,7 +174,14 @@ extension MapStyle {
             .place: ClassStyle(
                 label: LabelStyle(
                     size: ZoomValue((8, 11), (14, 15)), color: MapColor(hex: 0x222222), haloWidth: 2.5, priority: 50,
-                    thinningRadius: ZoomValue((10, 80), (11, 0))),
+                    thinningRadius: ZoomValue((10, 80), (11, 0)),
+                    // A city of 300,000 people has the full size; a town of 50,000 is written at 0.88 of it and a village of 2,000 at 0.7,
+                    // at low zoom; by zoom 13 every place has the same size.
+                    populationScale: PopulationScale(
+                        stops: [
+                            .init(population: 2_000, scale: 0.7), .init(population: 20_000, scale: 0.8),
+                            .init(population: 100_000, scale: 0.92), .init(population: 300_000, scale: 1),
+                        ], strength: ZoomValue((10, 1), (13, 0)))),
                 layer: 61),
         ])
 }

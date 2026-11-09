@@ -251,3 +251,49 @@ struct LabelThinningStyleTests {
         #expect(throws: (any Error).self) { try MapStyle(json: Data(json.utf8)) }
     }
 }
+
+@Suite("Population scale")
+struct PopulationScaleTests {
+    private let scale = PopulationScale(
+        stops: [.init(population: 300_000, scale: 1), .init(population: 2_000, scale: 0.7), .init(population: 20_000, scale: 0.8)],
+        strength: ZoomValue((10, 1), (13, 0)))!
+
+    @Test func aBigCityKeepsTheFullSizeAndSmallerPlacesAreSmallerAtLowZoom() {
+        #expect(scale.scale(population: 360_000, atZoom: 9) == 1)
+        #expect(scale.scale(population: 300_000, atZoom: 9) == 1)
+        #expect(scale.scale(population: 500, atZoom: 9) == 0.7, "below the first stop")
+        #expect(scale.scale(population: 20_000, atZoom: 9) == 0.8)
+        let houten = scale.scale(population: 50_000, atZoom: 9)
+        #expect(houten > 0.8 && houten < 1)
+    }
+
+    @Test func theScaleFollowsTheLogarithmBetweenStops() {
+        // 6,325 is the geometric mean of 2,000 and 20,000: half way between 0.7 and 0.8.
+        #expect(abs(scale.scale(population: 6_325, atZoom: 9) - 0.75) < 0.001)
+    }
+
+    @Test func theEffectFadesOutWithZoom() {
+        #expect(scale.scale(population: 2_000, atZoom: 13) == 1 && scale.scale(population: 2_000, atZoom: 15) == 1)
+        let half = scale.scale(population: 2_000, atZoom: 11.5)
+        #expect(abs(half - 0.85) < 0.001)
+    }
+
+    @Test func theStandardStyleWritesHoutenSmallerThanUtrechtAtZoom9() {
+        let scale = MapStyle.standard.classes[.place]?.label?.populationScale
+        #expect(scale?.scale(population: 360_000, atZoom: 9) == 1)
+        #expect((scale?.scale(population: 50_000, atZoom: 9) ?? 1) < 0.95)
+        #expect(scale?.scale(population: 50_000, atZoom: 14) == 1)
+    }
+
+    @Test func itSurvivesAJsonRoundTripAndBadStopsAreRefused() throws {
+        let again = try MapStyle(json: try MapStyle.standard.jsonData())
+        #expect(again.classes[.place]?.label?.populationScale == MapStyle.standard.classes[.place]?.label?.populationScale)
+        func decode(_ json: String) throws -> PopulationScale { try JSONDecoder().decode(PopulationScale.self, from: Data(json.utf8)) }
+        #expect(try decode(#"{"stops": [[2000, 0.7], [300000, 1]]}"#).stops.count == 2)
+        #expect(throws: (any Error).self) { try decode(#"{"stops": [[2000, 0]]}"#) }
+        #expect(throws: (any Error).self) { try decode(#"{"stops": []}"#) }
+        #expect(throws: (any Error).self) { try decode(#"{"stops": [[2000]]}"#) }
+        #expect(throws: (any Error).self) { try decode(#"{"stops": [[2000, 1]], "strenth": 1}"#) }
+        #expect(PopulationScale(stops: []) == nil)
+    }
+}

@@ -1,5 +1,5 @@
 extension LabelStyle: Codable {
-    private enum Keys: String, CodingKey, CaseIterable { case size, color, haloColor, haloWidth, priority, visibleZoom, placement, minimumArea, thinningRadius }
+    private enum Keys: String, CodingKey, CaseIterable { case size, color, haloColor, haloWidth, priority, visibleZoom, placement, minimumArea, thinningRadius, populationScale }
 
     public init(from decoder: Decoder) throws {
         try decoder.requireKnownKeys(Keys.self)
@@ -20,7 +20,8 @@ extension LabelStyle: Codable {
             priority: try c.decodeIfPresent(Int.self, forKey: .priority) ?? 0, visibleZoom: range,
             placement: try c.decodeIfPresent(LabelPlacement.self, forKey: .placement) ?? .onLine,
             minimumArea: try c.decodeNumber(forKey: .minimumArea, default: 0),
-            thinningRadius: c.contains(.thinningRadius) ? try c.decodeZoomNumber(forKey: .thinningRadius) : ZoomValue(constant: 0))
+            thinningRadius: c.contains(.thinningRadius) ? try c.decodeZoomNumber(forKey: .thinningRadius) : ZoomValue(constant: 0),
+            populationScale: try c.decodeIfPresent(PopulationScale.self, forKey: .populationScale))
         guard minimumArea >= 0, minimumArea.isFinite else {
             throw DecodingError.dataCorruptedError(forKey: .minimumArea, in: c, debugDescription: "expects an area of 0 or more square points")
         }
@@ -38,6 +39,7 @@ extension LabelStyle: Codable {
         // older readers (which refuse unknown keys) can still read them.
         if placement != .onLine { try c.encode(placement, forKey: .placement) }
         if minimumArea > 0 { try c.encode(minimumArea, forKey: .minimumArea) }
+        if let populationScale { try c.encode(populationScale, forKey: .populationScale) }
         if thinningRadius != ZoomValue(constant: 0) { try c.encode(thinningRadius, forKey: .thinningRadius) }
     }
 }

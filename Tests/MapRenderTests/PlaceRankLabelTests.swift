@@ -52,4 +52,25 @@ struct PlaceRankLabelTests {
         let points = [place(1, "Gouda", x: 300, population: 74_000), place(2, "Waddinxveen", x: 340, population: 31_000)]
         #expect(names(points, zoom: 9, style: style) == ["Gouda", "Waddinxveen"])
     }
+
+    private func sizes(_ points: [ScenePoint], zoom: Double) -> [String: Double] {
+        let viewport = MapViewport(center: Coordinate(latitude: 52, longitude: 5), zoom: zoom, width: 800, height: 600)
+        let scene = MapScene(
+            viewport: viewport, band: .overview, steps: [SceneStep(step: DrawStep(featureClass: .place, part: .body), points: points)],
+            cellCount: 1)
+        return Dictionary(uniqueKeysWithValues: LabelCandidates.collect(from: scene, style: .standard).map { ($0.text, $0.fontSize) })
+    }
+
+    @Test func aSmallerPlaceIsWrittenSmallerAtLowZoomAndEqualWhenZoomedIn() throws {
+        let points = [
+            place(1, "Utrecht", x: 100, subclass: 1, population: 360_000), place(2, "Houten", x: 400, population: 50_000),
+            place(3, "Untagged", x: 700, subclass: 3),
+        ]
+        let low = sizes(points, zoom: 9)
+        let utrecht = try #require(low["Utrecht"]), houten = try #require(low["Houten"]), untagged = try #require(low["Untagged"])
+        #expect(houten < utrecht && untagged < houten, "a village without population is taken as 2,000 people")
+        let near = sizes(points, zoom: 14)
+        #expect(near["Utrecht"] == near["Houten"] && near["Houten"] == near["Untagged"])
+        #expect(utrecht == MapStyle.standard.classes[.place]?.label?.size.value(atZoom: 9), "a city has the size of the style")
+    }
 }
