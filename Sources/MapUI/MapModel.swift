@@ -70,7 +70,7 @@ final class MapModel {
         let margin = MapFramePlan.margin(forViewWidth: viewport.width, viewHeight: viewport.height)
         let padded = MapViewport(
             center: viewport.center, zoom: viewport.zoom, width: viewport.width + 2 * margin, height: viewport.height + 2 * margin,
-            bearing: viewport.bearing)
+            bearing: viewport.bearing, labelInset: margin)
         draw(padded, scale: scale)
     }
 

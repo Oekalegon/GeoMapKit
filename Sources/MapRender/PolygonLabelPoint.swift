@@ -6,8 +6,11 @@ import Foundation
 /// largest circle that fits inside the rings (even-odd, so a hole is outside), to a precision of a point, by looking at
 /// squares and keeping only those that can still hold a larger circle than the best one so far (Mapbox's polylabel).
 enum PolygonLabelPoint {
-    /// How many squares are looked at at most; a polygon with a hundred thousand vertices must not stall a frame.
+    /// How many squares are looked at at most.
     static let maximumSquares = 600
+    /// How many edges are measured against at most, over all squares: a lake with hundreds of thousands of vertices must not stall a
+    /// frame. When it is used up, the best point so far is the answer, which is coarser but still in the water.
+    static let defaultEdgeBudget = 4_000_000
 
     private struct Square {
         let x: Double
@@ -29,10 +32,12 @@ enum PolygonLabelPoint {
     ///   - precision: How close to the best point the answer is, in points.
     /// - Returns: The point and its distance to the nearest edge, or `nil` if there is no area.
     static func find(
-        in rings: [[ScreenPoint]], edges: [[ScreenPoint]]? = nil, domain: ScreenBounds? = nil, precision: Double = 1
+        in rings: [[ScreenPoint]], edges: [[ScreenPoint]]? = nil, domain: ScreenBounds? = nil, precision: Double = 1,
+        edgeBudget: Int = defaultEdgeBudget
     ) -> (point: ScreenPoint, distance: Double)? {
         let rings = rings.filter { $0.count >= 3 }
         let lines = edges ?? rings
+        let segments = max(1, rings.reduce(0) { $0 + $1.count } + lines.reduce(0) { $0 + max($1.count - 1, 0) })
         guard var bounds = ScreenBounds(of: rings.joined()) else { return nil }
         if let domain {
             bounds = ScreenBounds(
@@ -45,23 +50,28 @@ enum PolygonLabelPoint {
         guard side > 0 else { return nil }
 
         var squares: [Square] = []
+        var work = 0
         func make(_ x: Double, _ y: Double, _ half: Double) -> Square {
-            Square(x: x, y: y, half: half, distance: signedDistance(x, y, rings, lines))
+            work += segments
+            return Square(x: x, y: y, half: half, distance: signedDistance(x, y, rings, lines))
         }
         var half = side / 2
+        // The middle of the bounding box is the first guess; the squares that cover the box, at most `maximumSquares` of them, are the next.
+        var best = make((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, 0)
         var x = bounds.minX
-        while x < bounds.maxX {
+        covering: while x < bounds.maxX {
             var y = bounds.minY
             while y < bounds.maxY {
-                squares.append(make(x + half, y + half, half))
+                if squares.count >= maximumSquares || (work >= edgeBudget && !squares.isEmpty) { break covering }
+                let square = make(x + half, y + half, half)
+                if square.distance > best.distance { best = square }
+                squares.append(square)
                 y += side
             }
             x += side
         }
-        // The middle of the bounding box is the first guess.
-        var best = make((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, 0)
         var looked = squares.count
-        while !squares.isEmpty, looked < maximumSquares {
+        while !squares.isEmpty, looked < maximumSquares, work < edgeBudget {
             // The square with the largest potential next.
             guard let index = squares.indices.max(by: { squares[$0].potential < squares[$1].potential }) else { break }
             let square = squares.remove(at: index)

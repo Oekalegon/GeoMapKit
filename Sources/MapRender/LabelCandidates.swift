@@ -25,7 +25,8 @@ enum LabelCandidates {
 
     static func collect(from scene: MapScene, style: MapStyle) -> [LabelCandidate] {
         let zoom = scene.viewport.zoom
-        let view = ScreenBounds(width: scene.viewport.width, height: scene.viewport.height, margin: 0)
+        // The part of the viewport that is seen: a frame is drawn with a margin, and a name in the margin is never seen.
+        let view = ScreenBounds(width: scene.viewport.width, height: scene.viewport.height, margin: -scene.viewport.labelInset)
         var candidates: [LabelCandidate] = []
         for step in scene.steps where step.step.part == .body {
             guard let classStyle = style.style(for: step.step.featureClass), let label = classStyle.label else { continue }

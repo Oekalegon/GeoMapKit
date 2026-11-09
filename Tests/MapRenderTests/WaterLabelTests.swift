@@ -139,3 +139,126 @@ struct WaterLabelTests {
         }
     }
 }
+
+/// The rest of the cases of the review: a lake in two cells, the visible part of a padded frame, the parameters of the search, the
+/// cost bound, a thin polygon, and old style files.
+@Suite("Water labels, more")
+struct WaterLabelMoreTests {
+    private func rectangle(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double) -> [ScreenPoint] {
+        [ScreenPoint(x: x0, y: y0), ScreenPoint(x: x1, y: y0), ScreenPoint(x: x1, y: y1), ScreenPoint(x: x0, y: y1), ScreenPoint(x: x0, y: y0)]
+    }
+
+    @Test func theDomainAndTheEdgesOfTheSearchAreUsed() throws {
+        // A lake 100 wide and 40 high whose only shore is the left and right side (the top and bottom are cell borders, no shore). The
+        // domain is the left fifth: the best point in it is at its right end, 20 from the shore.
+        let lake = rectangle(0, 0, 100, 40)
+        let shore = [[ScreenPoint(x: 0, y: 40), ScreenPoint(x: 0, y: 0)], [ScreenPoint(x: 100, y: 0), ScreenPoint(x: 100, y: 40)]]
+        let all = try #require(PolygonLabelPoint.find(in: [lake], edges: shore))
+        #expect(abs(all.point.x - 50) < 2 && all.distance > 48, "without a domain: the middle, 50 from either side")
+        let cut = try #require(PolygonLabelPoint.find(in: [lake], edges: shore, domain: ScreenBounds(minX: 0, minY: 0, maxX: 20, maxY: 40)))
+        #expect(cut.point.x <= 20.5 && abs(cut.point.x - 20) < 2 && abs(cut.distance - 20) < 2)
+        // A domain that does not meet the polygon has no point.
+        #expect(PolygonLabelPoint.find(in: [lake], domain: ScreenBounds(minX: 200, minY: 200, maxX: 300, maxY: 300)) == nil)
+    }
+
+    @Test func aThinPolygonStillHasAPointAndAnEdgeBudgetKeepsTheSearchShort() throws {
+        // 900 long, 1 wide: more squares than the search looks at; the best of the first ones is the answer.
+        let thin = try #require(PolygonLabelPoint.find(in: [rectangle(0, 0, 900, 1)]))
+        #expect(thin.distance > 0.4 && thin.distance <= 0.5)
+        // A budget of one square: the answer is the best of what was looked at, still inside the lake.
+        let lake = rectangle(0, 0, 100, 100)
+        let poor = try #require(PolygonLabelPoint.find(in: [lake], edgeBudget: 1))
+        #expect(poor.point.x > 0 && poor.point.x < 100 && poor.distance > 0)
+    }
+
+    // MARK: Scenes
+
+    private func lakeInTwoCells(totalWidth: Double, height: Double, viewport: (Coordinate) -> MapViewport) throws -> (MapScene, MapStyle, Coordinate) {
+        var writer = FeatureStoreWriter(boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: "", classifierVersion: 20)
+        let west = TileID(zoom: 13, x: 4_400, y: 2_400)!, east = TileID(zoom: 13, x: 4_401, y: 2_400)!
+        let border = Int32((west.southEast.longitude * 1e7).rounded())
+        let lat = Int32(((west.northWest.latitude + west.southEast.latitude) / 2 * 1e7).rounded())
+        let dx = Int32(totalWidth * 1e7 / 2), dy = Int32(height * 1e7 / 2)
+        func piece(_ points: [PackedPoint], artificial: Range<Int>, in cell: TileID) throws {
+            try writer.add(
+                StoredFeature(
+                    classID: FeatureClass.waterArea.rawValue, kind: .area, objectType: .way, objectID: 88, nameID: writer.intern("Tvåcellssjön"),
+                    parts: [GeometryPart(points: points, artificialEdges: [artificial])]),
+                band: .detail, cell: cell)
+        }
+        // The west half, clockwise: its edge down the border (edge 1) is the clip's, not a shore. Then the east half.
+        try piece(
+            [PackedPoint(longitude: border - dx, latitude: lat + dy), PackedPoint(longitude: border, latitude: lat + dy),
+             PackedPoint(longitude: border, latitude: lat - dy), PackedPoint(longitude: border - dx, latitude: lat - dy),
+             PackedPoint(longitude: border - dx, latitude: lat + dy)], artificial: 1..<2, in: west)
+        try piece(
+            [PackedPoint(longitude: border, latitude: lat + dy), PackedPoint(longitude: border + dx, latitude: lat + dy),
+             PackedPoint(longitude: border + dx, latitude: lat - dy), PackedPoint(longitude: border, latitude: lat - dy),
+             PackedPoint(longitude: border, latitude: lat + dy)], artificial: 3..<4, in: east)
+        let file = try FeatureStoreFile(data: try writer.data())
+        let centre = Coordinate(latitude: Double(lat) * 1e-7, longitude: Double(border) * 1e-7)
+        return (try MapSceneBuilder(file: file, style: .standard).scene(for: viewport(centre)), .standard, centre)
+    }
+
+    @Test func aLakeInTwoCellsIsNamedOnceAtTheMiddleOfTheWholeLake() throws {
+        // 0.02 degree wide in all, 0.008 high: at zoom 14 about 230 × 93 points, in two pieces that meet in the middle of the view.
+        let (scene, style, _) = try lakeInTwoCells(totalWidth: 0.02, height: 0.008) { MapViewport(center: $0, zoom: 14, width: 400, height: 300) }
+        let candidates = LabelCandidates.collect(from: scene, style: style).filter { $0.objectID == 88 }
+        let candidate = try #require(candidates.first)
+        #expect(candidates.count == 1, "named once")
+        #expect(abs(candidate.anchor.x - 200) < 8, "the middle of the lake, where the pieces meet (a piece would give 140 or 260)")
+        #expect(try #require(candidate.fitWidth) > 60, "the cell border is no shore")
+    }
+
+    @Test func minimumAreaIsTheSumOfThePieces() throws {
+        // Each piece is about 116 × 229 = 26,600 square points (a degree of latitude is longer on the screen than a degree of longitude at
+        // these latitudes), together 53,000.
+        func candidates(minimum: Double) throws -> Int {
+            let (scene, standard, _) = try lakeInTwoCells(totalWidth: 0.02, height: 0.008) { MapViewport(center: $0, zoom: 14, width: 400, height: 300) }
+            var style = standard
+            var classStyle = try #require(style.style(for: .waterArea))
+            classStyle.label?.minimumArea = minimum
+            style.classes[.waterArea] = classStyle
+            return LabelCandidates.collect(from: scene, style: style).filter { $0.objectID == 88 }.count
+        }
+        #expect(try candidates(minimum: 40_000) == 1, "above each piece, below the sum")
+        #expect(try candidates(minimum: 70_000) == 0, "above the sum")
+    }
+
+    @Test func aNameIsNotPlacedInTheMarginOfAFrame() throws {
+        // A frame 600 × 500 with a margin of 100: the user sees 400 × 300 in the middle. The lake covers all of it and more.
+        let (scene, style, _) = try lakeInTwoCells(totalWidth: 0.06, height: 0.04) {
+            MapViewport(center: $0, zoom: 14, width: 600, height: 500, labelInset: 100)
+        }
+        let candidate = try #require(LabelCandidates.collect(from: scene, style: style).first { $0.objectID == 88 })
+        #expect(candidate.anchor.x >= 100 && candidate.anchor.x <= 500 && candidate.anchor.y >= 100 && candidate.anchor.y <= 400)
+        #expect(MapViewport(center: Coordinate(latitude: 60, longitude: 10), zoom: 10, width: 10, height: 10, labelInset: -5).labelInset == 0)
+        #expect(MapViewport(center: Coordinate(latitude: 60, longitude: 10), zoom: 10, width: 10, height: 10, labelInset: .nan).labelInset == 0)
+    }
+
+    // MARK: Style files
+
+    @Test func anOldStyleFileGetsTheRiverNameFromTheStreamLabel() throws {
+        var style = MapStyle.standard
+        style.classes[.riverName] = nil
+        let json = try style.jsonData()
+        // The file as it was before rule table 20: no entry for the class.
+        #expect(!String(decoding: json, as: UTF8.self).contains("riverName"))
+        let old = try MapStyle(json: json)
+        let river = try #require(old.style(for: .riverName))
+        let stream = try #require(old.style(for: .waterLine))
+        #expect(river.label == stream.label && river.fill == nil && river.stroke == nil, "a name only, like the stream's")
+        // A file whose lake label has no `minimumArea` names every lake, as before.
+        var object = try #require(try JSONSerialization.jsonObject(with: json) as? [String: Any])
+        var classes = try #require(object["classes"] as? [String: Any])
+        var water = try #require(classes["waterArea"] as? [String: Any])
+        var label = try #require(water["label"] as? [String: Any])
+        #expect(label["minimumArea"] != nil)
+        label["minimumArea"] = nil
+        water["label"] = label
+        classes["waterArea"] = water
+        object["classes"] = classes
+        let withoutMinimum = try MapStyle(json: try JSONSerialization.data(withJSONObject: object))
+        #expect(try #require(withoutMinimum.style(for: .waterArea)?.label).minimumArea == 0)
+    }
+}

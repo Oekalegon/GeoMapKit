@@ -25,6 +25,10 @@ public struct MapViewport: Sendable, Equatable {
     public let height: Double
     /// The compass direction at the top of the view, in degrees clockwise from north, 0 up to (not including) 360.
     public let bearing: Double
+    /// The margin, in points, around the part of the viewport that the user sees. A frame is drawn larger than the view so that a
+    /// pan does not show an edge; the labels that depend on where the view is (the name of a lake larger than the view) are placed in
+    /// the part inside this margin, since a name in the margin is drawn but never seen. 0 when the whole viewport is seen.
+    public let labelInset: Double
 
     /// Creates a viewport.
     ///
@@ -39,7 +43,8 @@ public struct MapViewport: Sendable, Equatable {
     ///   - height: The view height in points.
     ///   - bearing: The compass direction at the top of the view in degrees clockwise from north. Any finite value is
     ///     wrapped into 0..<360; a non-finite one becomes 0 (north up).
-    public init(center: Coordinate, zoom: Double, width: Double, height: Double, bearing: Double = 0) {
+    ///   - labelInset: The margin around the part that is seen, in points; see ``labelInset``. A negative or non-finite value is 0.
+    public init(center: Coordinate, zoom: Double, width: Double, height: Double, bearing: Double = 0, labelInset: Double = 0) {
         let latitude = center.latitude.isFinite ? min(max(center.latitude, -TileID.maximumLatitude), TileID.maximumLatitude) : 0
         var longitude = center.longitude.isFinite ? (center.longitude + 180).truncatingRemainder(dividingBy: 360) : 180
         if longitude < 0 { longitude += 360 }
@@ -51,6 +56,7 @@ public struct MapViewport: Sendable, Equatable {
         if turn < 0 { turn += 360 }
         // A value that rounds to 360 is north again.
         self.bearing = turn >= 360 ? 0 : turn
+        self.labelInset = labelInset.isFinite ? max(labelInset, 0) : 0
         let radians = self.bearing * .pi / 180
         cosBearing = cos(radians)
         sinBearing = sin(radians)
