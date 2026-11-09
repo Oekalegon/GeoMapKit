@@ -33,6 +33,11 @@ struct MapStyleTests {
         #expect(fill.alpha < 0.5, "the water and the land stay visible under the tint")
         #expect(try #require(military.stroke).dash.isEmpty == false, "dashed")
         #expect(military.layer > water.layer, "above the water, so a military area at sea shows the sea under the tint")
+        let sharedWithMilitary = [FeatureClass.building, .coastline, .waterEdge, .roadArea, .landcover, .forest, .landuseUrban, .sea]
+        for other in sharedWithMilitary {
+            #expect(try #require(MapStyle.standard.style(for: other)).layer < military.layer, "\(other) is drawn under military land")
+        }
+        #expect(try #require(MapStyle.standard.style(for: .path)).layer > military.layer, "roads stay above it")
         #expect(MapStyle.standard.style(for: .militaryArea)?.fill?.color.value(atZoom: 12) != MapStyle.standard.style(for: .landuseUrban)?.fill?.color.value(atZoom: 12))
         #expect(MapStyle.watch.style(for: .militaryArea) == nil, "not on the Watch")
     }

@@ -76,7 +76,7 @@ public enum FeatureClass: UInt8, CaseIterable, Sendable {
     case parkBorderSea = 34
     /// Piers, breakwaters and groynes (`man_made=pier`, `breakwater`, `groyne`). Added in rule table version 13.
     case pier = 35
-    /// Military land (`landuse=military`): an area to keep out of, drawn with a dashed red outline and a faint red tint, over the sea
-    /// and the land alike (it was part of `landuseUrban` until rule table version 17).
+    /// Military land (`landuse=military`), an area a runner keeps out of; the standard style draws it so (it was part of `landuseUrban`
+    /// until rule table version 17).
     case militaryArea = 36
 }

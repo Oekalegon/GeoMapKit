@@ -193,6 +193,11 @@ struct StyleJSONTests {
         }
     }
 
+    @Test func aStyleFileWithoutMilitaryLandDrawsItLikeUrbanLand() throws {
+        let style = try parse(document().replacingOccurrences(of: "roadMajor", with: "landuseUrban"))
+        #expect(style.classes[.militaryArea] != nil && style.classes[.militaryArea] == style.classes[.landuseUrban])
+    }
+
     @Test func malformedZoomValuesAreRejected() {
         func fill(_ color: String) -> String { document(classBody: "\"layer\": 1, \"fill\": {\"color\": \(color)}") }
         #expect(reason(fill("[[12, \"#000000\", 3]]")).contains("exactly two items"))

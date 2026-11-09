@@ -31,6 +31,7 @@ extension MapStyle: Codable {
         if classes[.parkBorder] == nil, let boundary = classes[.boundary] { classes[.parkBorder] = boundary }
         if classes[.parkBorderSea] == nil, let park = classes[.parkBorder] { classes[.parkBorderSea] = park }
         // Military land was part of `landuseUrban` before `militaryArea` existed (rule table 17); a style file from then draws it that way.
+        // (A file cannot hide military land by leaving the class out: a missing class is read as an old file.)
         if classes[.militaryArea] == nil, let urban = classes[.landuseUrban] { classes[.militaryArea] = urban }
         // Service roads were part of `roadMinor` before `roadService` existed; a style file from then draws them as streets.
         if classes[.roadService] == nil, let street = classes[.roadMinor] { classes[.roadService] = street }
