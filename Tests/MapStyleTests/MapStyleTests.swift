@@ -58,7 +58,10 @@ struct MapStyleTests {
         let sand = try #require(MapStyle.standard.style(for: .sand)?.fill?.color.value(atZoom: 12))
         #expect(sand.red > sand.blue && sand.green > sand.blue && sand.red > 0.9, "sand and beaches are light yellow")
         let sandStyle = try #require(MapStyle.standard.style(for: .sand))
-        #expect(sandStyle.layer > landcover.layer && sandStyle.layer >= forest.layer, "sand between woods is not hidden by the forest")
+        for hidden in [FeatureClass.sand, .bareGround, .wetland] {
+            let layer = try #require(MapStyle.standard.style(for: hidden)).layer
+            #expect(layer > landcover.layer && layer >= forest.layer, "\(hidden) in a wood is not hidden by the forest")
+        }
         for class_ in [FeatureClass.glacier, .bareGround, .wetland, .sand] { #expect(MapStyle.watch.style(for: class_) != nil, "\(class_) on the Watch") }
     }
 

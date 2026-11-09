@@ -16,11 +16,11 @@ extension MapStyle {
             .landcover: ClassStyle(fill: FillStyle(color: .color(0xDDE8C8)), visibleZoom: 10...24, layer: 11),
             // Ground that is not vegetation (rule table 18): bare rock, scree and sand in a grey beige, wetland in a bluish green, and
             // glaciers white with a light blue border (on the layer of the forest, above it, because a glacier lies over the land cover).
-            .bareGround: ClassStyle(fill: FillStyle(color: .color(0xDEDAD2)), visibleZoom: 10...24, layer: 11),
-            // Sand and beaches in a light yellow, on the layer of the forest (and above it): open sand lies between woods (inland dunes), and a
-            // forest polygon that covers it must not hide it.
+            .bareGround: ClassStyle(fill: FillStyle(color: .color(0xDEDAD2)), visibleZoom: 10...24, layer: 12),
+            // Sand and beaches in a light yellow. Sand, bare ground and wetland are on the layer of the forest (and above it): they lie in
+            // woods (inland dunes, rock outcrops, bogs), and a forest polygon that covers them must not hide them.
             .sand: ClassStyle(fill: FillStyle(color: .color(0xF3E9BF)), visibleZoom: 10...24, layer: 12),
-            .wetland: ClassStyle(fill: FillStyle(color: .color(0xC4DDD6)), visibleZoom: 10...24, layer: 11),
+            .wetland: ClassStyle(fill: FillStyle(color: .color(0xC4DDD6)), visibleZoom: 10...24, layer: 12),
             .glacier: ClassStyle(
                 fill: FillStyle(color: .color(0xFFFFFF)), stroke: .line(0x7FB5DC, ZoomValue((9, 0.8), (16, 1.5))), visibleZoom: 9...24, layer: 12),
             // Military land, an area to keep out of: a dashed red outline and a faint red tint (26 of 255, a value that survives the JSON round trip). The tint is translucent and drawn above the

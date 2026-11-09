@@ -42,4 +42,32 @@ struct LandUseTests {
         let watch = try FeatureStoreFile(data: try FeatureStoreBuilder(profile: .watch).build(from: extract).data)
         #expect(try watch.cells().flatMap { try watch.features(in: $0, band: .mid) }.allSatisfy { $0.objectID != 810 })
     }
+
+    @Test("A land use mapped as a multipolygon relation carries its value from the relation, and only the value in the mid band")
+    func relationAndTwoTags() throws {
+        var world = SyntheticWorld()
+        world.way(820, world.rectangle(first: 820, 0.3, 0.3, 1.7, 1.7))
+        world.relation(4_000, [(820, "outer", 1)], [("type", "multipolygon"), ("landuse", "animal_keeping"), ("natural", "moor"), ("name", "Hei")])
+        let file = try FeatureStoreFile(data: try FeatureStoreBuilder().build(from: try world.extract()).data)
+        var mid: [[String]] = [], detail: [[String]] = []
+        for cell in try file.cells() {
+            for band in [ZoomBand.mid, .detail] {
+                for feature in try file.features(in: cell, band: band) where feature.objectID == 4_000 && feature.classID == FeatureClass.landUse.rawValue {
+                    let tags = feature.tags.map { "\(file.string(at: $0.key) ?? "?")=\(file.string(at: $0.value) ?? "?")" }
+                    if band == .mid { mid.append(tags) } else { detail.append(tags) }
+                }
+            }
+        }
+        #expect(!mid.isEmpty && mid.allSatisfy { Set($0) == ["landuse=animal_keeping", "natural=moor"] }, "both value tags, and not the type or the name")
+        #expect(detail.allSatisfy { $0.contains("name=Hei") && $0.contains("type=multipolygon") })
+    }
+
+    @Test("An open way with a land use tag is a landUse line, and a node is an unclassified point")
+    func openWayAndNode() throws {
+        let classifier = FeatureClassifier()
+        let line = classifier.classify(["landuse": "landfill"], shape: .openWay)
+        #expect(line.featureClass == .landUse && line.kind == .line)
+        let node = classifier.classify(["landuse": "landfill"], shape: .node)
+        #expect(node.featureClass == .other && node.kind == .point)
+    }
 }
