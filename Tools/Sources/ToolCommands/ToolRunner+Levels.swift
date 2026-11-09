@@ -110,7 +110,13 @@ extension ToolRunner {
                 next += 1
                 group.addTask {
                     try Task.checkCancellation()
-                    return try Self.buildLevelBlock(task, base: baseManifest, directory: directory, margin: margin)
+                    do {
+                        return try Self.buildLevelBlock(task, base: baseManifest, directory: directory, margin: margin)
+                    } catch let error as ToolError {
+                        throw error
+                    } catch {
+                        throw ToolError("Level \(task.spec.topZoom) block \(task.tile.x)/\(task.tile.y) failed: \(error)")
+                    }
                 }
             }
             for _ in 0..<min(jobs, tasks.count) { start() }

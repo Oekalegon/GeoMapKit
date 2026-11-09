@@ -75,6 +75,34 @@ extension StoreManifest {
         }
     }
 
+    /// A block of a level that is out of date: a block of the base map it was derived from has another size now, or is gone.
+    public struct StaleLevelBlock: Equatable, Sendable {
+        /// The top zoom of the level.
+        public let topZoom: Int
+        /// The column of the tile.
+        public let x: Int
+        /// The row of the tile.
+        public let y: Int
+    }
+
+    /// The level blocks whose base blocks are not the ones they were derived from any more.
+    ///
+    /// It compares the sizes of the blocks that each level block lists in `derivedFrom` with the blocks of this manifest. A base block
+    /// that is new in the area a level block reads is not seen here (the level block does not list it); `build-levels` finds that, and
+    /// `build-region` removes the levels when it rebuilds a block.
+    ///
+    /// - Returns: The out-of-date level blocks, finest level first.
+    public func staleLevelBlocks() -> [StaleLevelBlock] {
+        let sizes = Dictionary(uniqueKeysWithValues: blocks.map { ("\($0.x)/\($0.y)", $0.bytes) })
+        var result: [StaleLevelBlock] = []
+        for level in levels.sorted(by: { $0.topZoom > $1.topZoom }) {
+            for block in level.blocks where block.derivedFrom.contains(where: { sizes["\($0.x)/\($0.y)"] != $0.bytes }) {
+                result.append(StaleLevelBlock(topZoom: level.topZoom, x: block.x, y: block.y))
+            }
+        }
+        return result
+    }
+
     /// Checks the levels: unique top zooms, the zooms and classes of each, blocks inside the grid, files that stay in the folder and
     /// are not used twice (also not by a base block), and origins inside the grid of the base blocks.
     func validateLevels(usedFiles: inout Set<String>) throws {

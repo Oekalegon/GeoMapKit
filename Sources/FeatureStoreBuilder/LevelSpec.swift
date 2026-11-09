@@ -6,7 +6,7 @@ import FeatureStore
 /// at those zooms touches about the same number of cells at every level, and it has one band, whose geometry is
 /// simplified for the top of the range.
 public struct LevelSpec: Sendable, Equatable {
-    /// The highest zoom the level serves, 1 to 11.
+    /// The highest zoom the level serves, 1 to 10.
     public let topZoom: Int
     /// The classes the level holds: the classes the style shows at the top zoom.
     public let classes: Set<UInt8>
@@ -22,11 +22,11 @@ public struct LevelSpec: Sendable, Equatable {
     var minimumExtent: Double { 3 * pixel }
 
     /// - Parameters:
-    ///   - topZoom: The highest zoom the level serves (1 to 11).
+    ///   - topZoom: The highest zoom the level serves (1 to 10).
     ///   - classes: The raw class IDs the level holds.
-    /// - Throws: ``LevelError/invalidTopZoom(_:)`` for a zoom outside 1 to 11.
+    /// - Throws: ``LevelError/invalidTopZoom(_:)`` for a zoom outside 1 to 10.
     public init(topZoom: Int, classes: Set<UInt8>) throws {
-        guard (1...11).contains(topZoom) else { throw LevelError.invalidTopZoom(topZoom) }
+        guard StoreManifest.Level.topZooms.contains(topZoom) else { throw LevelError.invalidTopZoom(topZoom) }
         self.topZoom = topZoom
         self.classes = classes
     }

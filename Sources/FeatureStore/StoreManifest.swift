@@ -71,8 +71,8 @@ public struct StoreManifest: Codable, Equatable, Sendable {
         }
     }
 
-    /// The version of the manifest format.
-    public var version: Int
+    /// The version of the manifest format: 2 when the manifest has levels, 1 when it has none.
+    public var version: Int { levels.isEmpty ? Self.baseVersion : Self.currentVersion }
     /// The format version of the block files.
     public var formatVersion: Int
     /// The rule-table version the block files were built with.
@@ -97,7 +97,6 @@ public struct StoreManifest: Codable, Equatable, Sendable {
         formatVersion: Int, classifierVersion: Int, storageZoom: Int, blockZoom: Int, bands: [ZoomBand], profile: String,
         attribution: String, blocks: [Block]
     ) {
-        version = Self.baseVersion
         self.formatVersion = formatVersion
         self.classifierVersion = classifierVersion
         self.storageZoom = storageZoom
@@ -115,7 +114,8 @@ public struct StoreManifest: Codable, Equatable, Sendable {
     /// Decodes a manifest; a manifest without `levels` (version 1) has none.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        version = try c.decode(Int.self, forKey: .version)
+        let version = try c.decode(Int.self, forKey: .version)
+        guard (Self.baseVersion...Self.currentVersion).contains(version) else { throw StoreSetError.unsupportedManifestVersion(version) }
         formatVersion = try c.decode(Int.self, forKey: .formatVersion)
         classifierVersion = try c.decode(Int.self, forKey: .classifierVersion)
         storageZoom = try c.decode(Int.self, forKey: .storageZoom)
@@ -125,12 +125,16 @@ public struct StoreManifest: Codable, Equatable, Sendable {
         attribution = try c.decode(String.self, forKey: .attribution)
         blocks = try c.decode([Block].self, forKey: .blocks)
         levels = try c.decodeIfPresent([Level].self, forKey: .levels) ?? []
+        // Levels are version 2; a version 1 file that has them is not one this code wrote.
+        guard levels.isEmpty || version == Self.currentVersion else {
+            throw StoreSetError.invalidManifest("levels need manifest version \(Self.currentVersion), this is version \(version)")
+        }
     }
 
     /// Encodes the manifest as version 2 when it has levels and as version 1 when it has none.
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(levels.isEmpty ? Self.baseVersion : Self.currentVersion, forKey: .version)
+        try c.encode(version, forKey: .version)
         try c.encode(formatVersion, forKey: .formatVersion)
         try c.encode(classifierVersion, forKey: .classifierVersion)
         try c.encode(storageZoom, forKey: .storageZoom)
@@ -152,6 +156,8 @@ public struct StoreManifest: Codable, Equatable, Sendable {
         decoder.dateDecodingStrategy = .iso8601
         do {
             self = try decoder.decode(StoreManifest.self, from: data)
+        } catch let error as StoreSetError {
+            throw error
         } catch {
             throw StoreSetError.invalidManifest("\(error)")
         }
@@ -171,7 +177,6 @@ public struct StoreManifest: Codable, Equatable, Sendable {
     ///
     /// - Throws: ``StoreSetError/unsupportedManifestVersion(_:)`` or ``StoreSetError/invalidManifest(_:)``.
     public func validate() throws {
-        guard (Self.baseVersion...Self.currentVersion).contains(version) else { throw StoreSetError.unsupportedManifestVersion(version) }
         guard (0...TileID.maximumZoom).contains(storageZoom), (0...storageZoom).contains(blockZoom) else {
             throw StoreSetError.invalidManifest("the block zoom \(blockZoom) must be from 0 to the storage zoom \(storageZoom), which must be from 0 to \(TileID.maximumZoom)")
         }

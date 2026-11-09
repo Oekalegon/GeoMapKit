@@ -156,7 +156,7 @@ public enum ReportFormatter {
         }
         var lines = ["", "Level blocks: \(report.outcomes.count), \(built) built, \(upToDate) up to date, \(empty) with nothing to store"]
         for summary in report.summaries {
-            lines.append("  level \(summary.topZoom) (cells of zoom \(summary.storageZoom)): \(summary.blocks) blocks, \(Formatting.bytes(summary.bytes))")
+            lines.append("  level \(summary.topZoom) (cells of zoom \(summary.storageZoom)): \(summary.blocks) block\(summary.blocks == 1 ? "" : "s"), \(Formatting.bytes(summary.bytes))")
         }
         lines.append("Manifest: \(report.manifestURL.path)")
         lines.append("Total: \(Formatting.seconds(report.totalTime)), peak memory footprint \(report.peakFootprint.map(Formatting.bytes) ?? "n/a")")

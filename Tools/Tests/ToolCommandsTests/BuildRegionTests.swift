@@ -121,6 +121,38 @@ struct BuildRegionTests {
         #expect(try StoreSet(manifestURL: third.manifestURL).manifest.blocks[0].sources[0].etag == "\"e2\"")
     }
 
+    @Test("A block that is built again takes the levels with it: they were made from the old block")
+    func rebuildingABlockRemovesTheLevels() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        // A level made from the block (its content does not matter here: the file is a copy of the block).
+        var manifest = try StoreManifest(json: Data(contentsOf: s.output.appendingPathComponent("manifest.json")))
+        let block = try #require(manifest.blocks.first)
+        let levelFile = "levels/8/8-\(block.x)-\(block.y).gmk"
+        let levelsFolder = s.output.appendingPathComponent("levels")
+        try FileManager.default.createDirectory(at: levelsFolder.appendingPathComponent("8"), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: s.output.appendingPathComponent(block.file), to: s.output.appendingPathComponent(levelFile))
+        manifest.levels = [
+            StoreManifest.Level(
+                topZoom: 8, blockZoom: 8, classes: [3],
+                blocks: [StoreManifest.LevelBlock(
+                    x: block.x, y: block.y, file: levelFile, bytes: block.bytes, builtAt: Date(), derivedFrom: [.init(x: block.x, y: block.y, bytes: block.bytes)])])
+        ]
+        try manifest.jsonData().write(to: s.output.appendingPathComponent("manifest.json"))
+        #expect(FileManager.default.fileExists(atPath: levelsFolder.path))
+
+        // A run that leaves everything as it is keeps the levels.
+        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        #expect(FileManager.default.fileExists(atPath: levelsFolder.path))
+
+        try put(s.cacheStore, etag: "\"e2\"")   // the source file was replaced: the blocks are built again
+        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        #expect(!FileManager.default.fileExists(atPath: levelsFolder.path))
+        let after = try StoreManifest(json: Data(contentsOf: s.output.appendingPathComponent("manifest.json")))
+        #expect(after.levels.isEmpty && after.version == 1 && after.staleLevelBlocks().isEmpty)
+    }
+
     @Test("A block file that is gone or of another size is built again")
     func damagedBlock() async throws {
         let s = try setup()

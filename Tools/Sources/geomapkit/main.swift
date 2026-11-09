@@ -103,6 +103,15 @@ GeoMapKit tools
       bad values in a style file are errors.
 """
 
+/// The value of an option that is a whole number in a range, or the fallback when the option is not given.
+func wholeNumberOption(_ parsed: CommandLineArguments, _ name: String, _ fallback: Int, in range: ClosedRange<Int>) throws -> Int {
+    guard let text = parsed.value(for: name) else { return fallback }
+    guard let value = Int(text), range.contains(value) else {
+        throw ToolError("--\(name) expects a whole number from \(range.lowerBound) to \(range.upperBound)")
+    }
+    return value
+}
+
 do {
     let arguments = Array(CommandLine.arguments.dropFirst())
     guard let command = arguments.first else {
@@ -145,9 +154,7 @@ do {
                 bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"), radiusKilometres: parsed.value(for: "radius-km")))
         }
         func whole(_ name: String, _ fallback: Int, in range: ClosedRange<Int>) throws -> Int {
-            guard let text = parsed.value(for: name) else { return fallback }
-            guard let value = Int(text), range.contains(value) else { throw ToolError("--\(name) expects a whole number from \(range.lowerBound) to \(range.upperBound)") }
-            return value
+            try wholeNumberOption(parsed, name, fallback, in: range)
         }
         var margin = 0.1
         if let text = parsed.value(for: "margin") {
@@ -187,9 +194,7 @@ do {
             topZooms = values.compactMap { $0 }
         }
         func whole(_ name: String, _ fallback: Int, in range: ClosedRange<Int>) throws -> Int {
-            guard let text = parsed.value(for: name) else { return fallback }
-            guard let value = Int(text), range.contains(value) else { throw ToolError("--\(name) expects a whole number from \(range.lowerBound) to \(range.upperBound)") }
-            return value
+            try wholeNumberOption(parsed, name, fallback, in: range)
         }
         let levelRequest = LevelRequest(
             directory: URL(fileURLWithPath: parsed.positional[0]), topZooms: topZooms, jobs: try whole("jobs", 2, in: 1...64),

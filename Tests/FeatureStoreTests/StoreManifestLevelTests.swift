@@ -75,6 +75,23 @@ struct StoreManifestLevelTests {
         try refused([outsideTile], "a block outside the grid of the level")
     }
 
+    @Test func theVersionFollowsTheLevelsAndALevelInAVersion1FileIsRefused() throws {
+        #expect(manifest().version == 1 && manifest(levels: [level()]).version == 2)
+        let json = String(decoding: try manifest(levels: [level()]).jsonData(), as: UTF8.self)
+        #expect(throws: StoreSetError.self) {
+            try StoreManifest(json: Data(json.replacingOccurrences(of: "\"version\" : 2", with: "\"version\" : 1").utf8))
+        }
+    }
+
+    @Test func aLevelBlockIsStaleWhenABaseBlockItWasMadeFromChangedOrIsGone() throws {
+        var current = manifest(levels: [level(8), level(7, file: "levels/7/8-140-75.gmk")])
+        #expect(current.staleLevelBlocks().isEmpty)
+        current.blocks[0].bytes += 1
+        #expect(current.staleLevelBlocks() == [.init(topZoom: 8, x: 140, y: 75), .init(topZoom: 7, x: 140, y: 75)], "finest level first")
+        current.blocks = []
+        #expect(current.staleLevelBlocks().count == 2, "a base block that is gone")
+    }
+
     @Test func aSetOpensAManifestWithLevelsAndStillReadsTheBlocks() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-levels-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }
