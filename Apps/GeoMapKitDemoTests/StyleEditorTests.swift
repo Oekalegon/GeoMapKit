@@ -142,4 +142,41 @@ struct StyleEditorModelTests {
         #expect(throws: MapStyleError.self) { try MapStyle(json: Data("{\"formatVersion\": 1}".utf8)) }
         do { _ = try MapStyle(json: Data("not json".utf8)) } catch { #expect("\(error)".contains("Invalid style")) }
     }
+
+    private var fresh: ClassStyle { ClassStyle(fill: FillStyle(color: ZoomValue(constant: MapColor(hex: 0xCCCCCC))), layer: 5) }
+
+    @Test func aClassSwitchedBackOnGetsItsOldLookAndEachSwitchIsAStepToUndo() {
+        let item = StyleItem(id: "a.json", name: "A", date: .now)
+        let model = StyleEditorModel(style: .standard, item: item)
+        let original = MapStyle.standard.classes[.waterArea]
+        model.setDrawn(false, for: .waterArea, fresh: fresh)
+        #expect(model.style.classes[.waterArea] == nil)
+        model.setDrawn(true, for: .waterArea, fresh: fresh)
+        #expect(model.style.classes[.waterArea] == original)
+        model.undo()
+        #expect(model.style.classes[.waterArea] == nil, "two switches are two steps")
+        // A class that neither the saved style nor the Standard style has starts as the fresh one.
+        var empty = MapStyle.standard
+        empty.classes[.waterArea] = nil
+        let other = StyleEditorModel(style: empty, item: item)
+        other.setDrawn(true, for: .waterArea, fallback: empty, fresh: fresh)
+        #expect(other.style.classes[.waterArea] == fresh)
+    }
+
+    @Test func jsonThatWaitsIsAppliedAtSaveAndMakesTheEditorDirty() throws {
+        let item = StyleItem(id: "a.json", name: "A", date: .now)
+        let model = StyleEditorModel(style: .standard, item: item)
+        var changed = MapStyle.standard
+        changed.background = MapColor(hex: 0x102030)
+        model.unappliedJSON = String(decoding: try changed.jsonData(), as: UTF8.self)
+        #expect(model.isDirty && model.style == .standard)
+        try model.applyUnappliedJSON()
+        #expect(model.style == changed && model.unappliedJSON == nil)
+        // Text that is not a style is refused and leaves the style as it was.
+        model.unappliedJSON = "not json"
+        #expect(throws: MapStyleError.self) { try model.applyUnappliedJSON() }
+        #expect(model.style == changed && model.isDirty)
+        model.revert()
+        #expect(model.style == .standard && !model.isDirty && model.reverts == 1)
+    }
 }

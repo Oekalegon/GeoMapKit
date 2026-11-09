@@ -4,20 +4,6 @@ import MapStyle
 import MapUI
 import SwiftUI
 
-/// What the preview of the editor shows: the map that is open, where the map is.
-struct PreviewMap {
-    let opened: OpenedMap
-    let center: Coordinate
-    let zoom: Double
-}
-
-/// A style being edited, for `sheet(item:)`.
-struct EditorSession: Identifiable {
-    let model: StyleEditorModel
-    let preview: PreviewMap?
-    var id: String { model.item.id }
-}
-
 /// The style editor: the map on top with the style as it is now, and below it the general settings, the classes (a form for each) and the
 /// JSON of the style. The preview stays when a class is opened.
 struct StyleEditorScreen: View {
@@ -104,6 +90,7 @@ struct StyleEditorScreen: View {
         ToolbarItemGroup(placement: .primaryAction) {
             Button { model.undo() } label: { Label("Undo", systemImage: "arrow.uturn.backward") }.disabled(!model.canUndo)
             Button { model.redo() } label: { Label("Redo", systemImage: "arrow.uturn.forward") }.disabled(!model.canRedo)
+            Button("Revert") { model.revert() }.disabled(!model.canRevert)
             Button("Save") { _ = save() }.disabled(!model.isDirty)
         }
     }

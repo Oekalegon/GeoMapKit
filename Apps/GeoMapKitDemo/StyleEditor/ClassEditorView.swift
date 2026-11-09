@@ -41,13 +41,7 @@ struct ClassEditorView: View {
             Section {
                 Toggle("Drawn in this style", isOn: Binding(
                     get: { classStyle != nil },
-                    set: { on in
-                        model.change("class.\(featureClass).drawn") { style in
-                            // Switching a class back on restores what the saved style or the Standard style had for it.
-                            style.classes[featureClass] =
-                                on ? (model.saved.classes[featureClass] ?? MapStyle.standard.classes[featureClass] ?? Self.newClass) : nil
-                        }
-                    }))
+                    set: { on in model.setDrawn(on, for: featureClass, fresh: Self.newClass) }))
             } footer: {
                 if classStyle == nil { Text("This class is not drawn: nothing in the map is shown for it.") }
             }

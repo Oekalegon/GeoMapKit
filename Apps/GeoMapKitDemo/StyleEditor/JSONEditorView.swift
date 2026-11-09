@@ -9,6 +9,8 @@ struct JSONEditorView: View {
     @State private var error: String?
     /// The style that the text was made from or applied as, so that applying it does not make the text again.
     @State private var applied: MapStyle?
+    /// The text as it was made from the style, to tell a change by the user from one by `load`.
+    @State private var loadedText = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,6 +36,8 @@ struct JSONEditorView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .onAppear { load() }
+        .onChange(of: model.reverts) { _, _ in load() }
+        .onChange(of: text) { _, new in if new != loadedText { model.unappliedJSON = new } }
         // The forms or an undo changed the style: the text follows, unless the text itself made the change.
         .onChange(of: model.style) { _, new in if new != applied { load() } }
         // A pause after the last key press, then the text is read.
@@ -47,13 +51,16 @@ struct JSONEditorView: View {
     private func load() {
         applied = model.style
         error = nil
-        text = (try? String(decoding: model.style.jsonData(), as: UTF8.self)) ?? ""
+        loadedText = (try? String(decoding: model.style.jsonData(), as: UTF8.self)) ?? ""
+        model.unappliedJSON = nil
+        text = loadedText
     }
 
     private func apply() {
         do {
             let style = try MapStyle(json: Data(text.utf8))
             error = nil
+            model.unappliedJSON = nil
             guard style != model.style else { return }
             applied = style
             model.replace(with: style)
