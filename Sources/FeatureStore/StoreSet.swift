@@ -121,7 +121,8 @@ public struct StoreSet: CellSource {
                 reason: "format \(file.formatVersion) and rule table \(file.classifierVersion), the manifest says \(manifest.formatVersion) and \(manifest.classifierVersion)")
         }
         // A file only has the bands that hold a feature, so a sparse block (sea, bare land) has fewer than the manifest lists;
-        // a band the manifest does not list means another build.
+        // a band the manifest does not list means another build. (This no longer separates profiles: a Watch block with the mid and
+        // detail bands passes in a full manifest; the other checks and the producer, which replaces a manifest of another profile, remain.)
         guard Set(file.bands.map { Int($0.rawValue) }).isSubset(of: manifest.bands) else {
             throw StoreSetError.blockMismatch(file: block.file, reason: "it holds bands that the manifest does not list")
         }

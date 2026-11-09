@@ -52,6 +52,27 @@ struct StoreSetTests {
         return Int64(try writer.data().count)
     }
 
+    @Test("A sparse block with fewer bands than the manifest lists opens, and the missing band reads as empty")
+    func sparseBlock() throws {
+        let folder = directory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // Only the detail band holds a feature, like a block of sea with a few objects.
+        var writer = FeatureStoreWriter(boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: "", classifierVersion: 16)
+        let point = PackedPoint(longitude: Int32((westCell.northWest.longitude * 1e7).rounded()) + 1_000, latitude: Int32((westCell.northWest.latitude * 1e7).rounded()) - 1_000)
+        try writer.add(
+            StoredFeature(classID: 5, kind: .point, objectType: .node, objectID: 1, parts: [GeometryPart(points: [point])]),
+            band: .detail, cell: westCell)
+        try writer.data().write(to: folder.appendingPathComponent("sparse.gmk"))
+        let size = Int64(try writer.data().count)
+        let set = try StoreSet(
+            manifest: try manifest([block(4, 3, file: "sparse.gmk", bytes: size)], bands: [.overview, .mid, .detail]), directory: folder)
+        let file = try #require(try set.file(containing: westCell))
+        #expect(file.bands == [.detail])
+        #expect(try file.features(in: westCell, band: .overview).isEmpty && file.features(in: westCell, band: .mid).isEmpty)
+        #expect(try file.features(in: westCell, band: .detail).count == 1)
+    }
+
     private func manifest(_ blocks: [StoreManifest.Block], classifier: Int = 16, bands: [ZoomBand] = [.mid, .detail]) throws -> StoreManifest {
         let probe = try FeatureStoreFile(data: {
             var writer = FeatureStoreWriter(boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: "")
