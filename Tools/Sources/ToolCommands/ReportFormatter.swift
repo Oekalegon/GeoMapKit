@@ -182,6 +182,11 @@ public enum ReportFormatter {
             "Manifest: \(report.manifestURL.path)",
             "Total: \(Formatting.seconds(report.totalTime)), peak memory footprint \(report.peakFootprint.map(Formatting.bytes) ?? "n/a")",
         ]
+        if let sea = report.openSea, sea.changed || !sea.conflicting.isEmpty {
+            lines.insert(
+                "Open sea: \(sea.created.count) blocks added, \(sea.extended.count) completed with sea, \(sea.conflicting.count) left because their neighbours disagree",
+                at: 2)
+        }
         for warning in report.warnings { lines.append("warning: \(warning)") }
         return lines.joined(separator: "\n")
     }

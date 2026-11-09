@@ -34,11 +34,13 @@ public struct BlockRequest: Sendable {
     /// builder that does not change the rule table (so the other blocks of the set stay valid), when only some blocks gain
     /// from it: run it over the area of those blocks.
     public var rebuild: Bool
+    /// Whether the sea of open-sea blocks is added after the build (question 53); `false` leaves the holes, for a comparison.
+    public var fillsOpenSea: Bool
 
     /// Creates a request.
     public init(
         area: Area, output: URL, blockZoom: Int = 8, jobs: Int = 1, margin: Double = 0.1, profile: BuildProfile = .full,
-        cacheDirectory: URL? = nil, rebuild: Bool = false
+        cacheDirectory: URL? = nil, rebuild: Bool = false, fillsOpenSea: Bool = true
     ) {
         self.rebuild = rebuild
         self.area = area
@@ -48,6 +50,7 @@ public struct BlockRequest: Sendable {
         self.margin = margin
         self.profile = profile
         self.cacheDirectory = cacheDirectory
+        self.fillsOpenSea = fillsOpenSea
     }
 }
 
@@ -85,4 +88,6 @@ public struct BlockRunReport: Sendable {
     public let peakFootprint: Int64?
     /// Warnings: source files that are older than 30 days and were not checked.
     public let warnings: [String]
+    /// What the open-sea pass did, or `nil` if it did not run (the Watch profile has no coastline class to see).
+    public let openSea: OpenSea.Report?
 }

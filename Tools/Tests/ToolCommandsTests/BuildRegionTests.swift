@@ -313,8 +313,10 @@ struct BuildRegionTests {
         #expect(ReportFormatter.line(for: BlockOutcome(x: 1, y: 2, status: .empty, regions: ["x"]), blockZoom: 8).contains("nothing to store"))
         let report = BlockRunReport(
             outcomes: [built, BlockOutcome(x: 1, y: 2, status: .empty, regions: [])], manifestURL: URL(fileURLWithPath: "/out/manifest.json"),
-            totalTime: .seconds(90), peakFootprint: 800_000_000, warnings: ["Sweden is old."])
+            totalTime: .seconds(90), peakFootprint: 800_000_000, warnings: ["Sweden is old."],
+            openSea: OpenSea.Report(created: [.init(x: 1, y: 2)], extended: [.init(x: 3, y: 4), .init(x: 5, y: 6)], conflicting: [.init(x: 7, y: 8)]))
         let text = ReportFormatter.text(for: report, blockZoom: 8)
+        #expect(text.contains("Open sea: 1 blocks added, 2 completed with sea, 1 left because their neighbours disagree"))
         #expect(text.contains("2 in the area, 1 built (110.0 MB), 0 up to date, 1 with nothing to store"))
         #expect(text.contains("/out/manifest.json") && text.contains("warning: Sweden is old."))
     }

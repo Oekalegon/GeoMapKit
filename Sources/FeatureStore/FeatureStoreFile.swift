@@ -195,6 +195,19 @@ public struct FeatureStoreFile: Sendable {
         return nil
     }
 
+    /// All relations of the file, in order of ID. Reads the whole relation table.
+    public func relations() throws -> [StoredRelation] {
+        let section = header.range(of: .relations)
+        var head = ByteCursor(data, range: section)
+        let count = Int(try head.readUInt32())
+        _ = try head.readUInt32()
+        guard count <= (section.count - 8) / 16 else { throw FeatureStoreError.corrupt("relation count") }
+        return try (0..<count).map { position in
+            let entry = try relationEntry(section: section, position: position)
+            return try decodeRelation(id: entry.id, section: section, offset: entry.offset)
+        }
+    }
+
     // MARK: Verification
 
     /// Checks the checksum and the whole structure: index order and ranges, every cell and band, the string table and the relations.

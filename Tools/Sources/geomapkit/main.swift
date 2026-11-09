@@ -50,7 +50,7 @@ GeoMapKit tools
       asked about again. An interrupted download continues where it stopped.
 
   geomapkit build-region (--region id[,id...] | --tiles x/y[,x/y...] | area as above) --output <folder> [--block-zoom 8] [--jobs N] [--margin 0.1]
-                         [--cache DIR] [--profile full|watch] [--rebuild] [--no-progress]
+                         [--cache DIR] [--profile full|watch] [--rebuild] [--no-progress] [--no-open-sea]
       Build a big area (for example a country) as blocks: one store file for
       each tile of a grid (zoom 8: about 78 km), and a manifest.json that lists
       them. Each block is cut with a margin from the source files in the cache
@@ -64,9 +64,8 @@ GeoMapKit tools
       the blocks x/y of the block zoom (with --rebuild, to do a few of them again).
       On a terminal a bar shows the blocks done, the share, the blocks running
       and, after four blocks, the time left; it is redrawn when a block starts or
-      ends. --no-progress turns it off.
-      A block of open sea (no coastline within its margin and hardly anything else) is built again with the sea assumed when a block
-      next to it is sea along the edge they share, so the middle of a gulf is not left blank.
+      ends. --no-progress turns it off. Afterwards the sea of blocks of open sea (no coastline
+      in them) is added from what their neighbours show; --no-open-sea skips that.
 
   geomapkit build-levels <folder> [--levels 9,8,7,6,5,4,3] [--jobs N] [--margin 32]
       Add coarse levels to a set of blocks, for views of hundreds of kilometres
@@ -147,7 +146,7 @@ do {
     case "build-region":
         let parsed = try CommandLineArguments(
             rest, knownOptions: ["region", "tiles", "bbox", "center", "radius-km", "output", "block-zoom", "jobs", "margin", "cache", "profile"],
-            knownFlags: ["no-progress", "rebuild"])
+            knownFlags: ["no-progress", "rebuild", "no-open-sea"])
         guard parsed.positional.isEmpty else { throw ToolError("build-region takes an area, not files") }
         guard let output = parsed.value(for: "output"), !output.isEmpty else { throw ToolError("build-region needs --output <folder>") }
         let area: BlockRequest.Area
@@ -185,7 +184,8 @@ do {
             area: area, output: URL(fileURLWithPath: output), blockZoom: try whole("block-zoom", 8, in: 0...13),
             jobs: try whole("jobs", defaultJobs, in: 1...64), margin: margin,
             profile: try ProfileArgument.parse(parsed.value(for: "profile")) == .watch ? .watch : .full,
-            cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) }, rebuild: parsed.hasFlag("rebuild"))
+            cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) }, rebuild: parsed.hasFlag("rebuild"),
+            fillsOpenSea: !parsed.hasFlag("no-open-sea"))
         // The bar is on standard error, only when that is a terminal; the block lines stay on standard output.
         let showBar = ProgressBar.isUsableTerminal && !parsed.hasFlag("no-progress")
         func clearBar() { if showBar { FileHandle.standardError.write(Data("\r\u{1B}[2K".utf8)) } }
