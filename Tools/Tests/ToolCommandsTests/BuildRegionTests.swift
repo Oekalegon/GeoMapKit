@@ -60,6 +60,22 @@ struct BuildRegionTests {
         report.outcomes.filter { if case .built = $0.status { return true } else { return false } }
     }
 
+    @Test("render draws a map from the manifest of a set of blocks")
+    func rendersAManifest() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let manifest = s.output.appendingPathComponent("manifest.json")
+        let set = try StoreSet(manifestURL: manifest)
+        let box = try #require(set.boundingBox)
+        let png = s.output.deletingLastPathComponent().appendingPathComponent("m.png")
+        let centre = Coordinate(latitude: (box.south + box.north) / 2, longitude: (box.west + box.east) / 2)
+        let report = try ToolRunner.render(
+            store: manifest, request: RenderRequest(center: centre, zoom: 9, width: 200, height: 150, scale: 1, style: .standard, output: png.path))
+        #expect(Array(try Data(contentsOf: png).prefix(4)) == [0x89, 0x50, 0x4E, 0x47])
+        #expect(report.pixelWidth == 200 && report.cellCount > 0)
+    }
+
     @Test("The blocks of an area are built, listed in a manifest, and can be read as one map")
     func firstRun() async throws {
         let s = try setup()

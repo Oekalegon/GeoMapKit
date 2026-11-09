@@ -223,6 +223,10 @@ struct StoreSetTests {
         let fine = bytes(of: "fine.gmk", in: folder)
         let wrongBands = try StoreSet(manifest: try manifest([block(4, 3, file: "fine.gmk", bytes: fine)], bands: [.detail]), directory: folder)
         #expect(throws: StoreSetError.self) { try wrongBands.file(containing: cell) }
+        // A sparse block holds fewer bands than the manifest lists (found on the real data: a block with only sea objects).
+        let moreBands = try StoreSet(
+            manifest: try manifest([block(4, 3, file: "fine.gmk", bytes: fine)], bands: [.overview, .mid, .detail]), directory: folder)
+        #expect(try moreBands.file(containing: cell) != nil)
         #expect(try StoreSet(manifest: try manifest([block(4, 3, file: "fine.gmk", bytes: fine)]), directory: folder).file(containing: cell) != nil)
         // A file of another size than the manifest records: another build, or one that was not written to the end.
         let wrongSize = try StoreSet(manifest: try manifest([block(4, 3, file: "fine.gmk", bytes: fine + 1)]), directory: folder)

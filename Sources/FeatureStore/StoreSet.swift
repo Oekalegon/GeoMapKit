@@ -120,8 +120,10 @@ public struct StoreSet: CellSource {
                 file: block.file,
                 reason: "format \(file.formatVersion) and rule table \(file.classifierVersion), the manifest says \(manifest.formatVersion) and \(manifest.classifierVersion)")
         }
-        guard file.bands.map({ Int($0.rawValue) }) == manifest.bands else {
-            throw StoreSetError.blockMismatch(file: block.file, reason: "the bands differ from the manifest")
+        // A file only has the bands that hold a feature, so a sparse block (sea, bare land) has fewer than the manifest lists;
+        // a band the manifest does not list means another build.
+        guard Set(file.bands.map { Int($0.rawValue) }).isSubset(of: manifest.bands) else {
+            throw StoreSetError.blockMismatch(file: block.file, reason: "it holds bands that the manifest does not list")
         }
         // The manifest says which build each block is from; a file of another size is another build, or a half-written one.
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize.map(Int64.init) ?? -1

@@ -69,7 +69,7 @@ GeoMapKit tools
       --inner N leaves out the cells within N cells of the edge of the first
       store (try 10), and says how many.
 
-  geomapkit render <file.gmk> --center lat,lon --zoom Z --output <file.png> [--bearing DEGREES]
+  geomapkit render <file.gmk | manifest.json> --center lat,lon --zoom Z --output <file.png> [--bearing DEGREES]
                    [--size WxH] [--scale S] [--style standard|watch|file.json]
                    [--attribution full|compact|none]
       Draw a map from a feature store file into a PNG. Size is in points
