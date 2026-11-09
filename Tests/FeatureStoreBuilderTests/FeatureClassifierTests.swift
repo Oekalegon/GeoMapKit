@@ -114,6 +114,7 @@ struct FeatureClassifierTests {
         Case(tags: ["leisure": "pitch"], featureClass: .landcover, band: .mid, watch: true),
         Case(tags: ["landuse": "residential"], featureClass: .landuseUrban, band: .overview, watch: false),
         Case(tags: ["landuse": "military"], featureClass: .militaryArea, band: .overview, watch: false),
+        Case(tags: ["landuse": "landfill"], featureClass: .landUse, band: .mid, watch: false),
         Case(tags: ["building": "yes"], featureClass: .building, band: .mid, watch: false),
         Case(tags: ["building": "house"], featureClass: .building, band: .mid, watch: false),
         Case(tags: ["building:part": "yes"], featureClass: .building, band: .detail, watch: false),
@@ -374,24 +375,40 @@ struct FeatureClassifierTests {
         #expect(classify(["name": "Stone"], .node).featureClass == .other)
     }
 
+    @Test("Every other landuse value, and dune, moor, tundra and bog, are landUse from the mid band; a building or a shop keeps its class")
+    func landUseCatchAll() {
+        for value in ["landfill", "animal_keeping", "plant_nursery", "greenhouse_horticulture", "religious", "aquaculture", "winter_sports", "depot", "harbour", "something_new"] {
+            let outcome = classify(["landuse": value], .closedWay)
+            #expect(outcome.featureClass == .landUse && outcome.minimumBand == .mid && !outcome.showsOnWatch && outcome.kind == .area, "\(value)")
+        }
+        for value in ["dune", "moor", "tundra", "bog"] {
+            #expect(classify(["natural": value], .closedWay).featureClass == .landUse, "\(value)")
+        }
+        #expect(classify(["landuse": "religious", "building": "yes"], .closedWay).featureClass == .building)
+        #expect(classify(["landuse": "religious", "amenity": "place_of_worship"], .closedWay).featureClass == .poi)
+        #expect(classify(["landuse": "landfill", "addr:street": "Weg"], .closedWay).featureClass == .landUse)
+        #expect(classify(["landuse": "forest"], .closedWay).featureClass == .forest && classify(["landuse": "residential"], .closedWay).featureClass == .landuseUrban)
+    }
+
     @Test("A node with a land cover tag is not stored as a surface: a single rock is an unclassified point")
     func nodesOfSurfaceTags() {
-        for tags in [["natural": "rock"], ["natural": "glacier"], ["natural": "wetland"], ["natural": "sand"], ["natural": "scrub"], ["leisure": "pitch"]] {
+        for tags in [["natural": "rock"], ["natural": "glacier"], ["natural": "wetland"], ["natural": "sand"], ["natural": "scrub"], ["leisure": "pitch"],
+            ["landuse": "landfill"], ["natural": "dune"]] {
             let node = classify(tags, .node)
             #expect(node.featureClass == .other && node.kind == .point, "\(tags)")
             #expect(classify(tags, .closedWay).featureClass != .other, "the area with the same tags keeps its class: \(tags)")
         }
     }
 
-    @Test("The rule table version is 18, and the class IDs of earlier versions did not change")
+    @Test("The rule table version is 19, and the class IDs of earlier versions did not change")
     func version() {
-        #expect(FeatureClassifier.version == 18)
+        #expect(FeatureClassifier.version == 19)
         #expect(FeatureClass.address.rawValue == 25 && FeatureClass.pavement.rawValue == 26 && FeatureClass.cliff.rawValue == 27)
         #expect(FeatureClass.countryBorder.rawValue == 24 && FeatureClass.roadPoint.rawValue == 23)
         #expect(FeatureClass.peak.rawValue == 12 && FeatureClass.boundary.rawValue == 16 && FeatureClass.other.rawValue == 0)
         #expect(FeatureClass.militaryArea.rawValue == 36 && FeatureClass.glacier.rawValue == 37)
         #expect(FeatureClass.bareGround.rawValue == 38 && FeatureClass.wetland.rawValue == 39)
-        #expect(FeatureClass.sand.rawValue == 40 && FeatureClass.allCases.count == 41)
+        #expect(FeatureClass.sand.rawValue == 40 && FeatureClass.landUse.rawValue == 41 && FeatureClass.allCases.count == 42)
         // The subclass numbers of the values that moved out of landcover (rule table 18) are fixed by this table.
         #expect(classify(["natural": "scree"], .closedWay).subclass == 2 && classify(["natural": "rock"], .closedWay).subclass == 6)
         #expect(classify(["natural": "beach"], .closedWay).subclass == 2 && classify(["natural": "wetland"], .closedWay).subclass == 1)

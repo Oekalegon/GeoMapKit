@@ -154,6 +154,11 @@ extension FeatureClassifier {
         for (index, key) in ["amenity", "shop", "tourism", "historic", "leisure", "man_made", "emergency"].enumerated() {
             rules.append(ClassifierRule(key, any: one(.poi, .detail, watch: false, sub: UInt8(index + 1))))
         }
+        // Land use and surface kinds that no rule above takes (rule table version 19): kept as `landUse` and not as unclassified objects,
+        // with the value of the tag in every band, so that a style can show them (animal husbandry, landfills, nurseries and so on).
+        // These rules are last of the surfaces on purpose: an object that is also a building, a shop or a hut keeps that class.
+        rules.append(ClassifierRule("landuse", any: one(.landUse, .mid, watch: false)))
+        rules.append(ClassifierRule("natural", make(.landUse, .mid, watch: false, [("dune", 1), ("moor", 2), ("tundra", 3), ("bog", 4)])))
         // Objects with nothing but an address (rule table version 4): the largest group in a town.
         for key in ["addr:housenumber", "addr:housename", "addr:street", "addr:postcode", "addr:city"] {
             rules.append(ClassifierRule(key, any: one(.address, .detail, watch: false)))

@@ -19,11 +19,12 @@ struct MapStyleTests {
         #expect(steps.map(\.part) == [.casing, .body])
     }
 
-    @Test func standardStyleCoversEveryClassExceptOtherAndAddresses() {
-        for featureClass in FeatureClass.allCases where featureClass != .other && featureClass != .address {
+    @Test func standardStyleCoversEveryClassExceptOtherAddressesAndLandUse() {
+        // `landUse` (rule table 19) is stored so that a style can show it; the standard style draws nothing for it.
+        for featureClass in FeatureClass.allCases where featureClass != .other && featureClass != .address && featureClass != .landUse {
             #expect(MapStyle.standard.style(for: featureClass) != nil, "\(featureClass) has no standard style")
         }
-        #expect(MapStyle.standard.style(for: .other) == nil && MapStyle.standard.style(for: .address) == nil)
+        #expect(MapStyle.standard.style(for: .other) == nil && MapStyle.standard.style(for: .address) == nil && MapStyle.standard.style(for: .landUse) == nil)
     }
 
     @Test func militaryLandIsDashedRedAndTranslucentAboveTheWater() throws {
@@ -56,6 +57,8 @@ struct MapStyleTests {
         }
         let sand = try #require(MapStyle.standard.style(for: .sand)?.fill?.color.value(atZoom: 12))
         #expect(sand.red > sand.blue && sand.green > sand.blue && sand.red > 0.9, "sand and beaches are light yellow")
+        let sandStyle = try #require(MapStyle.standard.style(for: .sand))
+        #expect(sandStyle.layer > landcover.layer && sandStyle.layer >= forest.layer, "sand between woods is not hidden by the forest")
         for class_ in [FeatureClass.glacier, .bareGround, .wetland, .sand] { #expect(MapStyle.watch.style(for: class_) != nil, "\(class_) on the Watch") }
     }
 
