@@ -7,6 +7,7 @@ import SwiftUI
 /// The map of the selected store, with the library, the style and the position of the user.
 struct MapScreen: View {
     @Environment(MapLibrary.self) private var library
+    @Environment(WatchLink.self) private var watch
     @State private var opened: OpenedMap?
     @State private var center = Coordinate(latitude: 59.9, longitude: 10.7)
     @State private var zoom = 3.0
@@ -15,6 +16,8 @@ struct MapScreen: View {
     @State private var message: String?
     @State private var showLibrary = false
     @State private var cutting = false
+    /// The copy that was just cut, while the user is asked whether to send it to the Watch.
+    @State private var offerToSend: MapItem?
     @State private var editor: EditorSession?
     @State private var location = LocationModel()
     /// The user pressed "centre on me" before there was a position: the first one that comes is where the map goes.
@@ -68,7 +71,20 @@ struct MapScreen: View {
                 library.styleToEdit = nil
                 startEditing(id)
             }
-        }) { LibraryScreen().environment(library) }
+        }) { LibraryScreen().environment(library).environment(watch) }
+        #if os(iOS)
+        .confirmationDialog("Send it to the Watch?", isPresented: Binding(get: { offerToSend != nil }, set: { if !$0 { offerToSend = nil } }), titleVisibility: .visible) {
+            Button("Send to the Watch") {
+                if let map = offerToSend {
+                    do { try watch.send(library.url(of: map), named: map.name) } catch { message = error.localizedDescription }
+                }
+                offerToSend = nil
+            }
+            Button("Not now", role: .cancel) { offerToSend = nil }
+        } message: {
+            Text(offerToSend?.name ?? "")
+        }
+        #endif
         .sheet(item: $editor) { session in StyleEditorScreen(session: session).environment(library) }
         .task(id: library.selectedMapID) { loadMap() }
         .onChange(of: library.revision) { _, _ in loadStyle() }
@@ -203,6 +219,9 @@ struct MapScreen: View {
                     message = error.localizedDescription
                 } else {
                     message = "Cut \(result.report.cellsWritten) cells, \(result.report.fileBytes / 1_000) kB, and opened it from the library."
+                    #if os(iOS)
+                    if watch.status == .ready, let id = added.maps.first { offerToSend = library.maps.first { $0.id == id } }
+                    #endif
                 }
             } catch {
                 message = WatchCut.sentence(for: error)

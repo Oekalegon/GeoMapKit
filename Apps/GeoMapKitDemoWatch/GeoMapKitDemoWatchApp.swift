@@ -1,16 +1,14 @@
 import SwiftUI
 
-/// The Watch app. In this step it only says what it will do; the map and the transfer from the phone come later.
+/// The Watch app: the maps the iPhone sent, and a map of each with the Watch style.
 @main
 struct GeoMapKitDemoWatchApp: App {
+    @State private var link = WatchLink()
+
     var body: some Scene {
         WindowGroup {
-            VStack(spacing: 8) {
-                Image(systemName: "map").font(.title)
-                Text("GeoMapKit").font(.headline)
-                Text("The map arrives from the iPhone.").font(.footnote).multilineTextAlignment(.center)
-            }
-            .padding()
+            WatchMapList()
+                .environment(link)
         }
     }
 }

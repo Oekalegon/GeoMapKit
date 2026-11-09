@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 /// The maps and styles the user has stored: pick one, add, rename, delete, share.
 struct LibraryScreen: View {
+    @Environment(WatchLink.self) private var watch
     @Environment(MapLibrary.self) private var library
     @Environment(\.dismiss) private var dismiss
 
@@ -47,6 +48,16 @@ struct LibraryScreen: View {
                     }
                     ForEach(library.maps) { map in mapRow(map) }
                 } header: { Text("Maps") }
+
+                #if os(iOS)
+                Section {
+                    Label(watch.status.sentence, systemImage: watch.status == .ready ? "applewatch.radiowaves.left.and.right" : "applewatch.slash")
+                    if watch.pending > 0 { Label("\(watch.pending) on the way", systemImage: "arrow.up.circle") }
+                    if let problem = watch.lastProblem { Text(problem).font(.footnote).foregroundStyle(.red) }
+                } header: { Text("Apple Watch") } footer: {
+                    Text("Touch and hold a map to send it to the Watch. A map for the Watch is made with Cut for the Watch on the map.")
+                }
+                #endif
 
                 Section {
                     styleRow("Standard", choice: .standard)
@@ -120,6 +131,11 @@ struct LibraryScreen: View {
         .contextMenu {
             Button { begin(.map(map)) } label: { Label("Rename…", systemImage: "pencil") }
             if map.kind == .file { ShareLink(item: library.url(of: map)) }
+            #if os(iOS)
+            if map.kind == .file {
+                Button { send(map) } label: { Label("Send to the Watch", systemImage: "applewatch") }
+            }
+            #endif
             Button(role: .destructive) { remove(map) } label: { Label("Remove", systemImage: "trash") }
         }
         .swipeActions {
@@ -190,6 +206,16 @@ struct LibraryScreen: View {
         }
         self.renaming = nil
     }
+
+    #if os(iOS)
+    private func send(_ map: MapItem) {
+        do {
+            try watch.send(library.url(of: map), named: map.name)
+        } catch {
+            errors = [.failed(map.name, error.localizedDescription)]
+        }
+    }
+    #endif
 
     /// Asks the map screen to open the style in the editor, and closes the library.
     private func edit(_ item: StyleItem) {
