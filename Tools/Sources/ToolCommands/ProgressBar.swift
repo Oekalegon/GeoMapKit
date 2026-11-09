@@ -17,8 +17,8 @@ public enum ProgressBar {
         return ioctl(STDERR_FILENO, TIOCGWINSZ, &size) == 0 && size.ws_col > 0 ? Int(size.ws_col) : 80
     }
 
-    /// The width for the bar so that a line of `fixed` other characters stays within `terminal` (at most 20, at least 0).
-    public static func barWidth(terminal: Int, fixed: Int) -> Int { min(max(terminal - fixed - 1, 0), 20) }
+    /// The width for the bar so that a line of `fixed` other characters stays one column short of `terminal` (at most 20, at least 0).
+    public static func barWidth(terminal: Int, fixed: Int) -> Int { min(max(terminal - fixed - 2, 0), 20) }
 
     /// The line: `[ 57/163] ███████░░░░░░░░░░░░░  35 %  4 running  1:12:30 left`.
     ///
