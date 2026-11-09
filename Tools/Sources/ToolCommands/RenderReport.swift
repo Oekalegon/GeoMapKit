@@ -1,6 +1,6 @@
 import FeatureStore
 
-/// What the `render` command did.
+/// What the `render` command did, for a store file or for the manifest of a set of blocks.
 public struct RenderReport: Equatable, Sendable {
     /// The PNG file name.
     public let outputName: String

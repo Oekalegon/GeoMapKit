@@ -176,16 +176,25 @@ public enum ToolRunner {
     /// Draws a map from a feature store file into a PNG.
     ///
     /// - Parameters:
-    ///   - store: The `.gmk` file.
+    ///   - store: The `.gmk` file, or the `manifest.json` of a set of blocks.
     ///   - request: Centre, zoom, size, scale, style and output path.
     /// - Returns: What was drawn and how long it took.
     /// - Throws: ``ToolError`` for unreadable files or bad output paths, and the store or render errors.
     public static func render(store: URL, request: RenderRequest) throws -> RenderReport {
         let output = URL(fileURLWithPath: request.output)
         try checkWritable(output)
-        let file: FeatureStoreFile
+        let source: any CellSource
+        let built: Int
         do {
-            file = try FeatureStoreFile(contentsOf: store)
+            if store.pathExtension.lowercased() == "json" {
+                let set = try StoreSet(manifestURL: store)
+                source = set
+                built = set.manifest.classifierVersion
+            } else {
+                let file = try FeatureStoreFile(contentsOf: store)
+                source = file
+                built = file.classifierVersion
+            }
         } catch {
             throw ToolError("Cannot read \(store.path): \(error)")
         }
@@ -212,7 +221,7 @@ public enum ToolRunner {
 
         let clock = ContinuousClock()
         var started = clock.now
-        let scene = try MapSceneBuilder(file: file, style: style).scene(for: viewport)
+        let scene = try MapSceneBuilder(source: source, style: style).scene(for: viewport)
         let sceneTime = clock.now - started
 
         started = clock.now
@@ -230,7 +239,7 @@ public enum ToolRunner {
             outputName: output.lastPathComponent, pixelWidth: Int((Double(request.width) * request.scale).rounded()),
             pixelHeight: Int((Double(request.height) * request.scale).rounded()), pngBytes: png.count, band: scene.band,
             cellCount: scene.cellCount, stepCount: scene.steps.count, featureCount: featureCount, sceneTime: sceneTime,
-            drawTime: drawTime, outdatedRuleTable: file.classifierVersion < Int(FeatureClassifier.version) ? file.classifierVersion : nil,
+            drawTime: drawTime, outdatedRuleTable: built < Int(FeatureClassifier.version) ? built : nil,
             currentRuleTable: Int(FeatureClassifier.version))
     }
 
