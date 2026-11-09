@@ -62,6 +62,20 @@ GeoMapKit tools
       and, after four blocks, the time left; it is redrawn when a block starts or
       ends. --no-progress turns it off.
 
+  geomapkit build-levels <folder> [--levels 8,7,6,5,4,3] [--jobs N] [--margin 32]
+      Add coarse levels to a set of blocks, for views of hundreds of kilometres
+      (the blocks hold the cells of zoom 13, which are too many to draw then).
+      A level with the top zoom t serves the zooms above t-1 up to t: its cells
+      have the zoom t+2, and it holds only the classes that the standard style
+      shows at t, simplified for t, without what is smaller than three pixels.
+      The files go to levels/<t>/ in the folder and manifest.json is written
+      again (version 2) after every file. A level file is made from the blocks
+      with a margin of --margin cells around it (so that a road across the
+      border of a block is judged whole), and is left alone when those blocks
+      and the classes are the same, so a run that was stopped can be run again.
+      Each job uses memory in proportion to the area it reads (not measured for
+      the coarse levels: start with --jobs 2).
+
   geomapkit compare <first> <second> [--limit N] [--inner N]
       Compare two stores (a .gmk file or a manifest.json) in the cells both
       hold, and list the features that differ: a check that blocks give the
@@ -163,6 +177,28 @@ do {
             })
         clearBar()
         print(ReportFormatter.text(for: report, blockZoom: request.blockZoom))
+    case "build-levels":
+        let parsed = try CommandLineArguments(rest, knownOptions: ["levels", "jobs", "margin"])
+        guard parsed.positional.count == 1 else { throw ToolError("build-levels needs the folder of a set of blocks") }
+        var topZooms = [8, 7, 6, 5, 4, 3]
+        if let text = parsed.value(for: "levels") {
+            let values = text.split(separator: ",").map { Int($0.trimmingCharacters(in: .whitespaces)) }
+            guard !values.isEmpty, values.allSatisfy({ $0 != nil }) else { throw ToolError("--levels expects top zooms like 8,7,6") }
+            topZooms = values.compactMap { $0 }
+        }
+        func whole(_ name: String, _ fallback: Int, in range: ClosedRange<Int>) throws -> Int {
+            guard let text = parsed.value(for: name) else { return fallback }
+            guard let value = Int(text), range.contains(value) else { throw ToolError("--\(name) expects a whole number from \(range.lowerBound) to \(range.upperBound)") }
+            return value
+        }
+        let levelRequest = LevelRequest(
+            directory: URL(fileURLWithPath: parsed.positional[0]), topZooms: topZooms, jobs: try whole("jobs", 2, in: 1...64),
+            margin: try whole("margin", 32, in: 0...256))
+        let levelReport = try await ToolRunner.buildLevels(levelRequest, progress: { outcome in
+            print(ReportFormatter.line(for: outcome))
+            fflush(stdout)
+        })
+        print(ReportFormatter.text(for: levelReport))
     case "compare":
         let parsed = try CommandLineArguments(rest, knownOptions: ["limit", "inner"])
         guard parsed.positional.count == 2 else { throw ToolError("compare needs two stores") }

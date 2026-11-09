@@ -7,8 +7,11 @@ import GeoCore
 /// all the cells of its tile and no cell belongs to two blocks. The manifest says which blocks there are, what format they have
 /// (they must all agree), and which source files each was built from, so that "this block is out of date" is a comparison.
 public struct StoreManifest: Codable, Equatable, Sendable {
-    /// The version of this manifest format.
-    public static let currentVersion = 1
+    /// The version of a manifest without levels.
+    public static let baseVersion = 1
+    /// The latest version of this manifest format: a manifest with levels (question 50) is written as version 2, and a manifest
+    /// without them as version 1, so that a reader that does not know levels still opens a map that has none.
+    public static let currentVersion = 2
     /// The profiles a block set can be built with.
     static let profiles: Set<String> = ["full", "watch"]
 
@@ -86,13 +89,15 @@ public struct StoreManifest: Codable, Equatable, Sendable {
     public var attribution: String
     /// The blocks.
     public var blocks: [Block]
+    /// The coarse levels, if any (version 2). The blocks above are the finest level, the cells of zoom 13.
+    public var levels: [Level] = []
 
     /// Creates a manifest.
     public init(
         formatVersion: Int, classifierVersion: Int, storageZoom: Int, blockZoom: Int, bands: [ZoomBand], profile: String,
         attribution: String, blocks: [Block]
     ) {
-        version = Self.currentVersion
+        version = Self.baseVersion
         self.formatVersion = formatVersion
         self.classifierVersion = classifierVersion
         self.storageZoom = storageZoom
@@ -101,6 +106,40 @@ public struct StoreManifest: Codable, Equatable, Sendable {
         self.profile = profile
         self.attribution = attribution
         self.blocks = blocks
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version, formatVersion, classifierVersion, storageZoom, blockZoom, bands, profile, attribution, blocks, levels
+    }
+
+    /// Decodes a manifest; a manifest without `levels` (version 1) has none.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        formatVersion = try c.decode(Int.self, forKey: .formatVersion)
+        classifierVersion = try c.decode(Int.self, forKey: .classifierVersion)
+        storageZoom = try c.decode(Int.self, forKey: .storageZoom)
+        blockZoom = try c.decode(Int.self, forKey: .blockZoom)
+        bands = try c.decode([Int].self, forKey: .bands)
+        profile = try c.decode(String.self, forKey: .profile)
+        attribution = try c.decode(String.self, forKey: .attribution)
+        blocks = try c.decode([Block].self, forKey: .blocks)
+        levels = try c.decodeIfPresent([Level].self, forKey: .levels) ?? []
+    }
+
+    /// Encodes the manifest as version 2 when it has levels and as version 1 when it has none.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(levels.isEmpty ? Self.baseVersion : Self.currentVersion, forKey: .version)
+        try c.encode(formatVersion, forKey: .formatVersion)
+        try c.encode(classifierVersion, forKey: .classifierVersion)
+        try c.encode(storageZoom, forKey: .storageZoom)
+        try c.encode(blockZoom, forKey: .blockZoom)
+        try c.encode(bands, forKey: .bands)
+        try c.encode(profile, forKey: .profile)
+        try c.encode(attribution, forKey: .attribution)
+        try c.encode(blocks, forKey: .blocks)
+        if !levels.isEmpty { try c.encode(levels, forKey: .levels) }
     }
 
     /// Reads a manifest from JSON and checks it.
@@ -132,7 +171,7 @@ public struct StoreManifest: Codable, Equatable, Sendable {
     ///
     /// - Throws: ``StoreSetError/unsupportedManifestVersion(_:)`` or ``StoreSetError/invalidManifest(_:)``.
     public func validate() throws {
-        guard version == Self.currentVersion else { throw StoreSetError.unsupportedManifestVersion(version) }
+        guard (Self.baseVersion...Self.currentVersion).contains(version) else { throw StoreSetError.unsupportedManifestVersion(version) }
         guard (0...TileID.maximumZoom).contains(storageZoom), (0...storageZoom).contains(blockZoom) else {
             throw StoreSetError.invalidManifest("the block zoom \(blockZoom) must be from 0 to the storage zoom \(storageZoom), which must be from 0 to \(TileID.maximumZoom)")
         }
@@ -164,6 +203,7 @@ public struct StoreManifest: Codable, Equatable, Sendable {
                 throw StoreSetError.invalidManifest("the file '\(block.file)' is used by more than one block")
             }
         }
+        try validateLevels(usedFiles: &files)
     }
 
     /// Whether a relative path stays inside the folder it is relative to.

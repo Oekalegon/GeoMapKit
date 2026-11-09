@@ -133,6 +133,36 @@ public enum ReportFormatter {
         }
     }
 
+    /// One line for a level block that is done.
+    public static func line(for outcome: LevelOutcome) -> String {
+        let name = "level \(outcome.topZoom) block \(outcome.x)/\(outcome.y)"
+        switch outcome.status {
+        case .built(let bytes, let features, let seconds):
+            return "\(name): built, \(Formatting.bytes(bytes)), \(Formatting.count(features)) features, \(String(format: "%.1f", seconds)) s"
+        case .upToDate: return "\(name): up to date, left as it is"
+        case .empty: return "\(name): nothing to store"
+        }
+    }
+
+    /// The text for a finished `build-levels` run.
+    public static func text(for report: LevelRunReport) -> String {
+        var built = 0, upToDate = 0, empty = 0
+        for outcome in report.outcomes {
+            switch outcome.status {
+            case .built: built += 1
+            case .upToDate: upToDate += 1
+            case .empty: empty += 1
+            }
+        }
+        var lines = ["", "Level blocks: \(report.outcomes.count), \(built) built, \(upToDate) up to date, \(empty) with nothing to store"]
+        for summary in report.summaries {
+            lines.append("  level \(summary.topZoom) (cells of zoom \(summary.storageZoom)): \(summary.blocks) blocks, \(Formatting.bytes(summary.bytes))")
+        }
+        lines.append("Manifest: \(report.manifestURL.path)")
+        lines.append("Total: \(Formatting.seconds(report.totalTime)), peak memory footprint \(report.peakFootprint.map(Formatting.bytes) ?? "n/a")")
+        return lines.joined(separator: "\n")
+    }
+
     /// The text for a finished `build-region` run.
     public static func text(for report: BlockRunReport, blockZoom: Int) -> String {
         var built = 0, upToDate = 0, empty = 0
