@@ -99,4 +99,106 @@ struct RegionCutterTests {
         #expect(throws: RegionCutError.emptyArea) { try cutter.cut(area: empty, to: url) }
         #expect(!FileManager.default.fileExists(atPath: url.path), "nothing is written for a refused cut")
     }
+
+    /// The same cells as two block files of the zoom 8 grid (cells 0 and 1 in one, cell 2 in the other), each with its own string table.
+    private func makeSet(version: [UInt16] = [20, 20]) throws -> (set: StoreSet, folder: URL) {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-cutset-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var blocks: [StoreManifest.Block] = []
+        for (index, group) in [[0, 1], [2]].enumerated() {
+            var writer = FeatureStoreWriter(
+                boundingBox: BoundingBox(south: 59, west: 10, north: 60, east: 11), attribution: "© OpenStreetMap contributors, ODbL",
+                classifierVersion: version[index])
+            // A string that only this block has, so that the numbers of a name differ between the blocks.
+            _ = writer.intern("only in block \(index)")
+            for number in group {
+                let cell = cells[number]
+                try writer.add(
+                    StoredFeature(
+                        classID: FeatureClass.peak.rawValue, kind: .point, objectType: .node, objectID: Int64(number),
+                        nameID: writer.intern("Peak \(number)"), parts: [GeometryPart(points: [point(in: cell)])]),
+                    band: .mid, cell: cell)
+            }
+            let data = try writer.data()
+            let name = "block\(index).gmk"
+            try data.write(to: folder.appendingPathComponent(name))
+            blocks.append(
+                StoreManifest.Block(
+                    x: index == 0 ? 134 : 135, y: 71, file: name, bytes: Int64(data.count), builtAt: Date(timeIntervalSince1970: 1_800_000_000)))
+        }
+        let manifest = StoreManifest(
+            formatVersion: Int(FileHeader.formatVersion), classifierVersion: Int(version[0]), storageZoom: 13, blockZoom: 8, bands: [.mid],
+            profile: "full", attribution: "© OpenStreetMap contributors, ODbL", blocks: blocks)
+        return (try StoreSet(manifest: manifest, directory: folder), folder)
+    }
+
+    @Test func aSetOfBlocksIsCutToOneFileWithOneStringTable() throws {
+        let (set, folder) = try makeSet()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = output()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let area = BoundingBox(
+            south: cells[2].southEast.latitude + 0.0001, west: cells[0].northWest.longitude + 0.0001, north: cells[0].northWest.latitude - 0.0001,
+            east: cells[2].southEast.longitude - 0.0001)
+        let report = try RegionCutter(source: set).cut(area: area, to: url, sourceDate: Date(timeIntervalSince1970: 1_800_000_000))
+        #expect(report.cellsExamined == 21 && report.cellsWritten == 3)
+        let copy = try FeatureStoreFile(contentsOf: url)
+        try copy.verify()
+        #expect(copy.sourceDate == Date(timeIntervalSince1970: 1_800_000_000))
+        for number in 0..<3 {
+            let peak = try #require(copy.features(in: cells[number], band: .mid).first)
+            #expect(peak.nameID.flatMap { copy.string(at: $0) } == "Peak \(number)", "the name of a block's feature is read from that block")
+        }
+        #expect(copy.stringTableCount == 3, "the strings that only a block has are not in the copy")
+    }
+
+    @Test func filesWithDifferentClassTablesAreNotMixed() throws {
+        let (set, folder) = try makeSet(version: [20, 19])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = output()
+        let area = BoundingBox(
+            south: cells[2].southEast.latitude + 0.0001, west: cells[0].northWest.longitude + 0.0001, north: cells[0].northWest.latitude - 0.0001,
+            east: cells[2].southEast.longitude - 0.0001)
+        #expect(throws: RegionCutError.self) { try RegionCutter(source: set).cut(area: area, to: url) }
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test func aFolderThatIsNotThereIsAnIOError() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("no-such-folder-\(UUID().uuidString)/copy.gmk")
+        do {
+            try RegionCutter(source: makeSource()).cut(area: twoCells, to: url)
+            Issue.record("expected an error")
+        } catch let error as RegionCutError {
+            guard case .io = error else { Issue.record("expected io, got \(error)"); return }
+        }
+    }
+
+    @Test func anAreaOnTheBorderOfCellsTakesTheCellsItTouches() throws {
+        // From a corner of a cell to the corner of the next: points on borders fall in one of the two cells, so only the count of
+        // cells in each direction is certain (one or two), never zero.
+        let a = cells[0], b = cells[1]
+        let box = BoundingBox(
+            south: a.southEast.latitude, west: a.northWest.longitude, north: a.northWest.latitude, east: b.southEast.longitude)
+        let range = try RegionCutter(source: makeSource()).cells(of: box)
+        #expect((1...2).contains(range.rows.count) && (2...3).contains(range.columns.count))
+        #expect(range.columns.contains(a.x) && range.columns.contains(b.x) && range.rows.contains(a.y))
+    }
+
+    @Test func aSquareOfTheSameSideIsMoreCellsInTheNorth() throws {
+        // Cells are square on the map and shrink with the cosine of the latitude, so a square of the same side in kilometres is about 8 times as
+        // many cells at 70 degrees north as at the equator: the limit in cells is a smaller area in the north.
+        var writer = FeatureStoreWriter(boundingBox: BoundingBox(south: -1, west: -1, north: 71, east: 1), attribution: "x")
+        try writer.add(
+            StoredFeature(classID: 1, kind: .point, objectType: .node, objectID: 1, parts: [GeometryPart(points: [PackedPoint(longitude: 0, latitude: 0)])]),
+            band: .mid, cell: TileID(zoom: 13, x: 4_096, y: 4_096)!)
+        let cutter = RegionCutter(source: try FeatureStoreFile(data: writer.data()), maximumCells: 100_000)
+        func cells(at latitude: Double) throws -> Int {
+            let half = 10.0 / 2 / 111.32
+            let range = try cutter.cells(of: BoundingBox(
+                south: latitude - half, west: 10 - half / cos(latitude * .pi / 180), north: latitude + half, east: 10 + half / cos(latitude * .pi / 180)))
+            return range.columns.count * range.rows.count
+        }
+        let equator = try cells(at: 0), north = try cells(at: 70)
+        #expect(north > 4 * equator, "\(equator) cells at the equator and \(north) at 70 degrees north")
+    }
 }

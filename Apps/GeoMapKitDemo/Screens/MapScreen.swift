@@ -197,10 +197,12 @@ struct MapScreen: View {
             do {
                 let result = try await Task.detached { try WatchCut.cut(source: source, named: name, around: middle, kilometres: kilometres) }.value
                 let added = library.add([result.url])
+                // The file is copied into the library (or linked): the temporary folder is not needed any more.
+                try? FileManager.default.removeItem(at: result.url.deletingLastPathComponent())
                 if let error = added.errors.first {
                     message = error.localizedDescription
                 } else {
-                    message = "Cut \(result.report.cellsWritten) cells, \(result.report.fileBytes / 1_000) kB, and added it to the library."
+                    message = "Cut \(result.report.cellsWritten) cells, \(result.report.fileBytes / 1_000) kB, and opened it from the library."
                 }
             } catch {
                 message = WatchCut.sentence(for: error)

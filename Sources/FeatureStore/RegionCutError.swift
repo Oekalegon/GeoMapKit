@@ -7,6 +7,8 @@ public enum RegionCutError: Error, Equatable, Sendable {
     case tooLarge(cells: Int, limit: Int)
     /// The map has no feature of the profile in the area.
     case emptyArea
-    /// The source or the output could not be read or written.
+    /// The source is not a well-formed store, or its files do not agree (for example two files with different class tables).
     case store(FeatureStoreError)
+    /// A file could not be read or written (the text says what the system reported), or a set of blocks was refused.
+    case io(String)
 }

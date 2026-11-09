@@ -4,7 +4,8 @@ import GeoCore
 
 /// The cut of a Watch copy of the open map, around the middle of the view.
 enum WatchCut {
-    /// The box of a square around a position.
+    /// The box of a square around a position. Near the edge of the map (past 85° of latitude or ±180° of longitude) the box is cut
+    /// off, so the position is no longer its middle.
     ///
     /// - Parameters:
     ///   - center: The middle.
@@ -36,7 +37,8 @@ enum WatchCut {
         case .tooLarge(let cells, let limit): "That area is too large for the Watch: \(cells) cells, the limit is \(limit)."
         case .emptyArea: "The map has nothing for the Watch in this area. Move the map to where it has data."
         case .invalidArea: "That area is not valid."
-        case .store(let inner): "The map could not be read or written: \(inner)"
+        case .store(let inner): "The map is not well formed: \(inner)"
+        case .io(let text): "The map could not be read or written: \(text)"
         case nil: error.localizedDescription
         }
     }

@@ -17,7 +17,8 @@ public struct RegionCutter: Sendable {
     public let source: any CellSource
     /// What is kept.
     public let profile: WatchProfile
-    /// The most cells at the storage zoom an area may cover, 4,000 by default (about 25 km across at zoom 13 in the north of Norway).
+    /// The most cells at the storage zoom an area may cover, 1,000 by default. A cell is about 4.9 km wide at the equator and about 1.7 km at
+    /// 70° north, so 1,000 cells (32 × 32) are about 55 km across there. The number is a guess until the room on the Watch is known.
     public let maximumCells: Int
 
     /// Creates a cutter.
@@ -26,7 +27,7 @@ public struct RegionCutter: Sendable {
     ///   - source: The map to cut from. Its cells at the storage zoom are used, not its coarse levels.
     ///   - profile: What to keep, the fixed Watch profile by default.
     ///   - maximumCells: The largest area, in cells, that ``cut(area:to:)`` accepts; at least 1.
-    public init(source: any CellSource, profile: WatchProfile = .standard, maximumCells: Int = 4_000) {
+    public init(source: any CellSource, profile: WatchProfile = .standard, maximumCells: Int = 1_000) {
         self.source = source
         self.profile = profile
         self.maximumCells = max(maximumCells, 1)
@@ -55,10 +56,13 @@ public struct RegionCutter: Sendable {
     /// - Parameters:
     ///   - area: The area in degrees; the copy holds every cell that touches it.
     ///   - url: Where to write the file.
+    ///   - sourceDate: The date of the data, if known, for the header of the copy (a source does not tell it).
     /// - Returns: What the cut came to.
-    /// - Throws: ``RegionCutError`` for an area that is not valid, too large or empty, or for a file that cannot be read or written.
+    /// - Throws: ``RegionCutError``: ``RegionCutError/invalidArea``, ``RegionCutError/tooLarge(cells:limit:)`` or
+    ///   ``RegionCutError/emptyArea`` for the area, ``RegionCutError/store(_:)`` for a source that is not well formed, and
+    ///   ``RegionCutError/io(_:)`` for a file that cannot be read or written.
     @discardableResult
-    public func cut(area: BoundingBox, to url: URL) throws -> CutReport {
+    public func cut(area: BoundingBox, to url: URL, sourceDate: Date? = nil) throws -> CutReport {
         let range = try cells(of: area)
         let zoom = source.storageZoom
         // The box of the copy is the box of the cells, so that a reader sees where the map ends.
@@ -69,26 +73,35 @@ public struct RegionCutter: Sendable {
             south: last.southEast.latitude, west: first.northWest.longitude, north: first.northWest.latitude, east: last.southEast.longitude)
         let classIDs = Set(profile.classes.map(\.rawValue))
         var report = CutReport(cellsExamined: 0, cellsWritten: 0, featuresWritten: 0, fileBytes: 0)
-        // The writer is made at the first file that holds a cell, for the version of the class table of that file.
         var writer: FeatureStoreWriter?
+        var classifierVersion: UInt16?
         do {
             for y in range.rows {
                 for x in range.columns {
                     guard let cell = TileID(zoom: zoom, x: x, y: y) else { continue }
                     report.cellsExamined += 1
                     guard let file = try source.file(containing: cell) else { continue }
-                    var target = writer ?? FeatureStoreWriter(
-                        storageZoom: zoom, boundingBox: box, attribution: source.attribution,
-                        classifierVersion: UInt16(truncatingIfNeeded: file.classifierVersion))
-                    writer = nil
-                    defer { writer = target }
+                    // The class numbers of the copy are those of its source: files with another table cannot be mixed.
+                    let version = UInt16(truncatingIfNeeded: file.classifierVersion)
+                    if let classifierVersion, classifierVersion != version {
+                        throw FeatureStoreError.corrupt("the files of the source have different class tables (\(classifierVersion) and \(version))")
+                    }
+                    classifierVersion = version
+                    if writer == nil {
+                        writer = FeatureStoreWriter(
+                            storageZoom: zoom, boundingBox: box, attribution: source.attribution, sourceDate: sourceDate,
+                            classifierVersion: version)
+                    }
                     var written = false
                     for band in profile.bands {
                         for var feature in try file.features(in: cell, band: band, classes: classIDs) {
                             // Strings are numbers of the string table of the file they were read from: write them to the new table.
-                            feature.nameID = feature.nameID.flatMap { file.stringBytes(at: $0) }.map { target.intern([UInt8]($0)) }
+                            feature.nameID = try feature.nameID.map { id in
+                                guard let bytes = file.stringBytes(at: id) else { throw FeatureStoreError.corrupt("name outside the string table") }
+                                return writer!.intern([UInt8](bytes))
+                            }
                             feature.tags = []
-                            try target.add(feature, band: band, cell: cell)
+                            try writer!.add(feature, band: band, cell: cell)
                             report.featuresWritten += 1
                             written = true
                         }
@@ -100,8 +113,12 @@ public struct RegionCutter: Sendable {
             let data = try writer.data()
             try data.write(to: url, options: .atomic)
             report.fileBytes = data.count
+        } catch let error as RegionCutError {
+            throw error
         } catch let error as FeatureStoreError {
             throw RegionCutError.store(error)
+        } catch {
+            throw RegionCutError.io("\(error)")
         }
         return report
     }
