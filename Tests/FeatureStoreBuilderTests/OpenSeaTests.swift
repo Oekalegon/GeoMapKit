@@ -237,6 +237,9 @@ struct OpenSeaTests {
         let before = try manifest([writeSeaBlock(at: seaBlock, partialEdgeRows: [3, 4, 20], in: folder)])
         let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, open]))
         #expect(report.created == [open] && report.conflicting.isEmpty && after.blocks.count == 2)
+        // A second run finds the new block known, with sea squares on every edge, and changes nothing.
+        let (again, second) = try OpenSea.fill(manifest: after, folder: folder, covered: covered([seaBlock, open]))
+        #expect(!second.changed && again == after)
     }
 
     @Test func aBorderOfPartlySeaCellsOnlyHasNoEvidenceAndTheGroupIsLeft() throws {

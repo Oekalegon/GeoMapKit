@@ -72,6 +72,16 @@ struct CoreGraphicsRendererTests {
         #expect(close(pixel(hollowImage, x: 60, y: 20), to: MapStyle.standard.background))
     }
 
+    @Test("A way and a relation with the same ID are two objects: their overlap is not cancelled by the even-odd rule")
+    func sameIDDifferentType() throws {
+        let way = SceneArea(featureClass: .waterArea, objectType: .way, objectID: 5, rings: [rectangle(10, 10, 40, 30)], outline: [])
+        let relation = SceneArea(featureClass: .waterArea, objectType: .relation, objectID: 5, rings: [rectangle(20, 10, 50, 30)], outline: [])
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene(of: [way, relation]), style: .standard, scale: 1))
+        let water = try #require(MapStyle.standard.style(for: .waterArea)?.fill?.color.value(atZoom: 16))
+        #expect(close(pixel(image, x: 30, y: 20), to: water), "where the two overlap")
+        #expect(close(pixel(image, x: 15, y: 20), to: water) && close(pixel(image, x: 45, y: 20), to: water))
+    }
+
     @Test func pngHasTheRightSizeAndSignature() throws {
         let png = try CoreGraphicsRenderer().pngData(for: scene(), style: .standard, scale: 2)
         #expect(Array(png.prefix(8)) == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])

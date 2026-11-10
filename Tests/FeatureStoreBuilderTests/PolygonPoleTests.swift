@@ -1,4 +1,5 @@
 import FeatureStore
+import Foundation
 import Testing
 
 @testable import FeatureStoreBuilder
@@ -58,5 +59,22 @@ struct PolygonPoleTests {
         let pole = try #require(PolygonPole.find(in: [ring([(10, 65), (10 + width, 65), (10 + width, 65.001), (10, 65.001)])]))
         let (lon, lat) = degrees(pole)
         #expect(abs(lon - (10 + width / 2)) < width / 20 && abs(lat - 65.0005) < 0.0001)
+    }
+
+    @Test("A polygon with tens of thousands of vertices is answered within the work limit, with a point inside it")
+    func manyVertices() throws {
+        // A circle of 30,000 vertices, radius 0.05 degrees, around (10, 60).
+        var points: [(Double, Double)] = []
+        for index in 0..<30_000 {
+            let angle = Double(index) / 30_000 * 2 * Double.pi
+            points.append((10 + 0.05 * cos(angle) / 0.5, 60 + 0.05 * sin(angle)))
+        }
+        let clock = ContinuousClock()
+        let started = clock.now
+        let pole = try #require(PolygonPole.find(in: [ring(points)]))
+        let elapsed = clock.now - started
+        let (lon, lat) = degrees(pole)
+        #expect(hypot((lon - 10) * 0.5, lat - 60) < 0.05, "inside the circle")
+        #expect(elapsed < .seconds(10), "bounded work: \(elapsed)")
     }
 }
