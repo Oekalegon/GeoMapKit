@@ -10,8 +10,11 @@ import GeoCore
 /// sea is all sea or all land (a coastline would have been in the cut of at least one of them, the margin of the cut reaches into
 /// the next block), and the cells that the group shares a border with show which.
 ///
-/// - A group is **sea** if at least one block next to it has a border of cells that are all sea squares, and no block next to it has
-///   a border that shows land (no sea in any of its cells) or a mixture.
+/// - A group is **sea** if at least one block next to it has a border with a cell that is a sea square (a cell with no coastline in
+///   it that is wholly sea: the cell across the border can only be sea, since there is no coastline in the group), and no block next
+///   to it has a border that shows land (a cell with no sea at all) or contradicts itself (sea squares and cells with no sea on the
+///   same border). Cells that are only partly sea are neither: a coast near the border is normal, in an archipelago on every border,
+///   and says nothing about the group.
 /// - A group that touches only land, only blocks that are not covered by a source file, or nothing, is left as it is: the data
 ///   there is land without a coastline, or unknown, and unknown must stay empty.
 ///
@@ -46,7 +49,7 @@ public enum OpenSea {
         /// nothing known.
         public var left: [Position] = []
         /// The part of those that touch sea but whose neighbours also showed land or a mixed border (a coastline that was not joined,
-        /// or one with no node in the cut). Groups that only touch land or unclear edges are in `left` only.
+        /// or one with no node in the cut). Groups that only touch land, or borders with no evidence, are in `left` only.
         public var conflicting: [Position] = []
 
         /// Creates a report.
@@ -119,11 +122,11 @@ public enum OpenSea {
                     }
                 }
             }
-            if verdicts == [.sea] {
+            if verdicts.contains(.sea), !verdicts.contains(.land), !verdicts.contains(.conflict) {
                 sea.append(contentsOf: group)
             } else {
                 report.left.append(contentsOf: group)
-                if verdicts.contains(.sea) { report.conflicting.append(contentsOf: group) }
+                if verdicts.contains(.sea) || verdicts.contains(.conflict) { report.conflicting.append(contentsOf: group) }
             }
         }
         report.left.sort()
@@ -159,7 +162,9 @@ public enum OpenSea {
     // MARK: Looking at blocks
 
     private enum Side { case west, east, north, south }
-    private enum Border { case sea, land, unclear }
+    /// What the cells along a border say about the group: `sea` (a sea square, and no cell without sea), `land` (a cell without sea, and
+    /// no sea square), `conflict` (both), or `none` (only cells that are partly sea).
+    private enum Border { case sea, land, conflict, none }
 
     /// The cells of a block at the storage zoom.
     private static func cellRange(of position: Position, manifest zoom: (block: Int, storage: Int)) -> (columns: Range<Int>, rows: Range<Int>) {
@@ -180,7 +185,7 @@ public enum OpenSea {
         return false
     }
 
-    /// What the cells along one edge of a known block say: all sea squares, no sea at all, or neither.
+    /// What the cells along one edge of a known block say about the block next to it.
     private static func border(of file: FeatureStoreFile, side: Side, position: Position, blockZoom: Int) throws -> Border {
         let range = cellRange(of: position, manifest: (blockZoom, file.storageZoom))
         let cells: [(Int, Int)]
@@ -193,13 +198,16 @@ public enum OpenSea {
         let band = lookBand(of: file)
         var squares = 0, empty = 0
         for (x, y) in cells {
-            guard let cell = TileID(zoom: file.storageZoom, x: x, y: y) else { return .unclear }
+            guard let cell = TileID(zoom: file.storageZoom, x: x, y: y) else { return .conflict }
             let found = try file.features(in: cell, band: band, classes: [FeatureClass.sea.rawValue])
-            if found.isEmpty { empty += 1 } else if isSquare(found, of: cell) { squares += 1 } else { return .unclear }
+            if found.isEmpty { empty += 1 } else if isSquare(found, of: cell) { squares += 1 }
         }
-        if squares == cells.count { return .sea }
-        if empty == cells.count { return .land }
-        return .unclear
+        switch (squares > 0, empty > 0) {
+        case (true, false): return .sea
+        case (false, true): return .land
+        case (true, true): return .conflict
+        case (false, false): return .none
+        }
     }
 
     /// Whether the sea of a cell is the cell square and nothing else.
