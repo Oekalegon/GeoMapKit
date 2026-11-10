@@ -121,6 +121,18 @@ struct BuildRegionTests {
         #expect(try StoreSet(manifestURL: third.manifestURL).manifest.blocks[0].sources[0].etag == "\"e2\"")
     }
 
+    @Test("With rebuild, blocks that are built from the same files are built again")
+    func rebuildFlag() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        let first = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        var again = request(s)
+        again.rebuild = true
+        let second = try await ToolRunner.buildRegion(again, catalog: s.catalog)
+        #expect(built(second).count == built(first).count && !built(second).isEmpty)
+        #expect(!second.outcomes.contains { $0.status == .upToDate })
+    }
+
     @Test("A block that is built again takes the levels with it: they were made from the old block")
     func rebuildingABlockRemovesTheLevels() async throws {
         let s = try setup()

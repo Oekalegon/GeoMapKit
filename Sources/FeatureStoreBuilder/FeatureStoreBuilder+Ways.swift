@@ -4,12 +4,12 @@ import OSMPBF
 extension FeatureStoreBuilder {
     /// Stores every way as a line or area feature, except those a multipolygon already holds.
     func storeWays(
-        of extract: OSMExtract, suppressed: Set<Int64>, shore: inout ShoreContext, into emitter: inout FeatureEmitter
+        of extract: OSMExtract, suppressed: Set<Int64>, borders: inout BorderNames?, shore: inout ShoreContext,
+        into emitter: inout FeatureEmitter
     ) throws {
         // Built when the first footway needs it: an extract without footways never pays for it.
         var roads: RoadIndex?
         var town: TownIndex?
-        var borders: BorderNames?
         for position in extract.ways.indices {
             if position % 4096 == 0 { try Task.checkCancellation() }
             let id = extract.ways.ids[position]
