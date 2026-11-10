@@ -97,10 +97,12 @@ struct FeatureStoreBuilderTests {
         #expect(original.allSatisfy { stored.contains($0) })
         #expect(abs(path.reduce(0) { $0 + length($1.feature.parts[0].points) } - length(original)) < 1)
         #expect(file.string(at: try #require(path[0].feature.nameID)) == "Rheinweg")
-        // Paths start at the mid band: absent from overview, present in mid with the name but no tags.
+        // Paths start at the mid band: absent from overview, present in mid with the name and only the tags a style selects by (`KeptTagsTests`).
         #expect(pieces(try features(file, band: .overview), type: .way, id: 100).isEmpty)
         let mid = pieces(try features(file, band: .mid), type: .way, id: 100)
-        #expect(!mid.isEmpty && mid.allSatisfy { $0.feature.tags.isEmpty && $0.feature.nameID != nil })
+        #expect(!mid.isEmpty && mid.allSatisfy { piece in
+            piece.feature.nameID != nil && piece.feature.tags.allSatisfy { FeatureEmitter.keptTags[.path]?.contains(file.string(at: $0.key) ?? "") == true }
+        })
         // The forest starts at the overview band and is in all three.
         for band in ZoomBand.allCases { #expect(!pieces(try features(file, band: band), type: .way, id: 200).isEmpty) }
     }
