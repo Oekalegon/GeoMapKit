@@ -321,6 +321,44 @@ struct FeatureStoreBuilderTests {
         #expect(result.report.featuresByClass[.coastline] == 1)
     }
 
+    @Test("A block with no coastline has no sea, unless the caller says it is open sea: then every cell is sea, in every band")
+    func openSea() throws {
+        var world = SyntheticWorld()
+        world.node(1, 0.5, 1.5); world.node(2, 2.5, 1.5)
+        world.way(10, [1, 2], [("boundary", "administrative"), ("admin_level", "2")])   // a border in the sea: no coastline
+        let extract = try world.extract()
+        let plain = try FeatureStoreBuilder().build(from: extract)
+        #expect(plain.report.featuresByClass[.sea] == nil && !plain.report.seaAssumed)
+
+        let result = try FeatureStoreBuilder().build(from: extract, writing: extract.boundingBox, assumeSea: true)
+        let file = try FeatureStoreFile(data: result.data)
+        try file.verify()
+        #expect(result.report.seaAssumed && result.report.featuresByClass[.sea] == 1)
+        let block = world.block
+        for band in ZoomBand.allCases {
+            for row in 0..<3 {
+                for column in 0..<3 {
+                    let pieces = try file.features(in: block.tile(column: column, row: row), band: band).filter { $0.classID == FeatureClass.sea.rawValue }
+                    #expect(pieces.count == 1 && pieces[0].parts.count == 1 && pieces[0].parts[0].points.count == 5, "whole cell \(column),\(row) in \(band)")
+                }
+            }
+        }
+        #expect(try file.features(in: block.tile(column: 1, row: 1), band: .detail).contains { $0.classID == FeatureClass.countryBorder.rawValue },
+            "what else is in the block stays")
+    }
+
+    @Test("Assuming open sea changes nothing when the extract has a coastline")
+    func openSeaWithCoastline() throws {
+        var world = SyntheticWorld()
+        world.node(1, -0.3, 1.5); world.node(2, 1.5, 1.4); world.node(3, 3.3, 1.5)
+        world.way(10, [1, 2, 3], [("natural", "coastline")])
+        let extract = try world.extract()
+        let result = try FeatureStoreBuilder().build(from: extract, writing: extract.boundingBox, assumeSea: true)
+        #expect(!result.report.seaAssumed)
+        let file = try FeatureStoreFile(data: result.data)
+        #expect(try file.features(in: world.block.tile(column: 1, row: 0), band: .detail).allSatisfy { $0.classID != FeatureClass.sea.rawValue }, "the land stays land")
+    }
+
     @Test("An island mapped as a multipolygon of a coastline way gets its shore as a line, not as an area")
     func coastlineRelation() throws {
         var world = SyntheticWorld()

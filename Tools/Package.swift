@@ -41,7 +41,10 @@ let package = Package(
         // A thin executable: parse the command line, call ToolCommands, print.
         .executableTarget(
             name: "geomapkit",
-            dependencies: ["ToolSupport", "ToolCommands", .product(name: "FeatureStoreBuilder", package: "GeoMapKit"), .product(name: "Regions", package: "GeoMapKit")]
+            dependencies: [
+                "ToolSupport", "ToolCommands", .product(name: "FeatureStoreBuilder", package: "GeoMapKit"), .product(name: "Regions", package: "GeoMapKit"),
+                .product(name: "GeoCore", package: "GeoMapKit"),
+            ]
         ),
         .testTarget(name: "ToolSupportTests", dependencies: ["ToolSupport", .product(name: "GeoCore", package: "GeoMapKit")]),
         .testTarget(

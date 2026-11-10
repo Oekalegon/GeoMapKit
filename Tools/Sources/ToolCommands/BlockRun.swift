@@ -12,6 +12,8 @@ public struct BlockRequest: Sendable {
         case box(BoundingBox)
         /// Every block that meets one of these regions (ids of the region index, for example `sweden`).
         case regions([String])
+        /// Exactly these blocks, as tiles of the block zoom, for building a few of them again.
+        case tiles([TileID])
     }
 
     /// The area.

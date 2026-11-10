@@ -73,6 +73,8 @@ public struct BuildReport: Sendable, Equatable {
     public var waterLineStretchesInWater = 0
     /// The stretches of rivers and streams in a thin or small water area: lines in the overview band only, names from the mid band.
     public var waterLineStretchesInThinWater = 0
+    /// Whether the written area was taken to be open sea because the cut has no coastline and the caller said so.
+    public var seaAssumed = false
     /// Stretches of the border of protected areas that lie in the sea.
     public var parkBorderStretchesInSea = 0
     /// The number of stored features per class (each feature counted once, not per band or piece).
