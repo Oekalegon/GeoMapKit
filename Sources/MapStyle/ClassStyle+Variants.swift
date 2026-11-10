@@ -32,4 +32,26 @@ extension ClassStyle {
         guard let index = variantIndex(subclass: subclass, in: featureClass, tag: tag) else { return self }
         return applying(variants[index])
     }
+
+    /// The variant after an edit of its look: `effective` is what ``applying(_:)`` gave, changed by an editor. A part that is now the same as
+    /// the class's own goes back to `nil` (the variant follows the class again), a part that differs is the variant's. The selectors
+    /// (name, subclasses, tags) are kept.
+    ///
+    /// A variant cannot switch a part off, because `nil` means "the class's": a part that an editor removed from `effective` while the
+    /// class has it comes out as `nil`, that is, the class's.
+    public func variant(_ variant: StyleVariant, updatedFrom effective: ClassStyle) -> StyleVariant {
+        var result = variant
+        func part<T: Equatable>(_ own: T?, _ edited: T?) -> T? { edited == own ? nil : edited }
+        result.fill = part(fill, effective.fill)
+        result.stroke = part(stroke, effective.stroke)
+        result.point = part(point, effective.point)
+        result.label = part(label, effective.label)
+        result.visibleZoom = effective.visibleZoom == visibleZoom ? nil : effective.visibleZoom
+        result.layer = effective.layer == layer ? nil : effective.layer
+        result.casingLayer = part(casingLayer, effective.casingLayer)
+        result.bridge = part(bridge, effective.bridge)
+        result.tunnel = part(tunnel, effective.tunnel)
+        return result
+    }
 }
+

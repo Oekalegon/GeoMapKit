@@ -81,4 +81,18 @@ struct StyleVariantTests {
         #expect(reason("{\"tags\": [{\"key\": \"\"}]}").contains("OSM tag"))
         #expect(reason("{\"subclasses\": [\"trunk\"], \"layer\": 30}") == "no error")
     }
+
+    @Test func anEditedLookGoesBackIntoTheVariantAndAnUnchangedPartFollowsTheClass() {
+        let style = road([motorway])
+        var effective = style.applying(motorway)
+        effective.stroke?.width = LineWidth(points: ZoomValue(constant: 9))
+        effective.layer = style.layer
+        let updated = style.variant(motorway, updatedFrom: effective)
+        #expect(updated.stroke?.width.points == ZoomValue(constant: 9))
+        #expect(updated.layer == nil, "back to the class's own layer")
+        #expect(updated.subclasses == ["motorway", "trunk"] && updated.name == "Motorways")
+        // Nothing edited: a variant that set only a layer stays that way.
+        #expect(style.variant(motorway, updatedFrom: style.applying(motorway)) == motorway)
+    }
 }
+
