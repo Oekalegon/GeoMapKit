@@ -68,8 +68,9 @@ struct FeatureEmitter {
         }
         // The tags a style may select by (question 55: the surface and difficulty of a path, the gauge of a track) are kept in every band,
         // as values only, so a style that colours paths by surface does it at zoom 12 as well as at zoom 15.
+        // The Watch copy has no variants in its style, so it does not carry them.
         let tagArray = ClassifierTagArray(spec.tags)
-        for key in Self.keptTags[classification.featureClass] ?? [] {
+        for key in profile == .full ? (Self.keptTags[classification.featureClass] ?? []) : [] {
             if let value = tagArray.value(forKey: key) { valueTags.append(StoredTag(key: writer.intern(key), value: writer.intern(value))) }
         }
         for band in ZoomBand.allCases where band >= classification.minimumBand && band <= spec.lastBand {

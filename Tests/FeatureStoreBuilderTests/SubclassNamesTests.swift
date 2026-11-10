@@ -19,7 +19,8 @@ struct SubclassNamesTests {
             }
         }
         for (featureClass, names) in SubclassNames.all {
-            for name in names.keys { #expect(fromRules[featureClass]?[name] != nil, "\(featureClass) \(name) is not in the rule table") }
+            // A track's subclass is its `tracktype` grade, which the rule table does not have (see the test below).
+            for name in names.keys where !(featureClass == .track && name.hasPrefix("grade")) { #expect(fromRules[featureClass]?[name] != nil, "\(featureClass) \(name) is not in the rule table") }
         }
     }
 
@@ -29,4 +30,16 @@ struct SubclassNamesTests {
         #expect(SubclassNames.numbers(of: "farmland", in: .landcover).count == 1)
         #expect(SubclassNames.numbers(of: "nonsense", in: .roadMajor).isEmpty)
     }
+
+    @Test func aTrackWithEachGradeHasANameInTheTable() {
+        let classifier = FeatureClassifier()
+        for (grade, name) in [(nil, "track"), ("grade1", "grade1"), ("grade2", "grade2"), ("grade3", "grade3"), ("grade4", "grade4"), ("grade5", "grade5"), ("nonsense", "track")] {
+            var tags = ["highway": "track"]
+            if let grade { tags["tracktype"] = grade }
+            let result = classifier.classify(tags, shape: .openWay)
+            #expect(result.featureClass == .track)
+            #expect(SubclassNames.name(of: SubclassBits.value(of: result.subclass), in: .track) == name, "tracktype \(grade ?? "none")")
+        }
+    }
 }
+

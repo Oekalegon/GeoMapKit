@@ -3,12 +3,13 @@
 /// The builder writes a number in the subclass byte of every feature (the rule table in `FeatureStoreBuilder`); a style selects by the
 /// name. A test in `FeatureStoreBuilderTests` checks that this table is the rule table, so the two cannot drift apart. The numbers are
 /// only unique within a class, and one name can have two numbers when two tags give it (`natural=grass` and `landuse=grass`).
-/// This file is generated from the rule table.
+/// This file is generated from the rule table, except `track`: the classifier stores the `tracktype` grade as the subclass of a track, so
+/// `track` is a track with no grade and `grade1` to `grade5` are the graded ones (`FeatureClassifier.trackGrade`).
 public enum SubclassNames {
     /// The numbers of a subclass by its name, for each class that has named subclasses.
     private static let numbers: [FeatureClass: [String: [UInt8]]] = [
         .path: ["path": [1], "footway": [2], "bridleway": [3], "cycleway": [4], "steps": [5], "via_ferrata": [6]],
-        .track: ["track": [0]],
+        .track: ["track": [0], "grade1": [1], "grade2": [2], "grade3": [3], "grade4": [4], "grade5": [5]],
         .roadMajor: ["motorway": [1], "trunk": [2], "primary": [3], "secondary": [4], "tertiary": [5], "motorway_link": [9], "trunk_link": [10], "primary_link": [11], "secondary_link": [12], "tertiary_link": [13]],
         .roadMinor: ["unclassified": [1], "residential": [2], "living_street": [4], "pedestrian": [5], "road": [6]],
         .railway: ["rail": [1], "light_rail": [2], "narrow_gauge": [3], "funicular": [4], "tram": [5], "subway": [6], "monorail": [7]],
