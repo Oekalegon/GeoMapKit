@@ -179,22 +179,6 @@ public struct FeatureClassifier: Sendable {
         return found
     }
 
-    /// Every class that the rule table matches in the tags, in the order of the table, each class once.
-    ///
-    /// The first of them is the class `classify` takes; the others are what the object is as well.
-    ///
-    /// - Parameter tags: The tags of the object.
-    /// - Returns: The classes, empty if no rule matches.
-    public func matchingClasses(_ tags: some ClassifierTags) -> [FeatureClass] {
-        var found: [FeatureClass] = []
-        for rule in Self.rules {
-            if let value = tags.value(forKey: rule.key), let outcome = rule.match(value), !found.contains(outcome.featureClass) {
-                found.append(outcome.featureClass)
-            }
-        }
-        return found
-    }
-
     private func firstOutcome(in tags: some ClassifierTags) -> ClassifierOutcome? {
         for rule in Self.rules {
             if let value = tags.value(forKey: rule.key), let outcome = rule.match(value) { return outcome }
