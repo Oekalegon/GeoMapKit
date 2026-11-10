@@ -58,12 +58,9 @@ public struct FeatureStoreBuilder: Sendable {
     /// - Parameters:
     ///   - extract: The cut area, larger than `area` by a margin.
     ///   - area: The part to write. Its edges should be cell borders (see ``cellAlignedBox(covering:)``).
-    ///   - assumeSea: Whether the written area is open sea when the extract has no coastline at all. The sea is built from the
-    ///     coastlines, so a block in the middle of a gulf, with none within the margin, would have no sea; the caller knows from
-    ///     the blocks around it that it is sea. With a coastline in the extract this has no effect.
     /// - Returns: The file data, with the cells inside `area`, and a report.
     /// - Throws: `CancellationError` if the task is cancelled, or `FeatureStoreError` if a value does not fit the format.
-    public func build(from extract: OSMExtract, writing area: BoundingBox, assumeSea: Bool = false) throws -> BuildResult {
+    public func build(from extract: OSMExtract, writing area: BoundingBox) throws -> BuildResult {
         let inside = extract.boundingBox
         let part = BoundingBox(
             south: max(area.south, inside.south), west: max(area.west, inside.west), north: min(area.north, inside.north),
@@ -76,7 +73,7 @@ public struct FeatureStoreBuilder: Sendable {
         if let range { emitter.report.cellsInArea = range.columns.count * range.rows.count }
 
         var shore = ShoreContext(extract: extract, classifier: classifier)
-        let sea = try range.flatMap { try prepareSea(of: extract, columns: $0.columns, rows: $0.rows, assumeSea: assumeSea, into: &emitter) }
+        let sea = try range.flatMap { try prepareSea(of: extract, columns: $0.columns, rows: $0.rows, into: &emitter) }
         shore.sea = sea.map { SeaLookup(rings: $0.whole.rings) }
 
         // The index of the border relations, built by whichever step needs it first and shared with the other.
