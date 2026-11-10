@@ -241,12 +241,14 @@ struct StyleJSONTests {
 struct LabelThinningStyleTests {
     @Test func theStandardStyleThinsThePlaceNamesAtLowZoomOnly() {
         let radius = MapStyle.standard.classes[.place]?.label?.thinningRadius
-        #expect(radius?.value(atZoom: 9) == 80 && radius?.value(atZoom: 10) == 80 && radius?.value(atZoom: 12) == 0)
+        #expect(radius?.value(atZoom: 10) == 80 && radius?.value(atZoom: 12) == 0)
+        // The radius grows as the map zooms out, so a map of a whole region names only its largest places.
+        #expect(radius?.value(atZoom: 8) == 120 && radius?.value(atZoom: 3) == 300 && radius?.value(atZoom: 1) == 300)
     }
 
     @Test func theRadiusSurvivesAJsonRoundTripAndABadOneIsRefused() throws {
         let again = try MapStyle(json: try MapStyle.standard.jsonData())
-        #expect(again.classes[.place]?.label?.thinningRadius.value(atZoom: 9) == 80)
+        #expect(again.classes[.place]?.label?.thinningRadius.value(atZoom: 10) == 80)
         func decode(_ json: String) throws -> LabelStyle { try JSONDecoder().decode(LabelStyle.self, from: Data(json.utf8)) }
         let base = ##""size": 10, "color": "#000000""##
         #expect(throws: (any Error).self) { try decode("{\(base), \"thinningRadius\": \"far\"}") }
