@@ -169,6 +169,11 @@ extension FeatureStoreBuilder {
                 classification: classification, objectType: .way, objectID: id, tags: tags.orderedTags,
                 fallbackName: borderName, geometry: geometry))
             emitter.report.waysStored += 1
+            if classification.kind == .area {
+                try storeAreaPoint(
+                    primary: classification.featureClass, tags: tags.orderedTags, objectType: .way, objectID: id, rings: [runs[0]],
+                    into: &emitter)
+            }
             if classification.featureClass == .waterArea, classification.kind == .area, isClosed {
                 try storeWaterEdge(
                     of: [runs[0]], classification, objectType: .way, objectID: id, tags: tags.orderedTags, shore: &shore,

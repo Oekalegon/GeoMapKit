@@ -155,6 +155,29 @@ public struct FeatureClassifier: Sendable {
         OverlayGroup(keys: ["piste:type"], classes: [.piste]),
     ]
 
+    /// The classes that are drawn as a marker at a point, which an area can be as well (see ``pointClass(_:)``).
+    private static let pointClasses: Set<FeatureClass> = [.poi, .poiAnchor, .transportStop]
+
+    /// The point class an area is as well as its primary class, or `nil`.
+    ///
+    /// A shop, a church, a hut or a station that is mapped as an outline has the class of its outline (`building`, `landcover`, ...), and
+    /// the renderer draws the marker and the name of a point class for points only. This is the first rule of the table that gives a
+    /// point class (`poi`, `poiAnchor`, `transportStop`), whatever rules come before it: the class of the marker the area would have as a
+    /// node. The builder stores it as a point inside the area.
+    ///
+    /// - Parameter tags: The tags of the area.
+    /// - Returns: The classification, always of kind `point`, or `nil` if no rule gives a point class.
+    public func pointClass(_ tags: some ClassifierTags) -> Classification? {
+        for rule in Self.rules {
+            guard let value = tags.value(forKey: rule.key), let outcome = rule.match(value), Self.pointClasses.contains(outcome.featureClass)
+            else { continue }
+            return Classification(
+                featureClass: outcome.featureClass, subclass: outcome.subclass, kind: .point, minimumBand: outcome.band,
+                showsOnWatch: outcome.watch)
+        }
+        return nil
+    }
+
     /// The classes an object has as well as its primary class, as lines (see `overlayGroups`).
     ///
     /// Each group of tags is classified on its own, with the other tags left out, so the rule table, the levels of administrative

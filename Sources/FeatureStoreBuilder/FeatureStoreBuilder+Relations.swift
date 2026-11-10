@@ -110,6 +110,14 @@ extension FeatureStoreBuilder {
             try emitter.emit(FeatureSpec(
                 classification: classification, objectType: .relation, objectID: relation.id, tags: tags,
                 geometry: .rings(rings)))
+            // A shop or a church mapped as a multipolygon gets its marker and name at a point inside its largest polygon.
+            if classification.kind == .area,
+                let largest = assembly.polygons.max(by: { Self.outerArea($0) < Self.outerArea($1) })
+            {
+                try storeAreaPoint(
+                    primary: classification.featureClass, tags: tags, objectType: .relation, objectID: relation.id, rings: largest.rings,
+                    into: &emitter)
+            }
             // A forest or a meadow that is also a nature reserve has the border of the reserve as well (see
             // `FeatureClassifier.overlays`).
             for overlay in classifier.overlays(ClassifierTagArray(tags), primary: classification.featureClass)
@@ -145,6 +153,16 @@ extension FeatureStoreBuilder {
     /// Whether the tags of a relation make it the border of a protected area.
     private func isProtectedArea(_ tags: [OSMTag]) -> Bool {
         classifier.classify(ClassifierTagArray(tags), shape: .multipolygon).featureClass == .parkBorder
+    }
+
+    /// Twice the absolute area of the first ring of a polygon, in degrees squared: only to tell the larger polygon from the smaller.
+    private static func outerArea(_ polygon: AssembledPolygon) -> Double {
+        guard let ring = polygon.rings.first, ring.count >= 3 else { return 0 }
+        var twice = 0.0
+        for index in 0..<(ring.count - 1) {
+            twice += Double(ring[index].longitude) * Double(ring[index + 1].latitude) - Double(ring[index + 1].longitude) * Double(ring[index].latitude)
+        }
+        return abs(twice)
     }
 
     static func storedType(_ type: OSMMemberType) -> StoredObjectType {

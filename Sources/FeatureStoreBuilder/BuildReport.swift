@@ -73,6 +73,8 @@ public struct BuildReport: Sendable, Equatable {
     public var waterLineStretchesInWater = 0
     /// The stretches of rivers and streams in a thin or small water area: lines in the overview band only, names from the mid band.
     public var waterLineStretchesInThinWater = 0
+    /// Points stored inside areas, for the marker and the name of a shop, a church or a hut that is mapped as an outline.
+    public var areaPoints = 0
     /// Ways stored a second time as an overlay class: a border that is also a stream, a reserve that is also a forest, a piste on a track.
     public var overlayFeatures = 0
     /// Stretches of the border of protected areas that lie in the sea.
