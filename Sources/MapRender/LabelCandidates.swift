@@ -62,7 +62,9 @@ enum LabelCandidates {
             for point in ranked {
                 guard let name = point.name, !name.isEmpty else { continue }
                 if radius > 0 {
-                    let near = named.contains { hypot($0.position.x - point.position.x, $0.position.y - point.position.y) < radius }
+                    // A city is hidden only by a city (the cities are ranked first) within the shorter radius.
+                    let reach = point.subclass == 1 ? radius * label.cityThinningFactor : radius
+                    let near = named.contains { hypot($0.position.x - point.position.x, $0.position.y - point.position.y) < reach }
                     if near { continue }
                     named.append(point)
                 }

@@ -174,7 +174,7 @@ extension MapStyle {
             .place: ClassStyle(
                 label: LabelStyle(
                     size: ZoomValue((8, 11), (14, 15)), color: MapColor(hex: 0x222222), haloWidth: 2.5, priority: 50,
-                    thinningRadius: ZoomValue((3, 300), (5, 220), (8, 120), (10, 80), (11, 0)),
+                    thinningRadius: ZoomValue((3, 300), (5, 220), (8, 120), (10, 80), (11, 0)), cityThinningFactor: 0.4,
                     // The largest place in view has the full size; one with a hundredth of its people is written at half the size (and
                     // between them by the logarithm), at low zoom; by zoom 13 every place has the same size.
                     populationScale: PopulationScale(smallest: 0.5, decades: 2, strength: ZoomValue((10, 1), (13, 0)))),
