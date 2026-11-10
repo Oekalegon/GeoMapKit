@@ -39,6 +39,16 @@ struct PlacePopulationLabelTests {
         #expect(names([place(1, "Untagged", x: 300), place(2, "Tagged", x: 320, population: 8_000)], zoom: 9) == ["Tagged"])
     }
 
+    @Test func twoCitiesNearEachOtherAreBothNamedButATownNextToACityIsNot() {
+        // Haarlem 70 points from Amsterdam (inside the radius of 100 at zoom 9, outside the 40 that a city gets); IJmuiden is a town.
+        let cities = [place(1, "Amsterdam", x: 300, subclass: 1, population: 870_000), place(2, "Haarlem", x: 370, subclass: 1, population: 160_000)]
+        #expect(names(cities, zoom: 9) == ["Amsterdam", "Haarlem"])
+        let touching = [place(1, "Amsterdam", x: 300, subclass: 1, population: 870_000), place(2, "Close", x: 320, subclass: 1, population: 160_000)]
+        #expect(names(touching, zoom: 9) == ["Amsterdam"], "two cities within the shorter radius: the larger wins")
+        let town = cities + [place(3, "IJmuiden", x: 335, population: 31_000)]
+        #expect(names(town, zoom: 9) == ["Amsterdam", "Haarlem"])
+    }
+
     @Test func theSameTwoPlacesAreBothNamedOnceZoomedInAndWhenTheyAreFarApart() {
         let points = [place(1, "Gouda", x: 300, population: 74_000), place(2, "Waddinxveen", x: 340, population: 31_000)]
         #expect(names(points, zoom: 12) == ["Gouda", "Waddinxveen"], "the thinning has faded out by zoom 11")

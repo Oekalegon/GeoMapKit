@@ -21,6 +21,10 @@ public struct LabelStyle: Sendable, Equatable {
     /// For the name of a point: within this many points of a larger place of the same class, a place gets no name (the larger is
     /// the lower subclass number, then the greater `population`). 0 for no thinning. By zoom, so it can fade out.
     public var thinningRadius: ZoomValue<Double>
+    /// For the name of a place: the part of ``thinningRadius`` that applies to a city (subclass 1), 1 or less and more than 0. A city is
+    /// hidden only by another city within this shorter distance, so two real cities near each other (Haarlem and Amsterdam) are both named,
+    /// while a town or village is hidden by any larger place within the full radius. 1 treats a city like every other place.
+    public var cityThinningFactor: Double
     /// For the name of a place: the font size follows the population, see ``PopulationScale``. `nil` writes every name at `size`.
     public var populationScale: PopulationScale?
 
@@ -32,9 +36,11 @@ public struct LabelStyle: Sendable, Equatable {
         placement: LabelPlacement = .onLine,
         minimumArea: Double = 0,
         thinningRadius: ZoomValue<Double> = ZoomValue(constant: 0),
+        cityThinningFactor: Double = 1,
         populationScale: PopulationScale? = nil
     ) {
         self.thinningRadius = thinningRadius
+        self.cityThinningFactor = min(max(cityThinningFactor, 0.01), 1)
         self.populationScale = populationScale
         self.size = size
         self.color = color
