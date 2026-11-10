@@ -6,65 +6,101 @@ import SwiftUI
 struct ClassEditorView: View {
     let model: StyleEditorModel
     let featureClass: FeatureClass
+    /// The index of the variant of the class that is edited, or `nil` to edit the class itself.
+    var variant: Int?
 
-    private var classStyle: ClassStyle? { model.style.classes[featureClass] }
+    private var isVariant: Bool { variant != nil }
+
+    /// The class as the style has it (without a variant's changes).
+    private var baseStyle: ClassStyle? { model.style.classes[featureClass] }
+
+    /// What is edited: the class, or the class as a variant draws it (the class with what the variant sets).
+    private var classStyle: ClassStyle? {
+        guard let base = baseStyle else { return nil }
+        guard let variant, base.variants.indices.contains(variant) else { return base }
+        return base.applying(base.variants[variant])
+    }
+
+    /// Changes what is edited. For a variant the edit is made on the look the variant has, and every part that then differs from the class's
+    /// own is stored in the variant (a part that is the same as the class's follows the class again). Changes to one field in a row are one
+    /// step to undo.
+    private func edit(_ key: String, _ body: @escaping (inout ClassStyle) -> Void) {
+        let variant = variant
+        model.change("class.\(featureClass).\(variant ?? -1).\(key)") { style in
+            guard var base = style.classes[featureClass] else { return }
+            if let variant, base.variants.indices.contains(variant) {
+                var effective = base.applying(base.variants[variant])
+                body(&effective)
+                base.variants[variant] = base.variant(base.variants[variant], updatedFrom: effective)
+            } else {
+                body(&base)
+            }
+            style.classes[featureClass] = base
+        }
+    }
 
     /// A binding to a part of the class style: it reads the part (or a fallback when the class or the part is not there) and writes
     /// through the model, so that every change shows in the preview and can be undone. Changes to one field in a row are one step to undo.
     private func field<T>(_ name: String, get: @escaping (ClassStyle) -> T?, set: @escaping (inout ClassStyle, T) -> Void, fallback: T) -> Binding<T> {
         Binding(
             get: { classStyle.flatMap(get) ?? fallback },
-            set: { new in
-                model.change("class.\(featureClass).\(name)") { style in
-                    guard var current = style.classes[featureClass] else { return }
-                    set(&current, new)
-                    style.classes[featureClass] = current
-                }
-            })
+            set: { new in edit(name) { set(&$0, new) } })
     }
 
     /// A switch for a part that a class may or may not have: on makes the part from `make`, off removes it.
     private func part<T>(_ name: String, _ path: WritableKeyPath<ClassStyle, T?>, make: @escaping () -> T) -> Binding<Bool> {
         Binding(
             get: { classStyle?[keyPath: path] != nil },
-            set: { on in
-                model.change("class.\(featureClass).\(name).switch") { style in
-                    guard var current = style.classes[featureClass] else { return }
-                    current[keyPath: path] = on ? (current[keyPath: path] ?? make()) : nil
-                    style.classes[featureClass] = current
-                }
-            })
+            set: { on in edit("\(name).switch") { $0[keyPath: path] = on ? ($0[keyPath: path] ?? make()) : nil } })
     }
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Drawn in this style", isOn: Binding(
-                    get: { classStyle != nil },
-                    set: { on in model.setDrawn(on, for: featureClass, fresh: Self.newClass) }))
-            } footer: {
-                if classStyle == nil { Text("This class is not drawn: nothing in the map is shown for it.") }
+            if let variant {
+                VariantSelectorSection(model: model, featureClass: featureClass, variant: variant)
+            } else {
+                Section {
+                    Toggle("Drawn in this style", isOn: Binding(
+                        get: { classStyle != nil },
+                        set: { on in model.setDrawn(on, for: featureClass, fresh: Self.newClass) }))
+                } footer: {
+                    if classStyle == nil { Text("This class is not drawn: nothing in the map is shown for it.") }
+                }
             }
             if classStyle != nil {
                 visibility
-                fillSection
-                strokeSection
-                pointSection
-                labelSection
-                Section {
-                    Text("Bridges, tunnels, widths by number of lanes and the casing of bridges are set in the JSON editor.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Menu("Reset this class to…") {
-                        Button("The Standard style") { model.resetClass(featureClass, from: .standard) }
-                        Button("The Watch style") { model.resetClass(featureClass, from: .watch) }
+                // A variant changes the parts the class has: it cannot add or remove a part, so the sections of a part the class lacks are left out.
+                if !isVariant || baseStyle?.fill != nil { fillSection }
+                if !isVariant || baseStyle?.stroke != nil { strokeSection }
+                if !isVariant || baseStyle?.point != nil { pointSection }
+                if !isVariant || baseStyle?.label != nil { labelSection }
+                if isVariant {
+                    Section {
+                        Text("What is not changed here follows the class.").font(.footnote).foregroundStyle(.secondary)
+                    }
+                } else {
+                    VariantsSection(model: model, featureClass: featureClass)
+                    Section {
+                        Text("Bridges, tunnels, widths by number of lanes and the casing of bridges are set in the JSON editor.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Menu("Reset this class to…") {
+                            Button("The Standard style") { model.resetClass(featureClass, from: .standard) }
+                            Button("The Watch style") { model.resetClass(featureClass, from: .watch) }
+                        }
                     }
                 }
             }
         }
-        .navigationTitle(ClassGroups.name(of: featureClass))
+        .navigationTitle(title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+    }
+
+    private var title: String {
+        guard let variant else { return ClassGroups.name(of: featureClass) }
+        guard let list = baseStyle?.variants, list.indices.contains(variant) else { return "Variant" }
+        return list[variant].title
     }
 
     /// What a class gets when it is switched on: a thin grey line, to be changed.
@@ -89,7 +125,7 @@ struct ClassEditorView: View {
 
     private var fillSection: some View {
         Section("Fill") {
-            Toggle("Filled", isOn: part("fill", \.fill) { FillStyle(color: ZoomValue(constant: MapColor(hex: 0xCCCCCC))) })
+            if !isVariant { Toggle("Filled", isOn: part("fill", \.fill) { FillStyle(color: ZoomValue(constant: MapColor(hex: 0xCCCCCC))) }) }
             if classStyle?.fill != nil {
                 ColorStopsEditor(
                     title: "Colour",
@@ -100,9 +136,11 @@ struct ClassEditorView: View {
 
     private var strokeSection: some View {
         Section("Line") {
-            Toggle("Drawn as a line", isOn: part("stroke", \.stroke) {
-                StrokeStyle(color: ZoomValue(constant: MapColor(hex: 0x888888)), width: LineWidth(points: ZoomValue(constant: 1)))
-            })
+            if !isVariant {
+                Toggle("Drawn as a line", isOn: part("stroke", \.stroke) {
+                    StrokeStyle(color: ZoomValue(constant: MapColor(hex: 0x888888)), width: LineWidth(points: ZoomValue(constant: 1)))
+                })
+            }
             if classStyle?.stroke != nil {
                 ColorStopsEditor(
                     title: "Colour",
@@ -124,16 +162,12 @@ struct ClassEditorView: View {
                 Toggle("Casing (an outline of the line)", isOn: Binding(
                     get: { classStyle?.stroke?.casing != nil },
                     set: { on in
-                        model.change("class.\(featureClass).stroke.casing.switch") { style in
-                            guard var current = style.classes[featureClass], var stroke = current.stroke else { return }
-                            if on {
-                                stroke.casing = stroke.casing
-                                    ?? StrokeStyle.Casing(color: ZoomValue(constant: MapColor(hex: 0x666666)), extraPoints: ZoomValue(constant: 1))
-                            } else {
-                                stroke.casing = nil
-                            }
+                        edit("stroke.casing.switch") { current in
+                            guard var stroke = current.stroke else { return }
+                            stroke.casing = on
+                                ? (stroke.casing ?? StrokeStyle.Casing(color: ZoomValue(constant: MapColor(hex: 0x666666)), extraPoints: ZoomValue(constant: 1)))
+                                : nil
                             current.stroke = stroke
-                            style.classes[featureClass] = current
                         }
                     }))
                 if classStyle?.stroke?.casing != nil {
@@ -156,17 +190,17 @@ struct ClassEditorView: View {
             set: { text in
                 let numbers = text.split(whereSeparator: { $0 == " " || $0 == "," }).map { Double($0) }
                 guard numbers.allSatisfy({ $0 != nil && $0! >= 0 && $0!.isFinite }) else { return }
-                model.change("class.\(featureClass).stroke.dash") { style in
-                    style.classes[featureClass]?.stroke?.dash = numbers.compactMap { $0 }
-                }
+                edit("stroke.dash") { $0.stroke?.dash = numbers.compactMap { $0 } }
             })
     }
 
     private var pointSection: some View {
         Section("Point") {
-            Toggle("Drawn as a point", isOn: part("point", \.point) {
-                PointStyle(radius: ZoomValue(constant: 3), color: ZoomValue(constant: MapColor(hex: 0x555555)))
-            })
+            if !isVariant {
+                Toggle("Drawn as a point", isOn: part("point", \.point) {
+                    PointStyle(radius: ZoomValue(constant: 3), color: ZoomValue(constant: MapColor(hex: 0x555555)))
+                })
+            }
             if classStyle?.point != nil {
                 NumberStopsEditor(
                     title: "Radius (points)",
@@ -179,7 +213,7 @@ struct ClassEditorView: View {
                     "Outline colour",
                     selection: Binding(
                         get: { ColorConversion.color(classStyle?.point?.outlineColor ?? .white) },
-                        set: { new in model.change("class.\(featureClass).point.outline") { $0.classes[featureClass]?.point?.outlineColor = ColorConversion.mapColor(new) } }),
+                        set: { new in edit("point.outline") { $0.point?.outlineColor = ColorConversion.mapColor(new) } }),
                     supportsOpacity: true)
                 Stepper(
                     value: field("point.outlineWidth", get: { $0.point?.outlineWidth }, set: { $0.point?.outlineWidth = $1 }, fallback: 1), in: 0...10, step: 0.5
@@ -190,9 +224,11 @@ struct ClassEditorView: View {
 
     private var labelSection: some View {
         Section("Name") {
-            Toggle("Shows the name", isOn: part("label", \.label) {
-                LabelStyle(size: ZoomValue(constant: 10), color: MapColor(hex: 0x333333))
-            })
+            if !isVariant {
+                Toggle("Shows the name", isOn: part("label", \.label) {
+                    LabelStyle(size: ZoomValue(constant: 10), color: MapColor(hex: 0x333333))
+                })
+            }
             if classStyle?.label != nil {
                 NumberStopsEditor(
                     title: "Size (points)",
@@ -202,13 +238,13 @@ struct ClassEditorView: View {
                     "Colour",
                     selection: Binding(
                         get: { ColorConversion.color(classStyle?.label?.color ?? .black) },
-                        set: { new in model.change("class.\(featureClass).label.color") { $0.classes[featureClass]?.label?.color = ColorConversion.mapColor(new) } }),
+                        set: { new in edit("label.color") { $0.label?.color = ColorConversion.mapColor(new) } }),
                     supportsOpacity: true)
                 ColorPicker(
                     "Halo colour",
                     selection: Binding(
                         get: { ColorConversion.color(classStyle?.label?.haloColor ?? .white) },
-                        set: { new in model.change("class.\(featureClass).label.halo") { $0.classes[featureClass]?.label?.haloColor = ColorConversion.mapColor(new) } }),
+                        set: { new in edit("label.halo") { $0.label?.haloColor = ColorConversion.mapColor(new) } }),
                     supportsOpacity: true)
                 Stepper(
                     value: field("label.haloWidth", get: { $0.label?.haloWidth }, set: { $0.label?.haloWidth = $1 }, fallback: 2), in: 0...10, step: 0.5

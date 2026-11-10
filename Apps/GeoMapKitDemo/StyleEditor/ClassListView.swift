@@ -22,6 +22,7 @@ struct ClassListView: View {
         }
         .searchable(text: $search, prompt: "Find a class")
         .navigationDestination(for: FeatureClass.self) { ClassEditorView(model: model, featureClass: $0) }
+        .navigationDestination(for: VariantRef.self) { ClassEditorView(model: model, featureClass: $0.featureClass, variant: $0.index) }
         .navigationTitle("Classes")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
