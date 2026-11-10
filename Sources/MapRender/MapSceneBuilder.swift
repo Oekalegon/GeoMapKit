@@ -57,6 +57,9 @@ public struct MapSceneBuilder: Sendable {
             cellCount += 1
             for feature in try file.features(in: cell, band: band, classes: classIDs) {
                 guard let featureClass = FeatureClass(rawValue: feature.classID) else { continue }
+                // A hidden variant is dropped here, before it can join lines, taper road ends or count as a road in a divided road.
+                let variant = variantIndex(of: feature, class: featureClass, in: file)
+                if let variant, style.style(for: featureClass)?.variants[variant].hidden == true { continue }
                 switch feature.kind {
                 case .line:
                     let key = LineKey(featureClass: featureClass, objectID: feature.objectID, type: feature.objectType)
@@ -67,14 +70,13 @@ public struct MapSceneBuilder: Sendable {
                     }
                     if lineInfo[key] == nil {
                         // Tags are looked up only where the style uses them: `lanes` for classes with a ground width.
-                        let variant = variantIndex(of: feature, class: featureClass, in: file)
                         let usesLanes = style.style(for: featureClass, variant: variant)?.stroke?.width.ground != nil
                         let road = usesLanes ? roadTags(of: feature, in: file) : (lanes: nil, flow: 0)
                         lineInfo[key] = (road.lanes, name(of: feature, in: file), Structure(subclass: feature.subclass), road.flow, variant)
                     }
                 case .area:
                     if var area = makeArea(feature, in: file, featureClass: featureClass, viewport: viewport, visible: visible) {
-                        area.variant = variantIndex(of: feature, class: featureClass, in: file)
+                        area.variant = variant
                         areas[StepKey(featureClass: featureClass, variant: area.variant), default: []].append(area)
                     }
                 case .point:
@@ -85,7 +87,7 @@ public struct MapSceneBuilder: Sendable {
                         var point = ScenePoint(
                             featureClass: featureClass, objectID: feature.objectID, position: position, name: name(of: feature, in: file),
                             subclass: feature.subclass, population: featureClass == .place ? population(of: feature, in: file) : nil)
-                        point.variant = variantIndex(of: feature, class: featureClass, in: file)
+                        point.variant = variant
                         points[StepKey(featureClass: featureClass, variant: point.variant), default: []].append(point)
                     }
                 }
