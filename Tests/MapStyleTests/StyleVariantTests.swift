@@ -95,6 +95,17 @@ struct StyleVariantTests {
         #expect(style.variant(motorway, updatedFrom: style.applying(motorway)) == motorway)
     }
 
+    @Test func aHiddenVariantHasNoStepAndSurvivesAJsonRoundTrip() throws {
+        var style = MapStyle.watch
+        var cls = ClassStyle(stroke: StrokeStyle(color: ZoomValue(constant: MapColor(hex: 0x999999)), width: LineWidth(points: ZoomValue(constant: 1))), layer: 20)
+        cls.variants = [StyleVariant(name: "Underground", tags: [TagCondition(key: "location", values: ["underground"])], hidden: true)]
+        style.classes[.powerLine] = cls
+        #expect(style.drawSteps(atZoom: 15).filter { $0.featureClass == .powerLine }.map(\.variant) == [nil])
+        #expect(try MapStyle(json: try style.jsonData()) == style)
+        #expect(MapStyle.standard.classes[.powerLine]?.variants.first?.hidden == true)
+        #expect(MapStyle.standard.classes[.powerLine]?.point != nil, "towers and poles are drawn")
+    }
+
     @Test func aClassCopiedForAnOldFileDoesNotKeepTheVariantsOfTheOriginal() throws {
         // A file from before `glacier` existed: it has `landcover` with a farmland variant and no `glacier`.
         let json = "{\"formatVersion\": 1, \"name\": \"Old\", \"background\": \"#102030\", \"classes\": {\"landcover\": {\"layer\": 5, \"fill\": {\"color\": \"#CCCCCC\"}, \"variants\": [{\"subclasses\": [\"farmland\"], \"fill\": {\"color\": \"#EEEECC\"}}]}}}"

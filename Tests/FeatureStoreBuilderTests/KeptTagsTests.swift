@@ -47,6 +47,17 @@ struct KeptTagsTests {
         #expect(try tags(of: 920, class: .path, in: file, band: .mid).allSatisfy { $0.isEmpty })
     }
 
+    @Test("A cable keeps its location in the mid band")
+    func cableLocation() throws {
+        var world = SyntheticWorld()
+        world.node(940, 0.5, 0.5)
+        world.node(941, 0.5, 1.5)
+        world.way(940, [940, 941], [("power", "cable"), ("location", "underground"), ("voltage", "150000")])
+        let file = try FeatureStoreFile(data: try FeatureStoreBuilder().build(from: try world.extract()).data)
+        let mid = try tags(of: 940, class: .powerLine, in: file, band: .mid)
+        #expect(!mid.isEmpty && mid.allSatisfy { $0 == ["location=underground"] })
+    }
+
     @Test("The Watch copy does not carry the kept tags")
     func watchCopyHasNone() throws {
         var world = SyntheticWorld()
