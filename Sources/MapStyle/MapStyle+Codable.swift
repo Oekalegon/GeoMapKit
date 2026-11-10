@@ -56,6 +56,10 @@ extension MapStyle: Codable {
         }
         // Service roads were part of `roadMinor` before `roadService` existed; a style file from then draws them as streets.
         if classes[.roadService] == nil, let street = classes[.roadMinor] { classes[.roadService] = street }
+        // A class that was copied from another one for an old file has no kinds of its own: the variants of the original would name
+        // subclasses it does not have, and the file would not read back. Only the classes the file itself has keep their variants.
+        let own = Set(raw.allKeys.compactMap { byName[$0.stringValue] })
+        for featureClass in classes.keys where !own.contains(featureClass) { classes[featureClass]?.variants = [] }
         self.init(
             name: try c.decode(String.self, forKey: .name), background: try c.decode(MapColor.self, forKey: .background),
             classes: classes, attribution: try c.decodeIfPresent(AttributionDisplay.self, forKey: .attribution) ?? .full,

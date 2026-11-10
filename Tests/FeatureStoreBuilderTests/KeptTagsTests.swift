@@ -46,4 +46,16 @@ struct KeptTagsTests {
         #expect(!rail.isEmpty && rail.allSatisfy { $0 == ["gauge=1000"] })
         #expect(try tags(of: 920, class: .path, in: file, band: .mid).allSatisfy { $0.isEmpty })
     }
+
+    @Test("The Watch copy does not carry the kept tags")
+    func watchCopyHasNone() throws {
+        var world = SyntheticWorld()
+        world.node(930, 0.5, 0.5)
+        world.node(931, 0.5, 1.5)
+        world.way(930, [930, 931], [("highway", "path"), ("surface", "gravel")])
+        let file = try FeatureStoreFile(data: try FeatureStoreBuilder(profile: .watch).build(from: try world.extract()).data)
+        let mid = try tags(of: 930, class: .path, in: file, band: .mid)
+        #expect(!mid.isEmpty && mid.allSatisfy { $0.isEmpty })
+    }
 }
+
