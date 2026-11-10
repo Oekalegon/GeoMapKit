@@ -30,6 +30,7 @@ struct ShoreContext {
     private var coastGrid: SegmentGrid?
     private var waterLayer: AreaLayer?
     private var largeWaterLayer: AreaLayer?
+    private var drawnWaterLayer: AreaLayer?
     /// The sea of the stored area, or `nil` if there is none.
     var sea: SeaLookup?
 
@@ -73,6 +74,21 @@ struct ShoreContext {
         return layer
     }
 
+    /// The water areas that are drawn as the river in the mid band: the large ones and the thin or small ones that are wide enough
+    /// (`WaterSize.minimumDrawnWidth`) to survive the band's simplification. A river in a strip too thin for that keeps its line.
+    private mutating func drawnWater() -> AreaLayer {
+        if let drawnWaterLayer { return drawnWaterLayer }
+        var layer = AreaLayer()
+        let areas = AreaPolygons.collect(extract: extract, classifier: classifier) { classification, _ -> Bool? in
+            classification.featureClass == .waterArea && classification.kind == .area ? true : nil
+        }
+        for area in areas where !WaterSize.isSmall(area.polygon) || WaterSize.meanWidth(area.polygon) >= WaterSize.minimumDrawnWidth {
+            layer.add(area.polygon)
+        }
+        drawnWaterLayer = layer
+        return layer
+    }
+
     /// The outline of a water area without the stretches that lie on a coastline, and without those that have water on both sides
     /// (the line where two water areas meet, which is no shore).
     mutating func outline(of rings: [[PackedPoint]]) -> [[PackedPoint]] {
@@ -103,18 +119,27 @@ struct ShoreContext {
         return LineSplitter.removing(from: lines, projection: projection, spacing: Self.spacing) { water.contains(x: $0.x, y: $0.y) }
     }
 
-    /// A river or stream split into the stretches outside the water areas and the stretches inside them.
-    mutating func waterLineStretches(_ lines: [[PackedPoint]]) -> (kept: [[PackedPoint]], inWater: [[PackedPoint]]) {
-        let water = largeWater()
-        guard !water.polygons.isEmpty else { return (lines, []) }
-        var kept: [[PackedPoint]] = [], inWater: [[PackedPoint]] = []
+    /// A river or stream split into the stretches outside the water areas, those inside a large area and those inside a thin or
+    /// small one.
+    ///
+    /// A large area is in the overview band, so the centre line in it is never drawn. A thin or small one is from the mid band only:
+    /// at low zoom the river keeps its line, from zoom 12 the area is drawn and the line in it is not.
+    mutating func waterLineStretches(_ lines: [[PackedPoint]]) -> (kept: [[PackedPoint]], inWater: [[PackedPoint]], inThinWater: [[PackedPoint]]) {
+        let all = drawnWater()
+        guard !all.polygons.isEmpty else { return (lines, [], []) }
+        let large = largeWater()
+        var kept: [[PackedPoint]] = [], inWater: [[PackedPoint]] = [], inThinWater: [[PackedPoint]] = []
         for line in lines {
-            for stretch in LineSplitter.split(line, projection: projection, spacing: Self.spacing, test: { water.contains(x: $0.x, y: $0.y) })
+            for stretch in LineSplitter.split(line, projection: projection, spacing: Self.spacing, test: { large.contains(x: $0.x, y: $0.y) })
             where stretch.points.count >= 2 {
-                if stretch.answer { inWater.append(stretch.points) } else { kept.append(stretch.points) }
+                if stretch.answer { inWater.append(stretch.points); continue }
+                for rest in LineSplitter.split(stretch.points, projection: projection, spacing: Self.spacing, test: { all.contains(x: $0.x, y: $0.y) })
+                where rest.points.count >= 2 {
+                    if rest.answer { inThinWater.append(rest.points) } else { kept.append(rest.points) }
+                }
             }
         }
-        return (kept, inWater)
+        return (kept, inWater, inThinWater)
     }
 
     /// The border of a protected area, split into what lies on land and what lies in the sea.

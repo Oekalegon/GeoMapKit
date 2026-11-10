@@ -114,21 +114,48 @@ struct ShoreTests {
         #expect(report.featuresByClass[.waterLine] == 2, "the two rivers are kept where they are outside the lake")
     }
 
-    @Test("A river in a water area that is too thin for the overview band keeps its line there, and the area is not in the overview band")
+    /// How many pieces of a class a built file holds in one band.
+    private func pieces(of featureClass: FeatureClass, in file: FeatureStoreFile, band: ZoomBand) throws -> Int {
+        var found = 0
+        for cell in try file.cells() {
+            for feature in try file.features(in: cell, band: band) where feature.classID == featureClass.rawValue { found += 1 }
+        }
+        return found
+    }
+
+    @Test("A river in a water area that is too thin for the overview band keeps its line there; from the mid band the area has it")
     func riverInAThinArea() throws {
         var world = SyntheticWorld()
-        world.way(100, world.rectangle(first: 10, 0.5, 0.74982, 2.5, 0.75018), [("natural", "water")])   // 2 cells long and far under a metre wide
+        world.way(100, world.rectangle(first: 10, 0.5, 0.7465, 2.5, 0.7535), [("natural", "water")])   // 2 cells long and about 20 m wide
         world.node(20, 0.2, 0.75); world.node(21, 2.8, 0.75)
         world.way(101, [20, 21], [("waterway", "river"), ("name", "Testelva")])
         let (file, report) = try build(&world)
-        #expect(report.riverNameStretches == 0 && report.waterLineStretchesInWater == 0, "the river is not cut: its area is not drawn at low zoom")
-        #expect(report.featuresByClass[.waterLine] == 1 && report.featuresByClass[.riverName] == nil)
-        var overview = Set<UInt8>()
-        for cell in try file.cells() {
-            for feature in try file.features(in: cell, band: .overview) { overview.insert(feature.classID) }
-        }
+        #expect(report.waterLineStretchesInWater == 0 && report.waterLineStretchesInThinWater == 1)
+        let overview = try classes(file, band: .overview)
         #expect(overview.contains(FeatureClass.waterLine.rawValue))
         #expect(!overview.contains(FeatureClass.waterArea.rawValue) && !overview.contains(FeatureClass.waterEdge.rawValue))
+        #expect(!overview.contains(FeatureClass.riverName.rawValue), "the line carries the name in the overview band")
+        // The area is drawn from the mid band, so the river has no line in it there, and its name is kept as an undrawn line.
+        for band in [ZoomBand.mid, .detail] {
+            #expect(try classes(file, band: band).contains(FeatureClass.riverName.rawValue))
+            #expect(try classes(file, band: band).contains(FeatureClass.waterEdge.rawValue), "the area is drawn: its outline is")
+            #expect(try pieces(of: .waterLine, in: file, band: band) < pieces(of: .waterLine, in: file, band: .overview),
+                "the stretch in the area is left out of the band that draws the area")
+        }
+    }
+
+    @Test("A river in a strip too thin to survive the mid band keeps its line in every band")
+    func riverInAVeryThinStrip() throws {
+        var world = SyntheticWorld()
+        world.way(100, world.rectangle(first: 10, 0.5, 0.74985, 2.5, 0.75015), [("natural", "water")])   // about 9 m wide
+        world.node(20, 0.2, 0.75); world.node(21, 2.8, 0.75)
+        world.way(101, [20, 21], [("waterway", "river"), ("name", "Testelva")])
+        let (file, report) = try build(&world)
+        #expect(report.waterLineStretchesInThinWater == 0 && report.riverNameStretches == 0)
+        let overview = try pieces(of: .waterLine, in: file, band: .overview)
+        for band in [ZoomBand.mid, .detail] {
+            #expect(try pieces(of: .waterLine, in: file, band: band) == overview, "the line is whole in \(band)")
+        }
     }
 
     /// The classes of the features of a built file in one band.
@@ -175,14 +202,15 @@ struct ShoreTests {
     @Test("A thin water multipolygon is not in the overview band and does not cut the river that runs in it")
     func thinWaterMultipolygon() throws {
         var world = SyntheticWorld()
-        let ring = world.rectangle(first: 10, 0.5, 0.74982, 2.5, 0.75018)   // far under a metre wide
+        let ring = world.rectangle(first: 10, 0.5, 0.7465, 2.5, 0.7535)   // about 20 m wide
         world.way(100, ring, [])
         world.relation(200, [(100, "outer", 1)], [("type", "multipolygon"), ("natural", "water")])
         world.node(20, 0.2, 0.75); world.node(21, 2.8, 0.75)
         world.way(101, [20, 21], [("waterway", "river"), ("name", "Testelva")])
         let (file, report) = try build(&world)
         #expect(!(try classes(file, band: .overview)).contains(FeatureClass.waterArea.rawValue))
-        #expect(report.waterLineStretchesInWater == 0 && report.featuresByClass[.waterLine] == 1)
+        #expect(report.waterLineStretchesInWater == 0 && report.waterLineStretchesInThinWater == 1)
+        #expect(try classes(file, band: .overview).contains(FeatureClass.waterLine.rawValue))
     }
 
     @Test("A lake gets an outline of its own, and a river inside it no centre line")
