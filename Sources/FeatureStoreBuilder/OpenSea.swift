@@ -163,8 +163,8 @@ public enum OpenSea {
 
     private enum Side { case west, east, north, south }
     /// What the cells along a border say about the group: `sea` (a sea square, and no cell without sea), `land` (a cell without sea, and
-    /// no sea square), `conflict` (both), or `none` (only cells that are partly sea).
-    private enum Border { case sea, land, conflict, none }
+    /// no sea square), `conflict` (both), or `noEvidence` (only cells that are partly sea).
+    private enum Border { case sea, land, conflict, noEvidence }
 
     /// The cells of a block at the storage zoom.
     private static func cellRange(of position: Position, manifest zoom: (block: Int, storage: Int)) -> (columns: Range<Int>, rows: Range<Int>) {
@@ -206,7 +206,7 @@ public enum OpenSea {
         case (true, false): return .sea
         case (false, true): return .land
         case (true, true): return .conflict
-        case (false, false): return .none
+        case (false, false): return .noEvidence
         }
     }
 
