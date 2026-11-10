@@ -105,6 +105,17 @@ struct LibraryScreen: View {
         }
         #if os(macOS)
         .frame(minWidth: 420, minHeight: 480)
+        // A sheet on the Mac shows no toolbar, so the buttons are in the sheet itself.
+        .safeAreaInset(edge: .bottom) {
+            HStack {
+                Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
+                Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(12)
+            .background(.bar)
+        }
         #endif
     }
 
