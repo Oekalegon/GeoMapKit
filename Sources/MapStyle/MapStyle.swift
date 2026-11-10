@@ -44,12 +44,28 @@ public struct MapStyle: Sendable, Equatable {
         classes[featureClass]
     }
 
+    /// The style of a class for the features of one variant (`nil` for the features in no variant): the class's style with what the
+    /// variant sets. `nil` if the class is hidden in this style or the index is not a variant of it.
+    public func style(for featureClass: FeatureClass, variant: Int?) -> ClassStyle? {
+        guard let style = classes[featureClass] else { return nil }
+        guard let variant else { return style }
+        guard style.variants.indices.contains(variant) else { return nil }
+        return style.applying(style.variants[variant])
+    }
+
+    /// The style of what a draw step draws.
+    public func style(for step: DrawStep) -> ClassStyle? {
+        style(for: step.featureClass, variant: step.variant)
+    }
+
     /// The classes drawn at a zoom level, in drawing order (lowest layer first).
     ///
     /// Classes on the same layer are ordered by their raw value, so the order is deterministic.
     public func visibleClasses(atZoom zoom: Double) -> [FeatureClass] {
         classes
-            .filter { $0.value.visibleZoom.contains(zoom) }
+            .filter { entry in
+                entry.value.visibleZoom.contains(zoom) || entry.value.variants.contains { ($0.visibleZoom ?? entry.value.visibleZoom).contains(zoom) }
+            }
             .sorted { ($0.value.layer, $0.key.rawValue) < ($1.value.layer, $1.key.rawValue) }
             .map(\.key)
     }
@@ -71,27 +87,28 @@ public struct MapStyle: Sendable, Equatable {
     /// ``ClassStyle/tunnel`` gets a body step for its tunnels on layer ``tunnelLayer``, above the area fills and below the
     /// lines on the ground. The steps on the ground then draw only the lines that are on the ground.
     public func drawSteps(atZoom zoom: Double) -> [DrawStep] {
-        var steps: [(layer: Int, phase: Int, raw: UInt8, step: DrawStep)] = []
+        var steps: [(layer: Int, phase: Int, raw: UInt8, variant: Int, step: DrawStep)] = []
         for featureClass in visibleClasses(atZoom: zoom) {
-            guard let style = classes[featureClass] else { continue }
-            if style.stroke?.casing != nil {
-                let layer = style.casingLayer ?? style.layer
-                steps.append((layer, 0, featureClass.rawValue, DrawStep(featureClass: featureClass, part: .casing)))
-            }
-            steps.append((style.layer, 1, featureClass.rawValue, DrawStep(featureClass: featureClass, part: .body)))
-            guard style.stroke != nil else { continue }
-            if style.bridge != nil {
-                let casingLayer = Self.bridgeLayerOffset + (style.casingLayer ?? style.layer)
-                steps.append((casingLayer, 0, featureClass.rawValue, DrawStep(featureClass: featureClass, part: .casing, structure: .bridge)))
-                steps.append((
-                    Self.bridgeLayerOffset + style.layer, 1, featureClass.rawValue,
-                    DrawStep(featureClass: featureClass, part: .body, structure: .bridge)))
-            }
-            if style.tunnel != nil {
-                steps.append((Self.tunnelLayer, 1, featureClass.rawValue, DrawStep(featureClass: featureClass, part: .body, structure: .tunnel)))
+            guard let classStyle = classes[featureClass] else { continue }
+            // The features of the class that are in no variant, then each variant on its own look.
+            let looks: [(variant: Int?, style: ClassStyle)] =
+                [(nil, classStyle)] + classStyle.variants.indices.map { ($0, classStyle.applying(classStyle.variants[$0])) }
+            for (variant, style) in looks where style.visibleZoom.contains(zoom) {
+                let order = variant ?? -1
+                func add(_ layer: Int, _ phase: Int, _ part: DrawStep.Part, _ structure: Structure) {
+                    steps.append((layer, phase, featureClass.rawValue, order, DrawStep(featureClass: featureClass, part: part, structure: structure, variant: variant)))
+                }
+                if style.stroke?.casing != nil { add(style.casingLayer ?? style.layer, 0, .casing, .ground) }
+                add(style.layer, 1, .body, .ground)
+                guard style.stroke != nil else { continue }
+                if style.bridge != nil {
+                    add(Self.bridgeLayerOffset + (style.casingLayer ?? style.layer), 0, .casing, .bridge)
+                    add(Self.bridgeLayerOffset + style.layer, 1, .body, .bridge)
+                }
+                if style.tunnel != nil { add(Self.tunnelLayer, 1, .body, .tunnel) }
             }
         }
-        steps.sort { ($0.layer, $0.phase, $0.raw) < ($1.layer, $1.phase, $1.raw) }
+        steps.sort { ($0.layer, $0.phase, $0.raw, $0.variant) < ($1.layer, $1.phase, $1.raw, $1.variant) }
         return steps.map(\.step)
     }
 }

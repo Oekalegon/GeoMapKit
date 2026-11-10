@@ -14,6 +14,8 @@ public struct ScenePoint: Sendable, Equatable {
     public var subclass: UInt8
     /// The `population` of a place, if the feature has the tag and it reads as a number.
     public var population: Int?
+    /// The index of the style variant of the class this feature is drawn with (see `ClassStyle.variants`), or `nil` for the class's own look.
+    public var variant: Int? = nil
 
     /// Creates a point.
     public init(featureClass: FeatureClass, objectID: Int64, position: ScreenPoint, name: String? = nil, subclass: UInt8 = 0, population: Int? = nil) {

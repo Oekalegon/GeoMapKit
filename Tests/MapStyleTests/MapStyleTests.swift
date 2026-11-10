@@ -90,7 +90,7 @@ struct MapStyleTests {
         #expect(try #require(tunnels.min()) > (try #require(fills.max())))
         #expect(try #require(tunnels.max()) < (try #require(groundLines.min())))
         // A bridge has its casing step before its body step, and all casings before the bodies of the same layer.
-        let roadBridge = steps.filter { $0.featureClass == .roadMajor && $0.structure == .bridge }
+        let roadBridge = steps.filter { $0.featureClass == .roadMajor && $0.structure == .bridge && $0.variant == nil }
         #expect(roadBridge.map(\.part) == [.casing, .body])
         // The Watch style draws bridges and tunnels like any other line.
         #expect(MapStyle.watch.drawSteps(atZoom: 16).allSatisfy { $0.structure == .ground })

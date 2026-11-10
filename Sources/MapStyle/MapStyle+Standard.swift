@@ -13,7 +13,10 @@ extension MapStyle {
             .roadArea: ClassStyle(
                 fill: FillStyle(color: .color(0xFFFFFF)), stroke: .line(0xB0B0B0, .constant(0.5)), visibleZoom: 14...24, layer: 13),
             .landuseUrban: ClassStyle(fill: FillStyle(color: .color(0xE6E0D8)), visibleZoom: 9...24, layer: 10),
-            .landcover: ClassStyle(fill: FillStyle(color: .color(0xDDE8C8)), visibleZoom: 10...24, layer: 11),
+            // Farmland is a lighter, yellower green than the rest of the land cover (meadows, grass, orchards).
+            .landcover: ClassStyle(
+                fill: FillStyle(color: .color(0xDDE8C8)), visibleZoom: 10...24, layer: 11,
+                variants: [StyleVariant(name: "Farmland", subclasses: ["farmland"], fill: FillStyle(color: .color(0xEBEDC9)))]),
             // Ground that is not vegetation (rule table 18): bare rock, scree and sand in a grey beige, wetland in a bluish green, and
             // glaciers white with a light blue border (on the layer of the forest, above it, because a glacier lies over the land cover).
             .bareGround: ClassStyle(fill: FillStyle(color: .color(0xDEDAD2)), visibleZoom: 10...24, layer: 12),
@@ -127,7 +130,19 @@ extension MapStyle {
                 label: LabelStyle(size: .constant(10), color: MapColor(hex: 0x555555), priority: 15, visibleZoom: 12...24),
                 layer: 31, casingLayer: 29,
                 bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((12, 0.6), (16, 1.8)))),
-                tunnel: TunnelStyle(opacity: 0.5, dash: [5, 3])),
+                tunnel: TunnelStyle(opacity: 0.5, dash: [5, 3]),
+                // Motorways and trunk roads are the roads that matter at low zoom: wider, orange-red, drawn above the other major roads.
+                variants: [
+                    StyleVariant(
+                        name: "Motorways and trunk roads", subclasses: ["motorway", "trunk", "motorway_link", "trunk_link"],
+                        stroke: StrokeStyle(
+                            color: .color(0xF2A35E),
+                            width: LineWidth(
+                                points: ZoomValue((8, 1.3), (12, 2.4), (16, 4.2)),
+                                ground: GroundWidth(metresPerLane: 3, defaultLanes: 2)),
+                            casing: .init(color: .color(0xA8641E), extraPoints: ZoomValue((10, 0.4), (14, 0.9), (18, 1.7)))),
+                        layer: 32)
+                ]),
             // Sidewalks and crossings: part of the street, so fainter and thinner than the paths a runner chooses.
             .pavement: ClassStyle(
                 stroke: .line(0xE4B5A9, ZoomValue((15, 0.5), (18, 1.2))), visibleZoom: 15...24, layer: 38),

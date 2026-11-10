@@ -18,6 +18,8 @@ public struct SceneMedian: Sendable, Equatable {
     /// The line halfway between the two carriageways, in screen points. Two carriageways are separated by a divider, so the
     /// renderer draws this line along the whole strip, in the colour of the road's outline.
     public var divider: [ScreenPoint]
+    /// The index of the style variant of the class this feature is drawn with (see `ClassStyle.variants`), or `nil` for the class's own look.
+    public var variant: Int? = nil
 
     /// Creates a median strip.
     public init(featureClass: FeatureClass, structure: Structure, ring: [ScreenPoint], divider: [ScreenPoint] = []) {
