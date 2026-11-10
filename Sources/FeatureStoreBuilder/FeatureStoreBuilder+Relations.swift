@@ -110,6 +110,13 @@ extension FeatureStoreBuilder {
             try emitter.emit(FeatureSpec(
                 classification: classification, objectType: .relation, objectID: relation.id, tags: tags,
                 geometry: .rings(rings)))
+            // A forest or a meadow that is also a nature reserve has the border of the reserve as well (see
+            // `FeatureClassifier.overlays`).
+            for overlay in classifier.overlays(ClassifierTagArray(tags), primary: classification.featureClass)
+            where overlay.featureClass == .parkBorder {
+                try storeParkBorder(overlay, objectType: .relation, objectID: relation.id, tags: tags, lines: rings, shore: shore, into: &emitter)
+                emitter.report.overlayFeatures += 1
+            }
             if classification.featureClass == .waterArea {
                 try storeWaterEdge(
                     of: rings, classification, objectType: .relation, objectID: relation.id, tags: tags, shore: &shore,

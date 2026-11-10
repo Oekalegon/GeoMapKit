@@ -1,5 +1,6 @@
 import FeatureStoreBuilder
 import Foundation
+import GeoCore
 import OSMPBF
 import Regions
 import ToolCommands
@@ -48,7 +49,7 @@ GeoMapKit tools
       missing or out of date. Files that were checked within 30 days are not
       asked about again. An interrupted download continues where it stopped.
 
-  geomapkit build-region (--region id[,id...] | area as above) --output <folder> [--block-zoom 8] [--jobs N] [--margin 0.1]
+  geomapkit build-region (--region id[,id...] | --tiles x/y[,x/y...] | area as above) --output <folder> [--block-zoom 8] [--jobs N] [--margin 0.1]
                          [--cache DIR] [--profile full|watch] [--rebuild] [--no-progress]
       Build a big area (for example a country) as blocks: one store file for
       each tile of a grid (zoom 8: about 78 km), and a manifest.json that lists
@@ -59,10 +60,13 @@ GeoMapKit tools
       is, so a run that was stopped can be run again; --rebuild builds them again
       all the same (after a change of the builder that keeps the rule table, for
       the blocks of one area; the levels are built again with build-levels). --region takes the ids of
-      the region index (sweden, ostlandet); the blocks that meet them are built.
+      the region index (sweden, ostlandet); the blocks that meet them are built. --tiles builds exactly
+      the blocks x/y of the block zoom (with --rebuild, to do a few of them again).
       On a terminal a bar shows the blocks done, the share, the blocks running
       and, after four blocks, the time left; it is redrawn when a block starts or
       ends. --no-progress turns it off.
+      A block of open sea (no coastline within its margin and hardly anything else) is built again with the sea assumed when a block
+      next to it is sea along the edge they share, so the middle of a gulf is not left blank.
 
   geomapkit build-levels <folder> [--levels 9,8,7,6,5,4,3] [--jobs N] [--margin 32]
       Add coarse levels to a set of blocks, for views of hundreds of kilometres
@@ -142,12 +146,24 @@ do {
         print(ReportFormatter.text(for: try ToolRunner.cut(urls: parsed.positional.map { URL(fileURLWithPath: $0) }, area: area, options: options)))
     case "build-region":
         let parsed = try CommandLineArguments(
-            rest, knownOptions: ["region", "bbox", "center", "radius-km", "output", "block-zoom", "jobs", "margin", "cache", "profile"],
+            rest, knownOptions: ["region", "tiles", "bbox", "center", "radius-km", "output", "block-zoom", "jobs", "margin", "cache", "profile"],
             knownFlags: ["no-progress", "rebuild"])
         guard parsed.positional.isEmpty else { throw ToolError("build-region takes an area, not files") }
         guard let output = parsed.value(for: "output"), !output.isEmpty else { throw ToolError("build-region needs --output <folder>") }
         let area: BlockRequest.Area
-        if let regions = parsed.value(for: "region") {
+        if let tiles = parsed.value(for: "tiles") {
+            guard parsed.value(for: "region") == nil, parsed.value(for: "bbox") == nil, parsed.value(for: "center") == nil else {
+                throw ToolError("Use --tiles, --region or an area (--bbox, --center), not more than one")
+            }
+            let zoom = try wholeNumberOption(parsed, "block-zoom", 8, in: 0...13)
+            area = .tiles(try tiles.split(separator: ",").map { text in
+                let parts = text.split(separator: "/").compactMap { Int(String($0)) }
+                guard parts.count == 2, let tile = TileID(zoom: zoom, x: parts[0], y: parts[1]) else {
+                    throw ToolError("--tiles expects x/y,x/y (tiles of zoom \(zoom)), not '\(text)'")
+                }
+                return tile
+            })
+        } else if let regions = parsed.value(for: "region") {
             guard parsed.value(for: "bbox") == nil, parsed.value(for: "center") == nil else {
                 throw ToolError("Use --region or an area (--bbox, --center), not both")
             }

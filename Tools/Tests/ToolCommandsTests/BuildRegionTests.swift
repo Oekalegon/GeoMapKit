@@ -133,6 +133,26 @@ struct BuildRegionTests {
         #expect(!second.outcomes.contains { $0.status == .upToDate })
     }
 
+    @Test("The cells along the edge of a block: 32 of them at zoom 13 for a block of zoom 8, on the side that was asked for")
+    func edgeCells() throws {
+        let tile = try #require(TileID(zoom: 8, x: 141, y: 71))
+        let east = ToolRunner.edgeCells(of: tile, dx: 1, dy: 0, storageZoom: 13)
+        #expect(east.count == 32 && east.allSatisfy { $0.column == 141 * 32 + 31 } && east.map(\.row) == Array(71 * 32..<72 * 32))
+        let west = ToolRunner.edgeCells(of: tile, dx: -1, dy: 0, storageZoom: 13)
+        #expect(west.allSatisfy { $0.column == 141 * 32 })
+        let south = ToolRunner.edgeCells(of: tile, dx: 0, dy: 1, storageZoom: 13)
+        #expect(south.allSatisfy { $0.row == 71 * 32 + 31 } && south.map(\.column) == Array(141 * 32..<142 * 32))
+        let north = ToolRunner.edgeCells(of: tile, dx: 0, dy: -1, storageZoom: 13)
+        #expect(north.allSatisfy { $0.row == 71 * 32 })
+    }
+
+    @Test("A cut with no coastline and few ways may be open sea; with a coastline or many ways it is not")
+    func openSeaCandidate() {
+        #expect(ToolRunner.isOpenSeaCandidate(coastlineWays: 0, wayCount: 40))
+        #expect(!ToolRunner.isOpenSeaCandidate(coastlineWays: 3, wayCount: 40), "a coast is in the cut: the builder knows the sea")
+        #expect(!ToolRunner.isOpenSeaCandidate(coastlineWays: 0, wayCount: ToolRunner.openSeaWayLimit), "the land of the inland has many ways")
+    }
+
     @Test("A block that is built again takes the levels with it: they were made from the old block")
     func rebuildingABlockRemovesTheLevels() async throws {
         let s = try setup()
