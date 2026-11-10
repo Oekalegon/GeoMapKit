@@ -168,13 +168,13 @@ extension MapStyle {
                 point: PointStyle(radius: ZoomValue((12, 2.5), (15, 4)), color: .color(0x8D6E63)),
                 label: LabelStyle(size: ZoomValue((12, 10), (15, 12)), color: MapColor(hex: 0x5D4037), priority: 40),
                 visibleZoom: 12...24, layer: 60),
-            // Names of places are thinned at low zoom: within 80 points (zoom 10 and below, fading out by zoom 11) of a larger place
-            // a place gets no name, so the density follows the country: a dense one (the Netherlands) names only its larger towns at
+            // Names of places are thinned at low zoom: within 80 points of a larger place at zoom 10, growing to 300 points at zoom 3 and
+            // below (a map of a whole region names only its largest cities), fading out by zoom 11, a place gets no name, so the density follows the country: a dense one (the Netherlands) names only its larger towns at
             // zoom 9, a sparse one (Norway) names its small ones too. Larger is the rank (city, town, village) and then the `population`.
             .place: ClassStyle(
                 label: LabelStyle(
                     size: ZoomValue((8, 11), (14, 15)), color: MapColor(hex: 0x222222), haloWidth: 2.5, priority: 50,
-                    thinningRadius: ZoomValue((10, 80), (11, 0)),
+                    thinningRadius: ZoomValue((3, 300), (5, 220), (8, 120), (10, 80), (11, 0)),
                     // The largest place in view has the full size; one with a hundredth of its people is written at half the size (and
                     // between them by the logarithm), at low zoom; by zoom 13 every place has the same size.
                     populationScale: PopulationScale(smallest: 0.5, decades: 2, strength: ZoomValue((10, 1), (13, 0)))),
