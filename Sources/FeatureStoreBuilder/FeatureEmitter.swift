@@ -52,7 +52,7 @@ struct FeatureEmitter {
         {
             valueTags.append(StoredTag(key: writer.intern("population"), value: writer.intern(population)))
         }
-        for band in ZoomBand.allCases where band >= classification.minimumBand {
+        for band in ZoomBand.allCases where band >= classification.minimumBand && band <= spec.lastBand {
             if profile == .watch && band == .overview { continue }
             try emit(spec, band: band, nameID: nameID, tags: band == .detail ? tags : valueTags)
         }

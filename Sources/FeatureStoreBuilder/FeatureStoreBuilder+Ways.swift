@@ -41,8 +41,12 @@ extension FeatureStoreBuilder {
             }
             // The border of a country is often a relation whose ways carry no border tags of their own (most of the land border of
             // Finland and Russia, and of Norway and Russia, is mapped so): a way with no class of its own that is a member of a
-            // national border relation is a border. A state border works in the same way.
-            if classification.featureClass == .other, tags.value(forKey: "boundary") == nil {
+            // national border relation is a border. A state border works in the same way. A way tagged `boundary=administrative`
+            // with no `admin_level` (the Finnish border at the tripoint with Norway) has no class of its own either.
+            if classification.featureClass == .other,
+                tags.value(forKey: "boundary") == nil
+                    || (tags.value(forKey: "boundary") == "administrative" && tags.value(forKey: "admin_level") == nil)
+            {
                 if borders == nil { borders = BorderNames(extract: extract, classifier: classifier) }
                 if let inherited = borders?.classOfUntaggedBorder(ofWay: id) {
                     let plain = [OSMTag(key: "boundary", value: "administrative"), OSMTag(key: "admin_level", value: inherited == .countryBorder ? "2" : "4")]
@@ -87,15 +91,34 @@ extension FeatureStoreBuilder {
                 // The centre line of a river is not drawn through the river's own area.
                 // Its name is kept: the stretches in the water are stored as `riverName` lines, which are not drawn but carry the name, so a
                 // wide river is named along its course though the area is what is drawn.
+                // A thin or small area is in the mid and detail bands only: there the line is not drawn, as in a large area, but in the
+                // overview band the line stays, since the area is not drawn there (the area and the line drawn together look like a river
+                // with a line down its middle).
                 let result = shore.waterLineStretches(runs)
                 emitter.report.waterLineStretchesInWater += result.inWater.count
+                emitter.report.waterLineStretchesInThinWater += result.inThinWater.count
                 runs = result.kept
-                if !result.inWater.isEmpty, let name = tags.value(forKey: "name"), !name.isEmpty {
+                let name = tags.value(forKey: "name") ?? ""
+                if !result.inWater.isEmpty, !name.isEmpty {
                     try emitter.emit(FeatureSpec(
                         classification: Classification(
                             featureClass: .riverName, subclass: classification.subclass, kind: .line, minimumBand: .overview, showsOnWatch: false),
                         objectType: .way, objectID: id, tags: tags.orderedTags, geometry: .lines(result.inWater)))
                     emitter.report.riverNameStretches += result.inWater.count
+                }
+                if !result.inThinWater.isEmpty {
+                    var overviewLine = FeatureSpec(
+                        classification: classification, objectType: .way, objectID: id, tags: tags.orderedTags,
+                        geometry: .lines(result.inThinWater))
+                    overviewLine.lastBand = .overview
+                    try emitter.emit(overviewLine)
+                    if !name.isEmpty {
+                        try emitter.emit(FeatureSpec(
+                            classification: Classification(
+                                featureClass: .riverName, subclass: classification.subclass, kind: .line, minimumBand: .mid, showsOnWatch: false),
+                            objectType: .way, objectID: id, tags: tags.orderedTags, geometry: .lines(result.inThinWater)))
+                        emitter.report.riverNameStretches += result.inThinWater.count
+                    }
                 }
             default:
                 break

@@ -42,8 +42,24 @@ enum WaterSize {
         return area < minimumArea || 2 * area / perimeter < minimumWidth
     }
 
+    /// The mean width of a polygon (rings in metres): twice its area over its perimeter, `0` for a polygon with no perimeter.
+    static func meanWidth(_ polygon: AreaPolygon) -> Double {
+        let (area, perimeter) = measure(polygon)
+        return perimeter > 0 ? 2 * area / perimeter : 0
+    }
+
     /// Whether a polygon (rings in metres) is too thin or too small for the overview band: the same rule as ``isSmall(_:)``.
     static func isSmall(_ polygon: AreaPolygon) -> Bool {
+        let (area, perimeter) = measure(polygon)
+        guard perimeter > 0 else { return true }
+        return area < minimumArea || 2 * area / perimeter < minimumWidth
+    }
+
+    /// The width under which a water area is no use as the river itself in the mid band: its outline and its fill are simplified at
+    /// about 5 m there, so a strip a few metres wide is left to its centre line.
+    static let minimumDrawnWidth = 10.0
+
+    private static func measure(_ polygon: AreaPolygon) -> (area: Double, perimeter: Double) {
         var area = 0.0, perimeter = 0.0
         for ring in polygon.rings where ring.xs.count >= 4 {
             var twice = 0.0
@@ -53,8 +69,7 @@ enum WaterSize {
             }
             area += abs(twice) / 2
         }
-        guard perimeter > 0 else { return true }
-        return area < minimumArea || 2 * area / perimeter < minimumWidth
+        return (area, perimeter)
     }
 
     /// The classification with its band raised to mid when the area is small and was in the overview band.

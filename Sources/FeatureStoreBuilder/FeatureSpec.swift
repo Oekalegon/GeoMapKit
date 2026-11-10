@@ -21,4 +21,8 @@ struct FeatureSpec {
     var geometry: Geometry
     /// Flags added to every piece, for example `incomplete`.
     var extraFlags: FeatureFlags = []
+    /// The last band the feature is stored in; the first is the `minimumBand` of its classification. A feature that another one
+    /// replaces from a finer band (the centre line of a river in a thin water area, which the area replaces from the mid band) ends
+    /// before it.
+    var lastBand: ZoomBand = .detail
 }

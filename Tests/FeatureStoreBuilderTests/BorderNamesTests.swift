@@ -91,6 +91,18 @@ struct BorderNamesTests {
         #expect(try names(of: .countryBorder, in: &world) == ["Suomi – Россия"])
     }
 
+    @Test("A way tagged boundary=administrative with no admin_level takes its class from the relation, one with another level does not")
+    func administrativeWayWithoutLevel() throws {
+        var world = SyntheticWorld()
+        border(&world, tags: [("boundary", "administrative"), ("source", "Landsat")])
+        for (offset, tags) in borderRelations.enumerated() { world.relation(Int64(50 + offset), [(10, "outer", 1)], tags) }
+        #expect(try count(of: .countryBorder, in: &world) > 0)
+        var municipality = SyntheticWorld()
+        border(&municipality, tags: [("boundary", "administrative"), ("admin_level", "8")])
+        for (offset, tags) in borderRelations.enumerated() { municipality.relation(Int64(50 + offset), [(10, "outer", 1)], tags) }
+        #expect(try count(of: .countryBorder, in: &municipality) == 0)
+    }
+
     @Test("A way with no border tags that belongs to a state border relation is a state border")
     func untaggedWayInStateRelation() throws {
         var world = SyntheticWorld()
