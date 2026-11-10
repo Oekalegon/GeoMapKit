@@ -172,6 +172,15 @@ struct BorderNamesTests {
         #expect(try count(of: .parkBorder, in: &world) > 0)
     }
 
+    @Test("A multipolygon that is a forest and a nature reserve is stored as the forest and as the border of the reserve")
+    func forestReserveRelation() throws {
+        var world = SyntheticWorld()
+        world.way(100, world.rectangle(first: 10, 0.5, 0.5, 2.5, 2.5), [])
+        world.relation(200, [(100, "outer", 1)], [("type", "multipolygon"), ("landuse", "forest"), ("leisure", "nature_reserve"), ("name", "Skov")])
+        #expect(try count(of: .forest, in: &world) > 0)
+        #expect(try count(of: .parkBorder, in: &world) > 0)
+    }
+
     @Test("A way with no border tags that belongs to a state border relation is a state border")
     func untaggedWayInStateRelation() throws {
         var world = SyntheticWorld()
