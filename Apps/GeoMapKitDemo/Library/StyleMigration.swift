@@ -21,7 +21,10 @@ enum StyleMigration {
             .filter { $0.lowercased().hasSuffix(".json") && !$0.hasPrefix(".") }.sorted()
         for name in names {
             let destination = target.appendingPathComponent(name)
-            if FileManager.default.fileExists(atPath: destination.path) {
+            // A style that iCloud has listed but not downloaded is a hidden placeholder `.Name.json.icloud`; it counts as there, so the local
+            // file does not overwrite a style that another device uploaded.
+            let placeholder = target.appendingPathComponent(".\(name).icloud")
+            if FileManager.default.fileExists(atPath: destination.path) || FileManager.default.fileExists(atPath: placeholder.path) {
                 result.kept.append(name)
                 continue
             }

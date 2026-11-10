@@ -53,6 +53,15 @@ struct StyleStorageTests {
         #expect(StyleMigration.copyMissing(from: local, to: cloud).copied.isEmpty)
     }
 
+    @Test func aStyleThatICloudHasOnlyAsAPlaceholderIsNotOverwritten() throws {
+        let local = try folder(), cloud = try folder()
+        try Data("local".utf8).write(to: local.appendingPathComponent("Shared.json"))
+        try Data().write(to: cloud.appendingPathComponent(".Shared.json.icloud"))
+        let result = StyleMigration.copyMissing(from: local, to: cloud)
+        #expect(result.copied.isEmpty && result.kept == ["Shared.json"])
+        #expect(!FileManager.default.fileExists(atPath: cloud.appendingPathComponent("Shared.json").path))
+    }
+
     @Test func aLibraryKeepsItsStylesInTheFolderItIsGiven() throws {
         let root = try folder(), shared = try folder().appendingPathComponent("Documents/Styles")
         let library = MapLibrary(root: root, stylesDirectory: shared, defaults: UserDefaults(suiteName: "geomapkit-\(UUID().uuidString)")!)

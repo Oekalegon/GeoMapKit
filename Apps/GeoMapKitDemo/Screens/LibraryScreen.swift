@@ -86,6 +86,7 @@ struct LibraryScreen: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            #if os(iOS)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
@@ -102,6 +103,7 @@ struct LibraryScreen: View {
                 guard case .success(let urls) = result else { return }
                 finishImport(urls)
             }
+            #endif
             .alert("Could not add", isPresented: Binding(get: { !errors.isEmpty }, set: { if !$0 { errors = [] } })) {
                 Button("OK") { errors = [] }
             } message: {
