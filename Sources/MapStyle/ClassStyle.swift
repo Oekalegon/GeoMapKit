@@ -30,6 +30,8 @@ public struct ClassStyle: Sendable, Equatable {
     public var bridge: BridgeStyle?
     /// How tunnels of the class are drawn, or `nil` to draw them like the rest of the class (see ``TunnelStyle``).
     public var tunnel: TunnelStyle?
+    /// Different looks for some of the features of the class, tried in order (see ``StyleVariant``). Empty for one look.
+    public var variants: [StyleVariant] = []
 
     /// Creates a class style.
     public init(
