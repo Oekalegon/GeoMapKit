@@ -49,7 +49,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_PREFIX).GeoMapKitDemo
         GENERATE_INFOPLIST_FILE: NO
-        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: GeoMapKitDemo/GeoMapKitDemo.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: $(APP_ENTITLEMENTS_MAC)
+        CODE_SIGN_ENTITLEMENTS[sdk=iphone*]: $(APP_ENTITLEMENTS_IOS)
         TARGETED_DEVICE_FAMILY: "1,2"
     info:
       path: GeoMapKitDemo/Info.plist
@@ -68,6 +69,12 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSLocationWhenInUseUsageDescription: The map shows where you are and can be centred on you.
+        # The iCloud folder of the app shows in Files and Finder (it is only there with the iCloud entitlements, see Config.xcconfig).
+        NSUbiquitousContainers:
+          iCloud.org.oekalegon.GeoMapKitDemo:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerName: GeoMapKit
+            NSUbiquitousContainerSupportedFolderLevels: Any
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UTExportedTypeDeclarations:

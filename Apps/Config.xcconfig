@@ -3,3 +3,13 @@
 
 DEVELOPMENT_TEAM =
 APP_BUNDLE_PREFIX = org.oekalegon
+
+// iCloud (the styles are kept in iCloud Drive and shared between the Mac, the iPhone and the iPad) needs a team, and so these entitlements.
+// With a team set above, change the two lines below to the iCloud files; without one leave them: an unsigned build cannot carry the iCloud
+// entitlements and would not start. The container is iCloud.org.oekalegon.GeoMapKitDemo: with another APP_BUNDLE_PREFIX change it in the
+// two iCloud files and in the Info.plist (`NSUbiquitousContainers` in project.yml).
+APP_ENTITLEMENTS_MAC = GeoMapKitDemo/GeoMapKitDemo.entitlements
+// APP_ENTITLEMENTS_MAC = GeoMapKitDemo/GeoMapKitDemo-iCloud.entitlements
+APP_ENTITLEMENTS_IOS =
+// APP_ENTITLEMENTS_IOS = GeoMapKitDemo/GeoMapKitDemo-iCloud-iOS.entitlements
+

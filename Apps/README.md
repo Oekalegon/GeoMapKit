@@ -48,3 +48,15 @@ xcodebuild test -project Apps/GeoMapKitDemo.xcodeproj -scheme GeoMapKitDemo -des
 
 CI (`.github/workflows/swift.yml`, job `apps`) checks that the committed project is what `project.yml` generates, runs the library tests on the Mac and builds the
 iOS and Watch apps for the simulators.
+
+## Styles in iCloud
+
+The styles (not the maps) can be kept in the app's iCloud Drive folder, so a style saved on the Mac is on the iPhone and iPad too (question 56). It needs a team and the iCloud entitlements, which an unsigned build cannot carry, so it is off until you set it up:
+
+1. In `Config.xcconfig` set `DEVELOPMENT_TEAM`, and switch `APP_ENTITLEMENTS_MAC` and `APP_ENTITLEMENTS_IOS` to the two `-iCloud` files (the lines are there, commented).
+2. In the Apple developer account, the app ids `org.oekalegon.GeoMapKitDemo` need the iCloud capability with the container `iCloud.org.oekalegon.GeoMapKitDemo` (Xcode does it under Signing & Capabilities). With another `APP_BUNDLE_PREFIX` change the container name in the two entitlements files and in `project.yml`, then run `xcodegen`.
+3. Run on the Mac and on an iPhone signed in with the same Apple ID. The library shows a section "iCloud" with a switch and what is happening ("Syncing…", "up to date", or why iCloud is not available).
+4. The first time, the styles of the device are copied into iCloud; nothing is overwritten or removed. When two devices change one style, the newest wins and the other is saved as `name (conflict date).json` beside it.
+
+Without this setup the app keeps the styles on the device, as before, and the library says so.
+
