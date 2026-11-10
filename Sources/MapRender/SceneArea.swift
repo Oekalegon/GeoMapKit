@@ -2,11 +2,14 @@ import FeatureStore
 
 /// One piece of an area ready to draw, in screen points.
 ///
-/// An area that crosses cell borders comes as one piece per cell. Each piece is filled on its own and its
-/// ``outline`` leaves out the edges that lie on a cell border, so no seams are stroked.
+/// An area that crosses cell borders comes as one piece per cell. The pieces of one object (same ``objectType`` and ``objectID``) are
+/// filled together as one path, so that no seam shows where two of them meet between two pixels, and the ``outline`` of a piece
+/// leaves out the edges that lie on a cell border, so no seams are stroked.
 public struct SceneArea: Sendable, Equatable {
     /// The class of the feature.
     public var featureClass: FeatureClass
+    /// Whether the object is a way or a relation: a way and a relation can have the same ID.
+    public var objectType: StoredObjectType
     /// The OSM ID of the way or relation.
     public var objectID: Int64
     /// The closed rings to fill with the even-odd rule (outer rings and holes).
@@ -20,10 +23,11 @@ public struct SceneArea: Sendable, Equatable {
 
     /// Creates an area piece.
     public init(
-        featureClass: FeatureClass, objectID: Int64, rings: [[ScreenPoint]], outline: [[ScreenPoint]],
-        name: String? = nil, isIncomplete: Bool = false
+        featureClass: FeatureClass, objectType: StoredObjectType = .way, objectID: Int64, rings: [[ScreenPoint]],
+        outline: [[ScreenPoint]], name: String? = nil, isIncomplete: Bool = false
     ) {
         self.featureClass = featureClass
+        self.objectType = objectType
         self.objectID = objectID
         self.rings = rings
         self.outline = outline

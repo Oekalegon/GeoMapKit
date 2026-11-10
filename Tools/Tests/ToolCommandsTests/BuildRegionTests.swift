@@ -121,6 +121,23 @@ struct BuildRegionTests {
         #expect(try StoreSet(manifestURL: third.manifestURL).manifest.blocks[0].sources[0].etag == "\"e2\"")
     }
 
+    @Test("With tiles, exactly those blocks are built, and a tile of another zoom is an error")
+    func tilesArea() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        let first = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let one = try #require(built(first).first)
+        let tile = try #require(TileID(zoom: 8, x: one.x, y: one.y))
+        var again = request(s, area: .tiles([tile]))
+        again.rebuild = true
+        let second = try await ToolRunner.buildRegion(again, catalog: s.catalog)
+        #expect(second.outcomes.count == 1 && built(second).count == 1 && built(second).first?.x == one.x && built(second).first?.y == one.y)
+
+        let wrongZoom = try #require(TileID(zoom: 9, x: 1, y: 1))
+        await #expect(throws: ToolError.self) { try await ToolRunner.buildRegion(request(s, area: .tiles([wrongZoom])), catalog: s.catalog) }
+        await #expect(throws: ToolError.self) { try await ToolRunner.buildRegion(request(s, area: .tiles([])), catalog: s.catalog) }
+    }
+
     @Test("With rebuild, blocks that are built from the same files are built again")
     func rebuildFlag() async throws {
         let s = try setup()

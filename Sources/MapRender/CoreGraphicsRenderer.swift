@@ -1,5 +1,6 @@
 import CoreGraphics
 import CoreText
+import FeatureStore
 import MapStyle
 
 /// Draws a ``MapScene`` into a `CGContext` with Core Graphics and Core Text.
@@ -83,16 +84,19 @@ public struct CoreGraphicsRenderer: MapRenderer {
         // The pieces of one object (an area that was cut at cell borders, the sea of every cell) are filled as ONE path. Filled one by
         // one, two pieces that meet at a cell border each cover half of the pixels along it, so the background shows through as a thin
         // light line; filled together, the coverage of the pixels along the shared edge adds up to all of it. (A hairline stroke in the
-        // fill colour was used to hide this, but it also drew the border of every piece that is empty under the even-odd rule, as a line
-        // across the land from every cell of the sea.)
+        // fill colour was used to hide this, but it also drew sea-coloured lines across the land along the cell grid; see the
+        // architecture document.)
         if let fill = classStyle.fill {
             let color = fill.color.value(atZoom: zoom)
             context.setFillColor(color.cgColor)
-            var order: [Int64] = []
-            var rings: [Int64: [[ScreenPoint]]] = [:]
+            // A way and a relation can have the same ID, so the object is the pair.
+            struct Object: Hashable { let type: StoredObjectType; let id: Int64 }
+            var order: [Object] = []
+            var rings: [Object: [[ScreenPoint]]] = [:]
             for area in step.areas where !area.isIncomplete {
-                if rings[area.objectID] == nil { order.append(area.objectID) }
-                rings[area.objectID, default: []] += area.rings
+                let object = Object(type: area.objectType, id: area.objectID)
+                if rings[object] == nil { order.append(object) }
+                rings[object, default: []] += area.rings
             }
             for object in order {
                 context.beginPath()

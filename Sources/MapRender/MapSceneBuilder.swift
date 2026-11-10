@@ -181,7 +181,7 @@ public struct MapSceneBuilder: Sendable {
         }
         guard let bounds = ScreenBounds(of: rings.joined()), bounds.intersects(visible) else { return nil }
         return SceneArea(
-            featureClass: featureClass, objectID: feature.objectID, rings: rings, outline: outline,
+            featureClass: featureClass, objectType: feature.objectType, objectID: feature.objectID, rings: rings, outline: outline,
             name: name(of: feature, in: file), isIncomplete: feature.flags.contains(.incomplete))
     }
 

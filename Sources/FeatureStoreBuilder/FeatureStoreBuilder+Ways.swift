@@ -57,14 +57,18 @@ extension FeatureStoreBuilder {
             // A way is more than its primary class: a stream that the border follows, a forest that is a nature reserve, a track with a
             // piste (see `FeatureClassifier.overlays`). The overlay is stored as well, on the whole way. A way that is a member of a
             // national or state border relation is a border whatever else it is (the border of Ireland follows streams and a river that
-            // carry no border tag), unless it is tagged as the limit of an area of sea.
+            // carry no border tag), unless it is tagged as the limit of an area of sea, or is a coastline: the relations of a country or
+            // a region often have the coast as members (1,991 coastline ways in the relations of the Danish file), and the shore is no
+            // border.
             var overlays = classifier.overlays(tags, primary: classification.featureClass)
             if classification.featureClass != .countryBorder, classification.featureClass != .boundary,
                 !overlays.contains(where: { $0.featureClass == .countryBorder || $0.featureClass == .boundary }),
                 !classifier.isSeaLimit(tags)
             {
                 if borders == nil { borders = BorderNames(extract: extract, classifier: classifier) }
-                if classification.featureClass != .other, let inherited = borders?.classOfUntaggedBorder(ofWay: id) {
+                if classification.featureClass != .other, classification.featureClass != .coastline,
+                    let inherited = borders?.classOfUntaggedBorder(ofWay: id)
+                {
                     let plain = [OSMTag(key: "boundary", value: "administrative"), OSMTag(key: "admin_level", value: inherited == .countryBorder ? "2" : "4")]
                     overlays.append(classifier.classify(ClassifierTagArray(plain), shape: .openWay))
                 }

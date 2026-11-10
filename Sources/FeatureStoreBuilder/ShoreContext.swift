@@ -28,6 +28,7 @@ struct ShoreContext {
     private let classifier: FeatureClassifier
     private let projection: LocalMetres
     private var coastGrid: SegmentGrid?
+    private var waterPolygonList: [AreaPolygon]?
     private var waterLayer: AreaLayer?
     private var largeWaterLayer: AreaLayer?
     private var drawnWaterLayer: AreaLayer?
@@ -50,13 +51,21 @@ struct ShoreContext {
         return grid
     }
 
+    /// Every water area of the extract, in metres, collected once: assembling the multipolygons is the expensive part, and the three
+    /// layers below are different selections of the same polygons.
+    private mutating func waterPolygons() -> [AreaPolygon] {
+        if let waterPolygonList { return waterPolygonList }
+        let areas = AreaPolygons.collect(extract: extract, classifier: classifier) { classification, _ -> Bool? in
+            classification.featureClass == .waterArea && classification.kind == .area ? true : nil
+        }.map(\.polygon)
+        waterPolygonList = areas
+        return areas
+    }
+
     private mutating func water() -> AreaLayer {
         if let waterLayer { return waterLayer }
         var layer = AreaLayer()
-        let areas = AreaPolygons.collect(extract: extract, classifier: classifier) { classification, _ -> Bool? in
-            classification.featureClass == .waterArea && classification.kind == .area ? true : nil
-        }
-        for area in areas { layer.add(area.polygon) }
+        for polygon in waterPolygons() { layer.add(polygon) }
         waterLayer = layer
         return layer
     }
@@ -66,10 +75,7 @@ struct ShoreContext {
     private mutating func largeWater() -> AreaLayer {
         if let largeWaterLayer { return largeWaterLayer }
         var layer = AreaLayer()
-        let areas = AreaPolygons.collect(extract: extract, classifier: classifier) { classification, _ -> Bool? in
-            classification.featureClass == .waterArea && classification.kind == .area ? true : nil
-        }
-        for area in areas where !WaterSize.isSmall(area.polygon) { layer.add(area.polygon) }
+        for polygon in waterPolygons() where !WaterSize.isSmall(polygon) { layer.add(polygon) }
         largeWaterLayer = layer
         return layer
     }
@@ -79,11 +85,8 @@ struct ShoreContext {
     private mutating func drawnWater() -> AreaLayer {
         if let drawnWaterLayer { return drawnWaterLayer }
         var layer = AreaLayer()
-        let areas = AreaPolygons.collect(extract: extract, classifier: classifier) { classification, _ -> Bool? in
-            classification.featureClass == .waterArea && classification.kind == .area ? true : nil
-        }
-        for area in areas where !WaterSize.isSmall(area.polygon) || WaterSize.meanWidth(area.polygon) >= WaterSize.minimumDrawnWidth {
-            layer.add(area.polygon)
+        for polygon in waterPolygons() where !WaterSize.isSmall(polygon) || WaterSize.meanWidth(polygon) >= WaterSize.minimumDrawnWidth {
+            layer.add(polygon)
         }
         drawnWaterLayer = layer
         return layer
