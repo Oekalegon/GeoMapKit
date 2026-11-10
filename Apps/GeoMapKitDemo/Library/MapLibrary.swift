@@ -54,12 +54,13 @@ final class MapLibrary {
         var errors: [LibraryError] = []
     }
 
-    /// Opens the library in a folder: the Documents of the app, or another folder (tests use a new one).
-    init(root: URL = URL.documentsDirectory, defaults: UserDefaults = .standard) {
+    /// Opens the library in a folder: the Documents of the app, or another folder (tests use a new one). The styles are in that folder's
+    /// `Styles`, or in `stylesDirectory` (a folder in the app's iCloud container, see ``StyleFolder``).
+    init(root: URL = URL.documentsDirectory, stylesDirectory: URL? = nil, defaults: UserDefaults = .standard) {
         mapsDirectory = root.appendingPathComponent("Maps", isDirectory: true)
-        stylesDirectory = root.appendingPathComponent("Styles", isDirectory: true)
+        self.stylesDirectory = stylesDirectory ?? root.appendingPathComponent("Styles", isDirectory: true)
         self.defaults = defaults
-        for folder in [mapsDirectory, stylesDirectory] {
+        for folder in [mapsDirectory, self.stylesDirectory] {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
         selectedMapID = defaults.string(forKey: Keys.map)
@@ -149,14 +150,14 @@ final class MapLibrary {
             try FileManager.default.copyItem(at: url, to: target)
             return target.lastPathComponent
         case "json":
-            let data = try Data(contentsOf: url)
+            let data = try CoordinatedFiles.read(url)
             do { _ = try MapStyle(json: data) } catch {
                 // The manifest of a set of blocks is JSON too, and a file picker cannot give the folder around a single file.
                 if (try? StoreManifest(json: data)) != nil { throw LibraryError.noManifest("\(name) (pick the folder, not the file)") }
                 throw LibraryError.notAStyle(name, "\(error)")
             }
             let target = uniqueURL(in: stylesDirectory, name: url.deletingPathExtension().lastPathComponent, ext: "json")
-            try data.write(to: target, options: .atomic)
+            try CoordinatedFiles.write(data, to: target)
             return target.lastPathComponent
         default:
             throw LibraryError.notAMap(name)
@@ -222,7 +223,7 @@ final class MapLibrary {
         let target = stylesDirectory.appendingPathComponent(name).appendingPathExtension("json")
         guard target.lastPathComponent != style.id else { return }
         guard !FileManager.default.fileExists(atPath: target.path) else { throw LibraryError.exists(name) }
-        try FileManager.default.moveItem(at: url(of: style), to: target)
+        try CoordinatedFiles.move(from: url(of: style), to: target)
         // Where the old file was chosen, the renamed one is.
         var chosen = storedChoices
         for (key, value) in chosen where value == StyleChoice.user(style.id).storedValue { chosen[key] = StyleChoice.user(target.lastPathComponent).storedValue }
@@ -239,7 +240,7 @@ final class MapLibrary {
     }
 
     func delete(_ style: StyleItem) throws {
-        try FileManager.default.removeItem(at: url(of: style))
+        try CoordinatedFiles.delete(url(of: style))
         reload()
     }
 
@@ -271,7 +272,7 @@ final class MapLibrary {
         case .watch: return .watch
         case .user(let file):
             let url = stylesDirectory.appendingPathComponent(file)
-            do { return try MapStyle(json: try Data(contentsOf: url)) } catch { throw LibraryError.notAStyle(file, "\(error)") }
+            do { return try MapStyle(json: try CoordinatedFiles.read(url)) } catch { throw LibraryError.notAStyle(file, "\(error)") }
         }
     }
 
@@ -280,14 +281,14 @@ final class MapLibrary {
     func addStyle(_ style: MapStyle, named name: String) throws -> StyleItem {
         guard Self.isValidName(name) else { throw LibraryError.failed(name, "\"\(name)\" cannot be the name of a file.") }
         let target = uniqueURL(in: stylesDirectory, name: name.trimmingCharacters(in: .whitespacesAndNewlines), ext: "json")
-        try style.jsonData().write(to: target, options: .atomic)
+        try CoordinatedFiles.write(try style.jsonData(), to: target)
         reload()
         return styles.first { $0.id == target.lastPathComponent } ?? StyleItem(id: target.lastPathComponent, name: name, date: .now)
     }
 
     /// Writes a style to the file of an item of the library (the style editor saves with it). The map that uses the style is drawn again.
     func saveStyle(_ style: MapStyle, to item: StyleItem) throws {
-        do { try style.jsonData().write(to: url(of: item), options: .atomic) } catch { throw LibraryError.failed(item.name, error.localizedDescription) }
+        do { try CoordinatedFiles.write(try style.jsonData(), to: url(of: item)) } catch { throw LibraryError.failed(item.name, error.localizedDescription) }
         reload()
     }
 
