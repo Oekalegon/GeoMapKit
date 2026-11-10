@@ -199,35 +199,60 @@ struct OpenSeaTests {
         #expect(!report.changed && after == before)
     }
 
-    @Test func aBorderWithAPartialSeaCellIsUnclearAndTheGroupIsLeft() throws {
-        let folder = try folder()
-        let seaBlock = Position(x: 10, y: 10), open = Position(x: 11, y: 10)
-        // A sea block whose east edge has one cell that is only part sea.
+    /// A sea block (rows of sea squares) whose east edge is changed: the cells of the first rows listed get a part of sea (a coast
+    /// crosses them) or no sea at all.
+    private func writeSeaBlock(
+        at block: Position, partialEdgeRows: Set<Int> = [], landEdgeRows: Set<Int> = [], allPartialEdge: Bool = false, in folder: URL
+    ) throws -> StoreManifest.Block {
         var writer = FeatureStoreWriter(
             boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: attribution, classifierVersion: 16)
-        let all = cells(of: seaBlock)
-        for cell in all { for band in bands { try writer.add(seaSquare(cell), band: band, cell: cell) } }
+        let all = cells(of: block)
+        for (index, cell) in all.enumerated() {
+            let row = index / 32, onEast = index % 32 == 31
+            if onEast && (landEdgeRows.contains(row)) { continue }
+            if onEast && (allPartialEdge || partialEdgeRows.contains(row)) {
+                let rect = CellRect(tile: cell)
+                let part = StoredFeature(
+                    classID: FeatureClass.sea.rawValue, kind: .area, objectType: .way, objectID: 0,
+                    parts: [GeometryPart(points: [
+                        PackedPoint(longitude: rect.west, latitude: rect.north), PackedPoint(longitude: rect.east, latitude: rect.north),
+                        PackedPoint(longitude: rect.west, latitude: rect.south), PackedPoint(longitude: rect.west, latitude: rect.north),
+                    ])])
+                for band in bands { try writer.add(part, band: band, cell: cell) }
+            } else {
+                for band in bands { try writer.add(seaSquare(cell), band: band, cell: cell) }
+            }
+        }
         try writer.add(coastline(all[0]), band: .overview, cell: all[0])
-        let edge = all[31]    // the east edge of the first row
-        let rect = CellRect(tile: edge)
-        var part = StoredFeature(
-            classID: FeatureClass.sea.rawValue, kind: .area, objectType: .way, objectID: 0,
-            parts: [GeometryPart(points: [
-                PackedPoint(longitude: rect.west, latitude: rect.north), PackedPoint(longitude: rect.east, latitude: rect.north),
-                PackedPoint(longitude: rect.west, latitude: rect.south), PackedPoint(longitude: rect.west, latitude: rect.north),
-            ])])
-        part.flags = []
-        var broken = FeatureStoreWriter(
-            boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: attribution, classifierVersion: 16)
-        for cell in all where cell != edge { for band in bands { try broken.add(seaSquare(cell), band: band, cell: cell) } }
-        for band in bands { try broken.add(part, band: band, cell: edge) }
-        try broken.add(coastline(all[0]), band: .overview, cell: all[0])
-        let name = "blocks/8-10-10.gmk"
-        let data = try broken.data()
+        let name = "blocks/8-\(block.x)-\(block.y).gmk"
+        let data = try writer.data()
         try data.write(to: folder.appendingPathComponent(name))
-        let before = try manifest([StoreManifest.Block(x: 10, y: 10, file: name, bytes: Int64(data.count), builtAt: Date(timeIntervalSince1970: 0))])
+        return StoreManifest.Block(x: block.x, y: block.y, file: name, bytes: Int64(data.count), builtAt: Date(timeIntervalSince1970: 0))
+    }
+
+    @Test func partlySeaCellsOnTheBorderDoNotStopTheFill() throws {
+        // An archipelago: the border has cells with a coast in them next to the sea squares. The group beyond it is still sea.
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), open = Position(x: 11, y: 10)
+        let before = try manifest([writeSeaBlock(at: seaBlock, partialEdgeRows: [3, 4, 20], in: folder)])
+        let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, open]))
+        #expect(report.created == [open] && report.conflicting.isEmpty && after.blocks.count == 2)
+    }
+
+    @Test func aBorderOfPartlySeaCellsOnlyHasNoEvidenceAndTheGroupIsLeft() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), open = Position(x: 11, y: 10)
+        let before = try manifest([writeSeaBlock(at: seaBlock, allPartialEdge: true, in: folder)])
         let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, open]))
         #expect(!report.changed && after == before && report.left == [open] && report.conflicting.isEmpty)
+    }
+
+    @Test func aBorderWithSeaSquaresAndCellsWithoutSeaContradictsItselfAndTheGroupIsLeft() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), open = Position(x: 11, y: 10)
+        let before = try manifest([writeSeaBlock(at: seaBlock, landEdgeRows: [5], in: folder)])
+        let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, open]))
+        #expect(!report.changed && after == before && report.left == [open] && report.conflicting == [open])
     }
 
     @Test func aBlockThatOnlyTouchesSeaAtACornerIsLeft() throws {
