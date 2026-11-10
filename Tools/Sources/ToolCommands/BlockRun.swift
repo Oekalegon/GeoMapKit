@@ -28,12 +28,17 @@ public struct BlockRequest: Sendable {
     public var profile: BuildProfile
     /// The cache folder of the source files, or `nil` for the default one.
     public var cacheDirectory: URL?
+    /// Whether to build the blocks again although they are built from the same source files. This is for a change of the
+    /// builder that does not change the rule table (so the other blocks of the set stay valid), when only some blocks gain
+    /// from it: run it over the area of those blocks.
+    public var rebuild: Bool
 
     /// Creates a request.
     public init(
         area: Area, output: URL, blockZoom: Int = 8, jobs: Int = 1, margin: Double = 0.1, profile: BuildProfile = .full,
-        cacheDirectory: URL? = nil
+        cacheDirectory: URL? = nil, rebuild: Bool = false
     ) {
+        self.rebuild = rebuild
         self.area = area
         self.output = output
         self.blockZoom = blockZoom

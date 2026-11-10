@@ -49,14 +49,16 @@ GeoMapKit tools
       asked about again. An interrupted download continues where it stopped.
 
   geomapkit build-region (--region id[,id...] | area as above) --output <folder> [--block-zoom 8] [--jobs N] [--margin 0.1]
-                         [--cache DIR] [--profile full|watch] [--no-progress]
+                         [--cache DIR] [--profile full|watch] [--rebuild] [--no-progress]
       Build a big area (for example a country) as blocks: one store file for
       each tile of a grid (zoom 8: about 78 km), and a manifest.json that lists
       them. Each block is cut with a margin from the source files in the cache
       (nothing is downloaded; see fetch) and built on its own, up to --jobs at
       once, each using about 0.75 GB. The manifest is updated after each block,
       and a block that is already built from the same source files is left as it
-      is, so a run that was stopped can be run again. --region takes the ids of
+      is, so a run that was stopped can be run again; --rebuild builds them again
+      all the same (after a change of the builder that keeps the rule table, for
+      the blocks of one area; the levels are built again with build-levels). --region takes the ids of
       the region index (sweden, ostlandet); the blocks that meet them are built.
       On a terminal a bar shows the blocks done, the share, the blocks running
       and, after four blocks, the time left; it is redrawn when a block starts or
@@ -141,7 +143,7 @@ do {
     case "build-region":
         let parsed = try CommandLineArguments(
             rest, knownOptions: ["region", "bbox", "center", "radius-km", "output", "block-zoom", "jobs", "margin", "cache", "profile"],
-            knownFlags: ["no-progress"])
+            knownFlags: ["no-progress", "rebuild"])
         guard parsed.positional.isEmpty else { throw ToolError("build-region takes an area, not files") }
         guard let output = parsed.value(for: "output"), !output.isEmpty else { throw ToolError("build-region needs --output <folder>") }
         let area: BlockRequest.Area
@@ -167,7 +169,7 @@ do {
             area: area, output: URL(fileURLWithPath: output), blockZoom: try whole("block-zoom", 8, in: 0...13),
             jobs: try whole("jobs", defaultJobs, in: 1...64), margin: margin,
             profile: try ProfileArgument.parse(parsed.value(for: "profile")) == .watch ? .watch : .full,
-            cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) })
+            cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) }, rebuild: parsed.hasFlag("rebuild"))
         // The bar is on standard error, only when that is a terminal; the block lines stay on standard output.
         let showBar = ProgressBar.isUsableTerminal && !parsed.hasFlag("no-progress")
         func clearBar() { if showBar { FileHandle.standardError.write(Data("\r\u{1B}[2K".utf8)) } }

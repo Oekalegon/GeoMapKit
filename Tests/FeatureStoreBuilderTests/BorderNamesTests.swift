@@ -111,6 +111,32 @@ struct BorderNamesTests {
         #expect(try count(of: .countryBorder, in: &roadWorld) == 0)
     }
 
+    private let borderRelations: [[(String, String)]] = [
+        [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2"), ("name", "Suomi")],
+        [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2"), ("name", "Россия")],
+    ]
+
+    @Test("An untagged way of a national border stays a border when an area relation has it as a member too")
+    func untaggedBorderWayInAreaRelation() throws {
+        // The Nordic countries as one multipolygon, and a nature reserve whose outline runs along the border.
+        for area in [[("type", "multipolygon"), ("name", "Norden")], [("type", "boundary"), ("boundary", "protected_area"), ("name", "Pasvik")]] {
+            var world = SyntheticWorld()
+            border(&world)
+            for (offset, tags) in borderRelations.enumerated() { world.relation(Int64(50 + offset), [(10, "outer", 1)], tags) }
+            world.relation(60, [(10, "outer", 1)], area)
+            #expect(try count(of: .countryBorder, in: &world) > 0)
+        }
+    }
+
+    @Test("An untagged way in an area relation only is still part of the area, and no border")
+    func untaggedWayInAreaRelationOnly() throws {
+        var world = SyntheticWorld()
+        border(&world)
+        world.relation(60, [(10, "outer", 1)], [("type", "multipolygon"), ("name", "Norden")])
+        #expect(try count(of: .countryBorder, in: &world) == 0)
+        #expect(try count(of: .other, in: &world) == 0)
+    }
+
     // MARK: Sides
 
     private let level2: [(String, String)] = [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2")]

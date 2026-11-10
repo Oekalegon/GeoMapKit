@@ -9,6 +9,8 @@ extension FeatureStoreBuilder {
         of extract: OSMExtract, shore: inout ShoreContext, into emitter: inout FeatureEmitter
     ) throws -> Set<Int64> {
         var suppressed = Set<Int64>()
+        // Built when the first untagged member way needs it.
+        var borders: BorderNames?
         for position in extract.relations.indices {
             if position % 1024 == 0 { try Task.checkCancellation() }
             let item = extract.relations[position]
@@ -30,14 +32,14 @@ extension FeatureStoreBuilder {
             // The border of a protected area is often a relation of type `boundary` whose ways carry no tags of their own.
             let type = relation.tagValue(forKey: "type")
             guard type == "multipolygon" || (type == "boundary" && isProtectedArea(relation.orderedTags)) else { continue }
-            try assemble(item, extract: extract, suppressed: &suppressed, shore: &shore, into: &emitter)
+            try assemble(item, extract: extract, suppressed: &suppressed, borders: &borders, shore: &shore, into: &emitter)
         }
         return suppressed
     }
 
     private func assemble(
-        _ item: ExtractedRelation, extract: OSMExtract, suppressed: inout Set<Int64>, shore: inout ShoreContext,
-        into emitter: inout FeatureEmitter
+        _ item: ExtractedRelation, extract: OSMExtract, suppressed: inout Set<Int64>, borders: inout BorderNames?,
+        shore: inout ShoreContext, into emitter: inout FeatureEmitter
     ) throws {
         let relation = item.relation
         let isPark = isProtectedArea(relation.orderedTags)
@@ -53,7 +55,12 @@ extension FeatureStoreBuilder {
             }
             // An untagged member way has no features of its own; its geometry is part of the area.
             // A way that is itself the border of a protected area is part of the relation's border, and drawn once.
-            if extract.ways.tags(at: way).isEmpty
+            // An untagged way that is a member of a national or state border relation is kept: it is the border (the Russian
+            // border of Norway and Finland is made of such ways, and the relations of a reserve or of the Nordic countries
+            // have them as members too), and `storeWays` stores it as that.
+            let isUntagged = extract.ways.tags(at: way).isEmpty
+            if isUntagged, borders == nil { borders = BorderNames(extract: extract, classifier: classifier) }
+            if (isUntagged && borders?.classOfUntaggedBorder(ofWay: member.id) == nil)
                 || (isPark && classifier.classify(extract.ways.tags(at: way), shape: .openWay).featureClass == .parkBorder)
             {
                 suppressed.insert(member.id)

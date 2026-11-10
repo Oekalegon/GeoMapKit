@@ -93,7 +93,7 @@ extension ToolRunner {
         for task in tasks {
             let sources = task.regions.compactMap { records[$0.id] }
             let key = BlockKey(x: task.tile.x, y: task.tile.y)
-            if let block = kept[key], blockIsUpToDate(block, sources: sources, folder: request.output) {
+            if !request.rebuild, let block = kept[key], blockIsUpToDate(block, sources: sources, folder: request.output) {
                 let outcome = BlockOutcome(x: task.tile.x, y: task.tile.y, status: .upToDate, regions: task.regions.map(\.id))
                 outcomes[task.position] = outcome
                 finishedCount += 1
