@@ -94,5 +94,14 @@ struct StyleVariantTests {
         // Nothing edited: a variant that set only a layer stays that way.
         #expect(style.variant(motorway, updatedFrom: style.applying(motorway)) == motorway)
     }
+
+    @Test func aClassCopiedForAnOldFileDoesNotKeepTheVariantsOfTheOriginal() throws {
+        // A file from before `glacier` existed: it has `landcover` with a farmland variant and no `glacier`.
+        let json = "{\"formatVersion\": 1, \"name\": \"Old\", \"background\": \"#102030\", \"classes\": {\"landcover\": {\"layer\": 5, \"fill\": {\"color\": \"#CCCCCC\"}, \"variants\": [{\"subclasses\": [\"farmland\"], \"fill\": {\"color\": \"#EEEECC\"}}]}}}"
+        let style = try MapStyle(json: Data(json.utf8))
+        #expect(style.classes[.landcover]?.variants.count == 1)
+        #expect(style.classes[.glacier] != nil && style.classes[.glacier]?.variants.isEmpty == true)
+        #expect(try MapStyle(json: try style.jsonData()) == style, "it reads back")
+    }
 }
 
