@@ -2,6 +2,9 @@ import FeatureStore
 import MapStyle
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 /// The maps and styles the user has stored: pick one, add, rename, delete, share.
 struct LibraryScreen: View {
@@ -74,8 +77,8 @@ struct LibraryScreen: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button { importing = .maps } label: { Label("Add a map…", systemImage: "map") }
-                        Button { importing = .styles } label: { Label("Add a style…", systemImage: "paintpalette") }
+                        Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
+                        Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
                     } label: { Label("Add", systemImage: "plus") }
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
@@ -85,14 +88,7 @@ struct LibraryScreen: View {
                 allowedContentTypes: importing == .styles ? [.json] : [.folder, Self.storeType], allowsMultipleSelection: true
             ) { result in
                 guard case .success(let urls) = result else { return }
-                let added = library.add(urls)
-                errors = added.errors
-                // What was just added is what the user wants: a map is opened, a style is applied to the map that is open.
-                if let id = added.maps.first {
-                    library.selectedMapID = id
-                } else if let id = added.styles.first, let map = library.selectedMapID {
-                    library.setStyleChoice(.user(id), forMap: map)
-                }
+                finishImport(urls)
             }
             .alert("Could not add", isPresented: Binding(get: { !errors.isEmpty }, set: { if !$0 { errors = [] } })) {
                 Button("OK") { errors = [] }
@@ -110,6 +106,38 @@ struct LibraryScreen: View {
         #if os(macOS)
         .frame(minWidth: 420, minHeight: 480)
         #endif
+    }
+
+    // MARK: Adding
+
+    /// Asks for the files to add. On the Mac this is an open panel: `.fileImporter` did not open from the menu in this sheet (the Add
+    /// button did nothing), and a panel also shows the folders of blocks in `~/Maps`. On iOS the system file picker is used.
+    private func startImport(_ kind: ImportKind) {
+        #if os(macOS)
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = kind == .maps
+        panel.allowedContentTypes = kind == .styles ? [.json] : [.folder, Self.storeType, .json]
+        panel.message = kind == .styles ? "Choose style files (.json)" : "Choose a store file (.gmk) or a folder of blocks"
+        panel.begin { response in
+            guard response == .OK else { return }
+            finishImport(panel.urls)
+        }
+        #else
+        importing = kind
+        #endif
+    }
+
+    /// Adds what was chosen: a map is opened, a style is applied to the map that is open.
+    private func finishImport(_ urls: [URL]) {
+        let added = library.add(urls)
+        errors = added.errors
+        if let id = added.maps.first {
+            library.selectedMapID = id
+        } else if let id = added.styles.first, let map = library.selectedMapID {
+            library.setStyleChoice(.user(id), forMap: map)
+        }
     }
 
     // MARK: Rows
