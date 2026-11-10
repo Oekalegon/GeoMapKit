@@ -149,6 +149,16 @@ struct BorderNamesTests {
         #expect(try count(of: .countryBorder, in: &sea) == 0, "the limit of the territorial waters is no border")
     }
 
+    @Test("A coastline that is a member of a border relation is no border: the relations of a country or a region have the coast as members")
+    func coastlineInBorderRelation() throws {
+        var world = SyntheticWorld()
+        border(&world, tags: [("natural", "coastline")])
+        for (offset, tags) in borderRelations.enumerated() { world.relation(Int64(50 + offset), [(10, "outer", 1)], tags) }
+        world.relation(52, [(10, "outer", 1)], [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "4"), ("name", "Region")])
+        #expect(try count(of: .countryBorder, in: &world) == 0 && (try count(of: .boundary, in: &world)) == 0)
+        #expect(try count(of: .coastline, in: &world) > 0, "the shore stays a shore")
+    }
+
     @Test("A forest that is a nature reserve gets the border of the reserve, and a track with a piste gets the piste")
     func overlays() throws {
         let classifier = FeatureClassifier()
