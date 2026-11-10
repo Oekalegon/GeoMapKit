@@ -133,26 +133,6 @@ struct BuildRegionTests {
         #expect(!second.outcomes.contains { $0.status == .upToDate })
     }
 
-    @Test("The cells along the edge of a block: 32 of them at zoom 13 for a block of zoom 8, on the side that was asked for")
-    func edgeCells() throws {
-        let tile = try #require(TileID(zoom: 8, x: 141, y: 71))
-        let east = ToolRunner.edgeCells(of: tile, dx: 1, dy: 0, storageZoom: 13)
-        #expect(east.count == 32 && east.allSatisfy { $0.column == 141 * 32 + 31 } && east.map(\.row) == Array(71 * 32..<72 * 32))
-        let west = ToolRunner.edgeCells(of: tile, dx: -1, dy: 0, storageZoom: 13)
-        #expect(west.allSatisfy { $0.column == 141 * 32 })
-        let south = ToolRunner.edgeCells(of: tile, dx: 0, dy: 1, storageZoom: 13)
-        #expect(south.allSatisfy { $0.row == 71 * 32 + 31 } && south.map(\.column) == Array(141 * 32..<142 * 32))
-        let north = ToolRunner.edgeCells(of: tile, dx: 0, dy: -1, storageZoom: 13)
-        #expect(north.allSatisfy { $0.row == 71 * 32 })
-    }
-
-    @Test("A cut with no coastline and few ways may be open sea; with a coastline or many ways it is not")
-    func openSeaCandidate() {
-        #expect(ToolRunner.isOpenSeaCandidate(coastlineWays: 0, wayCount: 40))
-        #expect(!ToolRunner.isOpenSeaCandidate(coastlineWays: 3, wayCount: 40), "a coast is in the cut: the builder knows the sea")
-        #expect(!ToolRunner.isOpenSeaCandidate(coastlineWays: 0, wayCount: ToolRunner.openSeaWayLimit), "the land of the inland has many ways")
-    }
-
     @Test("A block that is built again takes the levels with it: they were made from the old block")
     func rebuildingABlockRemovesTheLevels() async throws {
         let s = try setup()
@@ -305,6 +285,19 @@ struct BuildRegionTests {
         }
     }
 
+    @Test("The open-sea pass runs after a full build, changes nothing without sea, and --no-open-sea skips it")
+    func openSeaPass() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        let with = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let sea = try #require(with.openSea)
+        #expect(!sea.changed)
+        let other = s.output.deletingLastPathComponent().appendingPathComponent("out2")
+        var off = request(s, output: other)
+        off.fillsOpenSea = false
+        #expect(try await ToolRunner.buildRegion(off, catalog: s.catalog).openSea == nil)
+    }
+
     @Test("The progress lines and the summary read as text")
     func text() {
         let built = BlockOutcome(x: 134, y: 74, status: .built(bytes: 110_000_000, cells: 1_332, seconds: 84.2), regions: ["sweden", "ostlandet"])
@@ -313,8 +306,10 @@ struct BuildRegionTests {
         #expect(ReportFormatter.line(for: BlockOutcome(x: 1, y: 2, status: .empty, regions: ["x"]), blockZoom: 8).contains("nothing to store"))
         let report = BlockRunReport(
             outcomes: [built, BlockOutcome(x: 1, y: 2, status: .empty, regions: [])], manifestURL: URL(fileURLWithPath: "/out/manifest.json"),
-            totalTime: .seconds(90), peakFootprint: 800_000_000, warnings: ["Sweden is old."])
+            totalTime: .seconds(90), peakFootprint: 800_000_000, warnings: ["Sweden is old."],
+            openSea: OpenSea.Report(created: [.init(x: 1, y: 2)], extended: [.init(x: 3, y: 4), .init(x: 5, y: 6)], conflicting: [.init(x: 7, y: 8)]))
         let text = ReportFormatter.text(for: report, blockZoom: 8)
+        #expect(text.contains("Open sea: 1 blocks added, 2 completed with sea, 1 left because their neighbours disagree"))
         #expect(text.contains("2 in the area, 1 built (110.0 MB), 0 up to date, 1 with nothing to store"))
         #expect(text.contains("/out/manifest.json") && text.contains("warning: Sweden is old."))
     }

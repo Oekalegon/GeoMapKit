@@ -12,7 +12,9 @@ extension ToolRunner {
     /// Each block is built on its own: its area is cut, with a margin, from the source files its tile needs, and only the cells of
     /// the tile are written. Up to `jobs` blocks are built at once. The source files must be in the cache (see `fetch`); nothing
     /// is downloaded. A block that is already in the manifest, built from the same source files, is left as it is, so a run that
-    /// was stopped can be run again. The manifest is written after each block, so it lists only blocks that are complete.
+    /// was stopped can be run again. The manifest is written after each block, so it lists only blocks that are complete. When the
+    /// blocks are done, the sea of blocks of open sea is added from what their neighbours show (``OpenSea``, question 53) unless
+    /// ``BlockRequest/fillsOpenSea`` is off.
     ///
     /// - Parameters:
     ///   - request: What to build.
@@ -90,7 +92,6 @@ extension ToolRunner {
         var toBuild: [BlockTask] = []
         var finishedCount = 0
         var removedFiles: [BlockKey: String] = [:]
-        var openSeaCandidates: [BlockTask] = []
         for task in tasks {
             let sources = task.regions.compactMap { records[$0.id] }
             let key = BlockKey(x: task.tile.x, y: task.tile.y)
@@ -176,7 +177,6 @@ extension ToolRunner {
                     manifest?.blocks = kept.values.sorted { ($0.y, $0.x) < ($1.y, $1.x) }
                     if let manifest { try Self.write(manifest, to: manifestURL) }
                     built += 1
-                    if result.openSeaCandidate { openSeaCandidates.append(task) }
                     let outcome = BlockOutcome(
                         x: task.tile.x, y: task.tile.y, status: .built(bytes: block.bytes, cells: block.cells, seconds: block.seconds),
                         regions: regionIDs)
@@ -200,52 +200,25 @@ extension ToolRunner {
                 onProgress(state())
             }
         }
-        // A block of open sea has no coastline in its cut, so the builder made no sea for it. It is sea if a block next to it is sea along
-        // the edge they share: no coastline is within the margin of its own edge, so nothing separates the two. Such a block is built
-        // again with the sea assumed; one that is sea in turn can make its own neighbour sea, so this goes on until no block is left
-        // that qualifies.
-        if !openSeaCandidates.isEmpty, var current = manifest {
-            var pending = openSeaCandidates
-            while !pending.isEmpty {
-                let ready = pending.filter {
-                    Self.hasSeaNeighbour($0.tile, blocks: kept.mapValues(\.file), storageZoom: current.storageZoom, folder: request.output)
-                }
-                guard !ready.isEmpty else { break }
-                pending.removeAll { task in ready.contains { $0.tile == task.tile } }
-                var queue = ready[...]
-                try await withThrowingTaskGroup(of: BuiltBlock.self) { group in
-                    func start() {
-                        guard let task = queue.popFirst() else { return }
-                        let files = task.regions.map { cache.fileURL(forRegionID: $0.id) }
-                        let sources = task.regions.compactMap { records[$0.id] }
-                        let profile = request.profile
-                        let target = blocksFolder.appendingPathComponent("\(request.blockZoom)-\(task.tile.x)-\(task.tile.y).gmk")
-                        group.addTask {
-                            try Task.checkCancellation()
-                            return try Self.buildBlock(task, files: files, sources: sources, profile: profile, target: target, assumeSea: true)
-                        }
-                    }
-                    for _ in 0..<min(jobs, ready.count) { start() }
-                    while let result = try await group.next() {
-                        try Task.checkCancellation()
-                        if let block = result.block {
-                            let task = result.task
-                            kept[BlockKey(x: task.tile.x, y: task.tile.y)] = StoreManifest.Block(
-                                x: task.tile.x, y: task.tile.y, file: "blocks/\(result.fileName)", bytes: block.bytes, builtAt: Date(),
-                                sources: block.sources)
-                            current.blocks = kept.values.sorted { ($0.y, $0.x) < ($1.y, $1.x) }
-                            try Self.write(current, to: manifestURL)
-                            manifest = current
-                            let outcome = BlockOutcome(
-                                x: task.tile.x, y: task.tile.y, status: .built(bytes: block.bytes, cells: block.cells, seconds: block.seconds),
-                                regions: task.regions.map(\.id))
-                            outcomes[task.position] = outcome
-                            progress(outcome)
-                        }
-                        start()
-                    }
+        // Open sea has no coastline in its cut and so no sea of its own: it is filled from what its neighbours show (question 53). The
+        // blocks it adds or changes are not in the levels that exist, which build-levels finds by comparing the blocks they came from.
+        var openSea: OpenSea.Report?
+        if profileName == "full", request.fillsOpenSea, let current = manifest {
+            var covered: [OpenSea.Position: [StoreManifest.Source]] = [:]
+            // The outlines of the source files stop at the territorial sea, so a block of open sea is mostly outside them (8/139/80 is 10%
+            // covered): any coverage counts, none is unknown.
+            for task in tasks where task.coveredShare > 0 {
+                covered[OpenSea.Position(x: task.tile.x, y: task.tile.y)] = task.regions.compactMap { records[$0.id] }.map {
+                    StoreManifest.Source(
+                        regionID: $0.regionID, url: $0.url.absoluteString, size: $0.size, downloadedAt: $0.downloadedAt, etag: $0.etag,
+                        lastModified: $0.lastModified)
                 }
             }
+            let (filled, report) = try OpenSea.fill(manifest: current, folder: request.output, covered: covered) { updated in
+                try Self.write(updated, to: manifestURL)
+            }
+            if report.changed { manifest = filled }
+            openSea = report
         }
         // A manifest that exists after a run in which nothing was built (everything up to date, or empty) is the one that was there.
         guard FileManager.default.fileExists(atPath: manifestURL.path) else {
@@ -253,7 +226,7 @@ extension ToolRunner {
         }
         return BlockRunReport(
             outcomes: outcomes.keys.sorted().compactMap { outcomes[$0] }, manifestURL: manifestURL, totalTime: clock.now - started,
-            peakFootprint: ProcessMemory.peakFootprintBytes(), warnings: warnings)
+            peakFootprint: ProcessMemory.peakFootprintBytes(), warnings: warnings, openSea: openSea)
     }
 
     // MARK: Blocks
@@ -265,13 +238,17 @@ extension ToolRunner {
         var tile: TileID
         var cutBox: BoundingBox
         var regions: [SourceRegion]
+        /// The share of the tile (not the cut) that the outlines of the regions cover; 0 when no source file has data there.
+        var coveredShare: Double = 0
     }
 
     /// The blocks of an area with, for each, the box that is cut and the regions whose files it needs (none if no region covers it).
     static func plannedBlocks(area: BlockRequest.Area, blockZoom: Int, margin: Double, in index: RegionIndex) throws -> [BlockTask] {
         try blockTiles(for: area, blockZoom: blockZoom, in: index).enumerated().map { position, tile in
             let box = cutBox(of: tile, margin: margin)
-            return BlockTask(position: position, tile: tile, cutBox: box, regions: index.regions(covering: box).regions)
+            // The tile alone decides whether the data there is known: the margin only reaches into the next block.
+            let share = index.regions(covering: tileBox(tile), samplesPerSide: 16).coveredShare
+            return BlockTask(position: position, tile: tile, cutBox: box, regions: index.regions(covering: box).regions, coveredShare: share)
         }
     }
 
@@ -291,8 +268,6 @@ extension ToolRunner {
         var fileName: String
         /// `nil` when the cut had no cell to store.
         var block: Block?
-        /// Whether the cut has no coastline and hardly anything else, so that the block may be open sea (see `isOpenSeaCandidate`).
-        var openSeaCandidate = false
     }
 
     /// The tiles of the block grid that the request covers, in order of row and column.
@@ -390,63 +365,16 @@ extension ToolRunner {
         return zip(block.sources, sources).allSatisfy { $0.regionID == $1.regionID && $0.size == $1.size && $0.etag == $1.etag && $0.lastModified == $1.lastModified }
     }
 
-    /// The most ways a cut without a coastline may have and still be taken for open sea: a block of land has thousands (every lake,
-    /// stream and track), the sea has a few borders, ferry lines and sea marks.
-    static let openSeaWayLimit = 1_000
-
-    /// Whether the cut of a block may be open sea: it holds no coastline and hardly anything else.
-    static func isOpenSeaCandidate(coastlineWays: Int, wayCount: Int) -> Bool {
-        coastlineWays == 0 && wayCount < openSeaWayLimit
-    }
-
-    /// The cells (zoom `storageZoom`) of a block along its border with another block, as (column, row) pairs.
-    ///
-    /// - Parameters:
-    ///   - tile: The block whose edge is wanted.
-    ///   - dx: Which edge: `1` for the east edge, `-1` for the west edge.
-    ///   - dy: `1` for the south edge, `-1` for the north edge. Give `dx` or `dy`, not both.
-    static func edgeCells(of tile: TileID, dx: Int, dy: Int, storageZoom: Int) -> [(column: Int, row: Int)] {
-        let count = 1 << max(storageZoom - tile.zoom, 0)
-        let firstColumn = tile.x * count, firstRow = tile.y * count
-        return (0..<count).map { step in
-            if dx > 0 { return (firstColumn + count - 1, firstRow + step) }
-            if dx < 0 { return (firstColumn, firstRow + step) }
-            if dy > 0 { return (firstColumn + step, firstRow + count - 1) }
-            return (firstColumn + step, firstRow)
-        }
-    }
-
-    /// Whether a block next to `tile` is sea in every cell along the edge they share.
-    private static func hasSeaNeighbour(_ tile: TileID, blocks: [BlockKey: String], storageZoom: Int, folder: URL) -> Bool {
-        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-            guard let file = blocks[BlockKey(x: tile.x + dx, y: tile.y + dy)],
-                let neighbour = TileID(zoom: tile.zoom, x: tile.x + dx, y: tile.y + dy),
-                let store = try? FeatureStoreFile(contentsOf: folder.appendingPathComponent(file))
-            else { continue }
-            // The edge of the neighbour that touches `tile` is the opposite one.
-            let cells = edgeCells(of: neighbour, dx: -dx, dy: -dy, storageZoom: storageZoom)
-            let allSea = cells.allSatisfy { cell in
-                guard let id = TileID(zoom: storageZoom, x: cell.column, y: cell.row),
-                    let found = try? store.features(in: id, band: .detail, classes: [FeatureClass.sea.rawValue])
-                else { return false }
-                return found.contains { $0.parts.count == 1 && $0.parts[0].points.count == 5 }
-            }
-            if allSea { return true }
-        }
-        return false
-    }
-
     /// Cuts and builds one block and writes its file. Runs on any thread; holds the cut in memory while it runs.
     private static func buildBlock(
-        _ task: BlockTask, files: [URL], sources: [CachedSource], profile: BuildProfile, target: URL, assumeSea: Bool = false
+        _ task: BlockTask, files: [URL], sources: [CachedSource], profile: BuildProfile, target: URL
     ) throws -> BuiltBlock {
         let clock = ContinuousClock()
         let started = clock.now
         let readers = try files.map { try PBFReader(url: $0) }
         let extract = try AreaCutter().cut(readers, to: task.cutBox)
         let writeBox = FeatureStoreBuilder.cellAlignedBox(covering: tileBox(task.tile))
-        let result = try FeatureStoreBuilder(profile: profile).build(from: extract, writing: writeBox, assumeSea: assumeSea)
-        let candidate = isOpenSeaCandidate(coastlineWays: result.report.coastlineWays, wayCount: extract.ways.indices.count)
+        let result = try FeatureStoreBuilder(profile: profile).build(from: extract, writing: writeBox)
         let file = try FeatureStoreFile(data: result.data)
         let name = target.lastPathComponent
         guard file.cellCount > 0 else { return BuiltBlock(task: task, fileName: name, block: nil) }
@@ -467,7 +395,7 @@ extension ToolRunner {
                         lastModified: $0.lastModified)
                 },
                 formatVersion: file.formatVersion, classifierVersion: file.classifierVersion, storageZoom: file.storageZoom,
-                bands: file.bands, attribution: file.attribution), openSeaCandidate: candidate && !result.report.seaAssumed)
+                bands: file.bands, attribution: file.attribution))
     }
 
     private static func write(_ manifest: StoreManifest, to url: URL) throws {

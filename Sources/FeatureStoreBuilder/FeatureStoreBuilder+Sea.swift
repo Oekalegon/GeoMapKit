@@ -8,8 +8,7 @@ extension FeatureStoreBuilder {
     /// This comes before the ways are stored, because the ways need to know where the sea is (the border of a protected area is
     /// another colour in it). Nothing is built if the coastlines cannot be closed.
     func prepareSea(
-        of extract: OSMExtract, columns: ClosedRange<Int>, rows: ClosedRange<Int>, assumeSea: Bool = false,
-        into emitter: inout FeatureEmitter
+        of extract: OSMExtract, columns: ClosedRange<Int>, rows: ClosedRange<Int>, into emitter: inout FeatureEmitter
     ) throws -> PreparedSea? {
         var ways: [CoastlineJoiner.Way] = []
         var skipped = 0
@@ -26,16 +25,7 @@ extension FeatureStoreBuilder {
         emitter.report.coastlineWaysSkipped = skipped
         // A coastline that could not be used at all must still be reported: the build has no sea, and the user should know why.
         if ways.isEmpty && skipped > 0 { emitter.report.seaOpenEnds = 1 }
-        guard let block = CellRect(columns: columns, rows: rows, zoom: Self.zoom) else { return nil }
-        if ways.isEmpty && skipped == 0 && assumeSea {
-            // No coastline in the cut, and the caller says this is open sea: the whole area is sea.
-            emitter.report.seaAssumed = true
-            emitter.report.seaPolygons = 1
-            return PreparedSea(
-                joined: CoastlineJoiner.Result(rings: [], chains: []),
-                whole: SeaBuilder.Result(rings: [SeaBuilder.boxRing(block)], seaPolygons: 1), block: block, isOpenSea: true)
-        }
-        guard !ways.isEmpty else { return nil }
+        guard !ways.isEmpty, let block = CellRect(columns: columns, rows: rows, zoom: Self.zoom) else { return nil }
         let joinedWays = CoastlineJoiner.join(ways)
         // Coastlines that end inside the area (the extract stops at a country border) are joined with straight lines.
         var borders: [[PackedPoint]] = []
@@ -74,7 +64,7 @@ extension FeatureStoreBuilder {
             let chains = joined.chains.map { chain in tolerance.map { GeometrySimplifier.simplify(line: chain, tolerance: $0) } ?? chain }
             let rings = joined.rings.compactMap { ring in tolerance.map { GeometrySimplifier.simplify(ring: ring, tolerance: $0) } ?? ring }
             let lines = SeaBuilder.Lines(rings: rings, chains: chains)
-            let sea = tolerance == nil || prepared.isOpenSea ? whole.rings : SeaBuilder.build(lines: lines, box: block).rings
+            let sea = tolerance == nil ? whole.rings : SeaBuilder.build(lines: lines, box: block).rings
             let blockParts = SeaBuilder.parts(lines: lines, sea: sea, columns: columns, rows: rows, zoom: Self.zoom)
             for row in rows {
                 for column in columns {
