@@ -111,5 +111,13 @@ struct StyleVariantSceneTests {
         let mid = try scene(style: style, band: .mid, zoom: 13)
         #expect(ids(mid, .railway, variant: 0).isEmpty && ids(mid, .railway, variant: nil) == [4])
     }
+
+    @Test func aHiddenVariantIsNotInTheScene() throws {
+        var style = MapStyle.standard
+        style.classes[.railway]?.variants = [StyleVariant(name: "Metre gauge", tags: [TagCondition(key: "gauge", values: ["1000"])], hidden: true)]
+        let scene = try scene(style: style)
+        #expect(ids(scene, .railway, variant: 0).isEmpty && ids(scene, .railway, variant: nil).isEmpty, "the metre-gauge rail (id 4) is dropped")
+        #expect(ids(scene, .roadMajor, variant: 0) == [1] && ids(scene, .roadMajor, variant: nil) == [2], "the other classes are untouched")
+    }
 }
 

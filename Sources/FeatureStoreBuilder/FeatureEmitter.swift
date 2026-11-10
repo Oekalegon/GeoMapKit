@@ -34,6 +34,7 @@ struct FeatureEmitter {
         .roadMajor: ["surface"],
         .roadMinor: ["surface", "smoothness"],
         .roadService: ["surface"],
+        .powerLine: ["location"],
         .railway: ["gauge", "electrified", "usage", "service"],
     ]
 

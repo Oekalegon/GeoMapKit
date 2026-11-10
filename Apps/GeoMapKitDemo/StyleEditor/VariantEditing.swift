@@ -93,6 +93,9 @@ struct VariantSelectorSection: View {
                     .textInputAutocapitalization(.sentences)
                 #endif
             }
+            Section {
+                Toggle("Do not draw these features", isOn: Binding(get: { current.hidden }, set: { new in edit("hidden") { $0.hidden = new } }))
+            } footer: { Text("They are still read; nothing is drawn for them (underground cables, for example).") }
             let names = SubclassNames.names(of: featureClass)
             if !names.isEmpty {
                 Section {
