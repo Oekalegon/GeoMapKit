@@ -80,26 +80,30 @@ public struct CoreGraphicsRenderer: MapRenderer {
 
     private func drawBody(_ step: SceneStep, classStyle: ClassStyle, viewport: MapViewport, in context: CGContext) {
         let zoom = viewport.zoom
-        for area in step.areas {
-            if let fill = classStyle.fill, !area.isIncomplete {
-                let color = fill.color.value(atZoom: zoom)
-                context.setFillColor(color.cgColor)
-                context.beginPath()
-                for ring in area.rings { addClosed(ring, to: context) }
-                context.fillPath(using: .evenOdd)
-                if classStyle.stroke == nil, color.alpha >= 1 {
-                    // A hairline in the fill colour closes the seams between neighbouring cells' pieces.
-                    context.setStrokeColor(color.cgColor)
-                    context.setLineWidth(0.5)
-                    context.setLineJoin(.round)
-                    context.beginPath()
-                    for ring in area.rings { addClosed(ring, to: context) }
-                    context.strokePath()
-                }
+        // The pieces of one object (an area that was cut at cell borders, the sea of every cell) are filled as ONE path. Filled one by
+        // one, two pieces that meet at a cell border each cover half of the pixels along it, so the background shows through as a thin
+        // light line; filled together, the coverage of the pixels along the shared edge adds up to all of it. (A hairline stroke in the
+        // fill colour was used to hide this, but it also drew the border of every piece that is empty under the even-odd rule, as a line
+        // across the land from every cell of the sea.)
+        if let fill = classStyle.fill {
+            let color = fill.color.value(atZoom: zoom)
+            context.setFillColor(color.cgColor)
+            var order: [Int64] = []
+            var rings: [Int64: [[ScreenPoint]]] = [:]
+            for area in step.areas where !area.isIncomplete {
+                if rings[area.objectID] == nil { order.append(area.objectID) }
+                rings[area.objectID, default: []] += area.rings
             }
-            if let stroke = classStyle.stroke {
-                context.setStrokeColor(stroke.color.value(atZoom: zoom).cgColor)
-                let width = stroke.width.resolved(atZoom: zoom, metresPerPoint: viewport.metresPerPoint, lanes: nil)
+            for object in order {
+                context.beginPath()
+                for ring in rings[object] ?? [] { addClosed(ring, to: context) }
+                context.fillPath(using: .evenOdd)
+            }
+        }
+        if let stroke = classStyle.stroke {
+            context.setStrokeColor(stroke.color.value(atZoom: zoom).cgColor)
+            let width = stroke.width.resolved(atZoom: zoom, metresPerPoint: viewport.metresPerPoint, lanes: nil)
+            for area in step.areas {
                 for run in area.outline { strokePath(run, width: width, stroke: stroke, dashed: true, in: context) }
             }
         }
