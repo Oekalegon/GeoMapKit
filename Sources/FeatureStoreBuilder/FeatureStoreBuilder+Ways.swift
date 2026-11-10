@@ -54,6 +54,36 @@ extension FeatureStoreBuilder {
                     emitter.report.waysTakingBorderFromRelation += 1
                 }
             }
+            // A way is more than its primary class: a stream that the border follows, a forest that is a nature reserve, a track with a
+            // piste (see `FeatureClassifier.overlays`). The overlay is stored as well, on the whole way. A way that is a member of a
+            // national or state border relation is a border whatever else it is (the border of Ireland follows streams and a river that
+            // carry no border tag), unless it is tagged as the limit of an area of sea.
+            var overlays = classifier.overlays(tags, primary: classification.featureClass)
+            if classification.featureClass != .countryBorder, classification.featureClass != .boundary,
+                !overlays.contains(where: { $0.featureClass == .countryBorder || $0.featureClass == .boundary }),
+                !classifier.isSeaLimit(tags)
+            {
+                if borders == nil { borders = BorderNames(extract: extract, classifier: classifier) }
+                if classification.featureClass != .other, let inherited = borders?.classOfUntaggedBorder(ofWay: id) {
+                    let plain = [OSMTag(key: "boundary", value: "administrative"), OSMTag(key: "admin_level", value: inherited == .countryBorder ? "2" : "4")]
+                    overlays.append(classifier.classify(ClassifierTagArray(plain), shape: .openWay))
+                }
+            }
+            for overlay in overlays {
+                if overlay.featureClass == .parkBorder {
+                    try storeParkBorder(overlay, objectType: .way, objectID: id, tags: tags.orderedTags, lines: runs, shore: shore, into: &emitter)
+                } else {
+                    var overlayName: String?
+                    if (overlay.featureClass == .countryBorder || overlay.featureClass == .boundary), tags.value(forKey: "name") == nil {
+                        if borders == nil { borders = BorderNames(extract: extract, classifier: classifier) }
+                        overlayName = borders?.name(ofWay: id, as: overlay.featureClass)
+                    }
+                    try emitter.emit(FeatureSpec(
+                        classification: overlay, objectType: .way, objectID: id, tags: tags.orderedTags, fallbackName: overlayName,
+                        geometry: .lines(runs)))
+                }
+                emitter.report.overlayFeatures += 1
+            }
             // A footway beside a road is a sidewalk, tagged or not.
             if Self.mayBeASidewalk(tags, classification) {
                 if roads == nil { roads = RoadIndex(extract: extract, classifier: classifier) }

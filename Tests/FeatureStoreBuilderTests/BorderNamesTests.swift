@@ -1,6 +1,7 @@
 import FeatureStore
 import Foundation
 import GeoCore
+import OSMPBF
 import Testing
 
 @testable import FeatureStoreBuilder
@@ -8,12 +9,12 @@ import Testing
 /// The names of national and state borders, taken from the relations the border ways belong to.
 @Suite("Border names")
 struct BorderNamesTests {
-    private func names(of featureClass: FeatureClass, in world: inout SyntheticWorld) throws -> [String] {
+    private func names(of featureClass: FeatureClass, ofWay way: Int64? = nil, in world: inout SyntheticWorld) throws -> [String] {
         let result = try FeatureStoreBuilder().build(from: try world.extract())
         let file = try FeatureStoreFile(data: result.data)
         var found: [String] = []
         for cell in try file.cells() {
-            for feature in try file.features(in: cell, band: .overview) where feature.classID == featureClass.rawValue {
+            for feature in try file.features(in: cell, band: .overview) where feature.classID == featureClass.rawValue && (way == nil || feature.objectID == way) {
                 found.append(feature.nameID.flatMap { file.string(at: $0) } ?? "")
             }
         }
@@ -81,6 +82,15 @@ struct BorderNamesTests {
         return found
     }
 
+    private func countInDetail(of featureClass: FeatureClass, in world: inout SyntheticWorld) throws -> Int {
+        let file = try FeatureStoreFile(data: try FeatureStoreBuilder().build(from: try world.extract()).data)
+        var found = 0
+        for cell in try file.cells() {
+            for feature in try file.features(in: cell, band: .detail) where feature.classID == featureClass.rawValue { found += 1 }
+        }
+        return found
+    }
+
     @Test("A way with no border tags that belongs to a national border relation is a national border")
     func untaggedWayInCountryRelation() throws {
         var world = SyntheticWorld()
@@ -103,6 +113,65 @@ struct BorderNamesTests {
         #expect(try count(of: .countryBorder, in: &municipality) == 0)
     }
 
+    @Test("A border way that is also a stream or a fence is a border as well as that; a municipal border way is not")
+    func borderBesideOwnClass() throws {
+        for own in [("waterway", "stream"), ("barrier", "fence")] {
+            var world = SyntheticWorld()
+            border(&world, tags: [("boundary", "administrative"), ("admin_level", "2"), own])
+            #expect(try count(of: .countryBorder, in: &world) > 0, "\(own.0) keeps its class and gains the border")
+            if own.0 == "waterway" { #expect(try countInDetail(of: .waterLine, in: &world) > 0, "the stream is still a stream") }
+        }
+        var state = SyntheticWorld()
+        border(&state, tags: [("boundary", "administrative"), ("admin_level", "4"), ("waterway", "river")])
+        #expect(try count(of: .boundary, in: &state) > 0)
+        var municipality = SyntheticWorld()
+        border(&municipality, tags: [("boundary", "administrative"), ("admin_level", "8"), ("waterway", "river")])
+        #expect(try count(of: .countryBorder, in: &municipality) == 0 && (try count(of: .boundary, in: &municipality)) == 0)
+        var sea = SyntheticWorld()
+        border(&sea, tags: [("boundary", "administrative"), ("admin_level", "2"), ("border_type", "territorial"), ("waterway", "river")])
+        #expect(try count(of: .countryBorder, in: &sea) == 0, "the limit of the territorial waters is no border")
+    }
+
+    @Test("A stream or a road that is a member of a national border relation is a border as well, with no border tag of its own")
+    func memberOfBorderRelationWithOwnClass() throws {
+        for own in [("waterway", "river"), ("highway", "track")] {
+            var world = SyntheticWorld()
+            border(&world, tags: [own, ("name", "Cor")])
+            for (offset, tags) in borderRelations.enumerated() { world.relation(Int64(50 + offset), [(10, "outer", 1)], tags) }
+            #expect(try count(of: .countryBorder, in: &world) > 0, "\(own.1) in the border relations")
+        }
+        var alone = SyntheticWorld()
+        border(&alone, tags: [("waterway", "river")])
+        #expect(try count(of: .countryBorder, in: &alone) == 0, "no relation, no border")
+        var sea = SyntheticWorld()
+        border(&sea, tags: [("waterway", "river"), ("boundary", "administrative"), ("admin_level", "2"), ("border_type", "territorial")])
+        sea.relation(50, [(10, "outer", 1)], borderRelations[0])
+        #expect(try count(of: .countryBorder, in: &sea) == 0, "the limit of the territorial waters is no border")
+    }
+
+    @Test("A forest that is a nature reserve gets the border of the reserve, and a track with a piste gets the piste")
+    func overlays() throws {
+        let classifier = FeatureClassifier()
+        let forest = ClassifierTagArray([OSMTag(key: "landuse", value: "forest"), OSMTag(key: "leisure", value: "nature_reserve")])
+        let primary = classifier.classify(forest, shape: .closedWay).featureClass
+        #expect(primary != .parkBorder)
+        #expect(classifier.overlays(forest, primary: primary).map(\.featureClass) == [.parkBorder])
+        let track = ClassifierTagArray([OSMTag(key: "highway", value: "track"), OSMTag(key: "piste:type", value: "nordic")])
+        #expect(classifier.overlays(track, primary: classifier.classify(track, shape: .openWay).featureClass).map(\.featureClass) == [.piste])
+        let shop = ClassifierTagArray([OSMTag(key: "building", value: "retail"), OSMTag(key: "shop", value: "supermarket"), OSMTag(key: "addr:street", value: "X")])
+        #expect(classifier.overlays(shop, primary: .building).isEmpty, "a shop in a building is no overlay")
+        let plain = ClassifierTagArray([OSMTag(key: "boundary", value: "administrative"), OSMTag(key: "admin_level", value: "2")])
+        #expect(classifier.overlays(plain, primary: .countryBorder).isEmpty, "never the primary class again")
+    }
+
+    @Test("A closed way that is a forest and a nature reserve is stored as the forest and as the border of the reserve")
+    func forestReserveWay() throws {
+        var world = SyntheticWorld()
+        world.way(100, world.rectangle(first: 10, 0.5, 0.5, 2.5, 2.5), [("landuse", "forest"), ("leisure", "nature_reserve"), ("name", "Skov")])
+        #expect(try count(of: .forest, in: &world) > 0)
+        #expect(try count(of: .parkBorder, in: &world) > 0)
+    }
+
     @Test("A way with no border tags that belongs to a state border relation is a state border")
     func untaggedWayInStateRelation() throws {
         var world = SyntheticWorld()
@@ -112,14 +181,13 @@ struct BorderNamesTests {
         #expect(try count(of: .countryBorder, in: &world) == 0)
     }
 
-    @Test("A way in no border relation stays what it was, and a road in a border relation stays a road")
+    @Test("A way in no border relation stays what it was")
     func otherWaysKeepTheirClass() throws {
         var world = SyntheticWorld()
         border(&world, tags: [("source", "Landsat")])
         #expect(try count(of: .countryBorder, in: &world) == 0)
         var roadWorld = SyntheticWorld()
         border(&roadWorld, tags: [("highway", "track")])
-        roadWorld.relation(50, [(10, "outer", 1)], [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2"), ("name", "Norge")])
         #expect(try count(of: .countryBorder, in: &roadWorld) == 0)
     }
 
@@ -177,7 +245,7 @@ struct BorderNamesTests {
     func sides() throws {
         var world = SyntheticWorld()
         neighbours(&world)
-        #expect(try names(of: .countryBorder, in: &world) == ["North\nSouth"])
+        #expect(try names(of: .countryBorder, ofWay: 10, in: &world) == ["North\nSouth"])
     }
 
     @Test("A way stored the other way round swaps the sides")
@@ -185,7 +253,7 @@ struct BorderNamesTests {
         var world = SyntheticWorld()
         neighbours(&world, wayNodes: [3, 2, 1])
         // The rings now do not close at the nodes of way 10 in the order the ways are given, but the nodes are the same.
-        #expect(try names(of: .countryBorder, in: &world) == ["South\nNorth"])
+        #expect(try names(of: .countryBorder, ofWay: 10, in: &world) == ["South\nNorth"])
     }
 
     @Test("A region whose ring cannot be followed takes the side that is free")
@@ -194,14 +262,14 @@ struct BorderNamesTests {
         // The southern region is only a name on this way: no ring to follow.
         neighbours(&world, south: false)
         world.relation(51, [(10, "outer", 1)], level2 + [("name", "South")])
-        #expect(try names(of: .countryBorder, in: &world) == ["North\nSouth"])
+        #expect(try names(of: .countryBorder, ofWay: 10, in: &world) == ["North\nSouth"])
     }
 
     @Test("A region on one side only is named on that side alone")
     func oneSide() throws {
         var world = SyntheticWorld()
         neighbours(&world, south: false)
-        #expect(try names(of: .countryBorder, in: &world) == ["North\n"])
+        #expect(try names(of: .countryBorder, ofWay: 10, in: &world) == ["North\n"])
     }
 
     @Test("A relation with too many ways missing from the extract is not followed: the names are in alphabetical order")
@@ -211,7 +279,7 @@ struct BorderNamesTests {
         // One of the four ways of each relation is not in the extract: 25%, far over the limit.
         world.relation(50, [(10, "outer", 1), (11, "outer", 1), (12, "outer", 1), (99, "outer", 1)], level2 + [("name", "North")])
         world.relation(51, [(10, "outer", 1), (13, "outer", 1), (14, "outer", 1), (98, "outer", 1)], level2 + [("name", "South")])
-        #expect(try names(of: .countryBorder, in: &world) == ["North – South"])
+        #expect(try names(of: .countryBorder, ofWay: 10, in: &world) == ["North – South"])
     }
 
     @Test("A relation whose ways do not join up is not followed")
@@ -223,7 +291,7 @@ struct BorderNamesTests {
         world.way(30, [20, 21]); world.way(31, [22, 23])
         world.relation(50, [(30, "outer", 1), (10, "outer", 1), (31, "outer", 1)], level2 + [("name", "North")])
         world.relation(51, [(31, "outer", 1), (10, "outer", 1), (30, "outer", 1)], level2 + [("name", "South")])
-        #expect(try names(of: .countryBorder, in: &world) == ["North – South"])
+        #expect(try names(of: .countryBorder, ofWay: 10, in: &world) == ["North – South"])
     }
 
     @Test("The stored border keeps the direction of its way, which the sides are given in")
@@ -234,7 +302,7 @@ struct BorderNamesTests {
         let file = try FeatureStoreFile(data: result.data)
         var pieces = 0
         for cell in try file.cells() {
-            for feature in try file.features(in: cell, band: .overview) where feature.classID == FeatureClass.countryBorder.rawValue {
+            for feature in try file.features(in: cell, band: .overview) where feature.classID == FeatureClass.countryBorder.rawValue && feature.objectID == 10 {
                 for part in feature.parts {
                     pieces += 1
                     #expect(zip(part.points, part.points.dropFirst()).allSatisfy { $0.0.longitude <= $0.1.longitude }, "west to east, as the way")

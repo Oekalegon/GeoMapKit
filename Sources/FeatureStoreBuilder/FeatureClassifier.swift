@@ -1,9 +1,12 @@
 import FeatureStore
+import OSMPBF
 
 /// Derives a feature class, subclass, geometry kind, minimum band and Watch flag from OSM tags.
 ///
 /// The rules are an ordered table; the first match wins, so one object has one
-/// class. The result is derived data: the builder also stores all raw tags, and
+/// primary class (``classify(_:shape:)``). A few classes can be added to it as overlays
+/// (``overlays(_:primary:)``): the border of a country, a state or a protected area, and
+/// a piste. The result is derived data: the builder also stores all raw tags, and
 /// objects that match no rule get class `FeatureClass.other`. The table has a
 /// version, ``version``, that goes into the file header; change it whenever a rule
 /// changes, since files built with older rules need a rebuild.
@@ -134,6 +137,63 @@ public struct FeatureClassifier: Sendable {
 
     private static let linearNatural: Set<String> = ["coastline", "cliff", "ridge", "arete", "tree_row", "valley", "no"]
     private static let linearManMade: Set<String> = ["pipeline", "cutline", "embankment", "dyke", "no"]
+
+    /// A group of tags that make an object something besides its primary class, and the classes they may give.
+    private struct OverlayGroup {
+        let keys: Set<String>
+        let classes: Set<FeatureClass>
+    }
+
+    /// What an object can be as well as its primary class: the border of a country or a state, the border of a protected area and a
+    /// piste. The primary class is the first of the rule table that matches, so a stream that the national border follows is a
+    /// stream, a forest that is a nature reserve is a forest and a track with a nordic piste is a track, and the border, the reserve
+    /// and the piste would be lost. Every other class is no overlay: a building that is a shop has nothing more to draw, and a
+    /// `landuse` is one class whatever else it is.
+    private static let overlayGroups: [OverlayGroup] = [
+        OverlayGroup(keys: ["boundary", "admin_level", "border_type"], classes: [.countryBorder, .boundary]),
+        OverlayGroup(keys: ["boundary", "leisure"], classes: [.parkBorder]),
+        OverlayGroup(keys: ["piste:type"], classes: [.piste]),
+    ]
+
+    /// The classes an object has as well as its primary class, as lines (see `overlayGroups`).
+    ///
+    /// Each group of tags is classified on its own, with the other tags left out, so the rule table, the levels of administrative
+    /// borders and the limits of the territorial waters work as they do for an object that has only those tags.
+    ///
+    /// - Parameters:
+    ///   - tags: The tags of the object.
+    ///   - primary: The class `classify` gives the object.
+    /// - Returns: The overlay classifications, never of the primary class, each a line.
+    public func overlays(_ tags: some ClassifierTags, primary: FeatureClass) -> [Classification] {
+        var found: [Classification] = []
+        for group in Self.overlayGroups {
+            let own = group.keys.compactMap { key in tags.value(forKey: key).map { OSMTag(key: key, value: $0) } }
+            guard !own.isEmpty else { continue }
+            let result = classify(ClassifierTagArray(own), shape: .openWay)
+            if group.classes.contains(result.featureClass), result.featureClass != primary,
+                !found.contains(where: { $0.featureClass == result.featureClass })
+            {
+                found.append(result)
+            }
+        }
+        return found
+    }
+
+    /// Every class that the rule table matches in the tags, in the order of the table, each class once.
+    ///
+    /// The first of them is the class `classify` takes; the others are what the object is as well.
+    ///
+    /// - Parameter tags: The tags of the object.
+    /// - Returns: The classes, empty if no rule matches.
+    public func matchingClasses(_ tags: some ClassifierTags) -> [FeatureClass] {
+        var found: [FeatureClass] = []
+        for rule in Self.rules {
+            if let value = tags.value(forKey: rule.key), let outcome = rule.match(value), !found.contains(outcome.featureClass) {
+                found.append(outcome.featureClass)
+            }
+        }
+        return found
+    }
 
     private func firstOutcome(in tags: some ClassifierTags) -> ClassifierOutcome? {
         for rule in Self.rules {
