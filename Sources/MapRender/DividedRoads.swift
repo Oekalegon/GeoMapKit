@@ -90,7 +90,9 @@ enum DividedRoads {
                 var ring = core.map(\.own)
                 for match in core.reversed() where ring.last != match.other { ring.append(match.other) }
                 guard ring.count >= 3 else { return }
-                strips.append(SceneMedian(featureClass: line.featureClass, structure: line.structure, ring: ring, divider: centre))
+                var strip = SceneMedian(featureClass: line.featureClass, structure: line.structure, ring: ring, divider: centre)
+                strip.variant = line.variant
+                strips.append(strip)
             }
             for (direction, point) in samples(along: line.points) {
                 let best = nearest(to: point, direction: direction, of: index, ownWidth: width, in: context)
@@ -150,7 +152,7 @@ enum DividedRoads {
         var best: (match: Match, distance: Double)?
         for segment in context.grid.segments(near: point) where segment.line > own {
             let other = context.lines[segment.line]
-            guard other.featureClass == context.lines[own].featureClass, other.structure == context.lines[own].structure,
+            guard other.featureClass == context.lines[own].featureClass, other.variant == context.lines[own].variant, other.structure == context.lines[own].structure,
                 let otherWidth = context.widths[segment.line]
             else { continue }
             // Two roads that are named, and not the same, are two roads. A carriageway without a name may be one half of a named road.

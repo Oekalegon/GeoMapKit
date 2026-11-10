@@ -19,11 +19,14 @@ public struct DrawStep: Sendable, Equatable {
     /// Which lines of the class the step draws: those on the ground, the bridges or the tunnels. Areas and points are
     /// only drawn in steps on the ground.
     public var structure: Structure
+    /// The index of the ``ClassStyle/variants`` entry this step draws, or `nil` for the features of the class that are in no variant.
+    public var variant: Int?
 
     /// Creates a step.
-    public init(featureClass: FeatureClass, part: Part, structure: Structure = .ground) {
+    public init(featureClass: FeatureClass, part: Part, structure: Structure = .ground, variant: Int? = nil) {
         self.featureClass = featureClass
         self.part = part
         self.structure = structure
+        self.variant = variant
     }
 }

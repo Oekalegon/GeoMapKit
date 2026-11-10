@@ -12,7 +12,7 @@ enum LabelCandidates {
         let zoom = scene.viewport.zoom
         var candidates: [LineLabelCandidate] = []
         for step in scene.steps where step.step.part == .body {
-            guard let label = style.style(for: step.step.featureClass)?.label else { continue }
+            guard let label = style.style(for: step.step)?.label else { continue }
             let size = label.size.value(atZoom: zoom)
             guard size > 0, label.visibleZoom.contains(zoom) else { continue }
             for line in step.lines {
@@ -42,7 +42,7 @@ enum LabelCandidates {
         let view = ScreenBounds(width: scene.viewport.width, height: scene.viewport.height, margin: -scene.viewport.labelInset)
         var candidates: [LabelCandidate] = []
         for step in scene.steps where step.step.part == .body {
-            guard let classStyle = style.style(for: step.step.featureClass), let label = classStyle.label else { continue }
+            guard let classStyle = style.style(for: step.step), let label = classStyle.label else { continue }
             let size = label.size.value(atZoom: zoom)
             guard size > 0, label.visibleZoom.contains(zoom) else { continue }
             // The larger places first (the lower subclass, then the greater population); a place within the thinning radius of one that

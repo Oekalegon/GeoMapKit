@@ -29,7 +29,7 @@ public struct CoreGraphicsRenderer: MapRenderer {
         context.fill(view)
 
         for sceneStep in scene.steps {
-            guard let classStyle = style.style(for: sceneStep.step.featureClass) else { continue }
+            guard let classStyle = style.style(for: sceneStep.step) else { continue }
             switch sceneStep.step.part {
             case .casing:
                 guard let stroke = classStyle.stroke(for: sceneStep.step.structure), let casing = stroke.casing else { continue }

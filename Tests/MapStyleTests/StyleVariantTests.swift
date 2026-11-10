@@ -66,7 +66,7 @@ struct StyleVariantTests {
         major.variants = [motorway, StyleVariant(name: "Gauge", tags: [TagCondition(key: "gauge", values: ["1000"]), TagCondition(key: "electrified")], visibleZoom: 8...24)]
         style.classes[.roadMajor] = major
         #expect(try MapStyle(json: try style.jsonData()) == style)
-        #expect(!String(decoding: try MapStyle.standard.jsonData(), as: UTF8.self).contains("variants"))
+        #expect(!String(decoding: try MapStyle.watch.jsonData(), as: UTF8.self).contains("variants"), "a style with no variants is the file it was")
     }
 
     @Test func aWrongSubclassNameOrLayerOrKeyIsRefusedWithAHelpfulSentence() {

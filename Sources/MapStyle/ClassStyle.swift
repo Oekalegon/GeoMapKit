@@ -37,8 +37,9 @@ public struct ClassStyle: Sendable, Equatable {
     public init(
         fill: FillStyle? = nil, stroke: StrokeStyle? = nil, point: PointStyle? = nil, label: LabelStyle? = nil,
         visibleZoom: ClosedRange<Double> = 0...24, layer: Int, casingLayer: Int? = nil, bridge: BridgeStyle? = nil,
-        tunnel: TunnelStyle? = nil
+        tunnel: TunnelStyle? = nil, variants: [StyleVariant] = []
     ) {
+        self.variants = variants
         self.bridge = bridge
         self.tunnel = tunnel
         self.fill = fill

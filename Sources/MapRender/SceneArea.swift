@@ -20,6 +20,8 @@ public struct SceneArea: Sendable, Equatable {
     public var name: String?
     /// Whether the area could not be assembled completely. It is drawn as an outline and not filled.
     public var isIncomplete: Bool
+    /// The index of the style variant of the class this feature is drawn with (see `ClassStyle.variants`), or `nil` for the class's own look.
+    public var variant: Int? = nil
 
     /// Creates an area piece.
     public init(

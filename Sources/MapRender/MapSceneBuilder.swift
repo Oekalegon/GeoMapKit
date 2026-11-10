@@ -46,9 +46,9 @@ public struct MapSceneBuilder: Sendable {
         let visible = ScreenBounds(width: viewport.width, height: viewport.height, margin: Self.cullingMargin)
 
         var linePieces: [LineKey: [LinePiece]] = [:]
-        var lineInfo: [LineKey: (lanes: Int?, name: String?, structure: Structure, flow: Int)] = [:]
-        var areas: [FeatureClass: [SceneArea]] = [:]
-        var points: [FeatureClass: [ScenePoint]] = [:]
+        var lineInfo: [LineKey: (lanes: Int?, name: String?, structure: Structure, flow: Int, variant: Int?)] = [:]
+        var areas: [StepKey: [SceneArea]] = [:]
+        var points: [StepKey: [ScenePoint]] = [:]
 
         let cells = viewport.cells(storageZoom: source.storageZoom, margin: Self.cullingMargin)
         var cellCount = 0
@@ -67,35 +67,39 @@ public struct MapSceneBuilder: Sendable {
                     }
                     if lineInfo[key] == nil {
                         // Tags are looked up only where the style uses them: `lanes` for classes with a ground width.
-                        let usesLanes = style.style(for: featureClass)?.stroke?.width.ground != nil
+                        let variant = variantIndex(of: feature, class: featureClass, in: file)
+                        let usesLanes = style.style(for: featureClass, variant: variant)?.stroke?.width.ground != nil
                         let road = usesLanes ? roadTags(of: feature, in: file) : (lanes: nil, flow: 0)
-                        lineInfo[key] = (road.lanes, name(of: feature, in: file), Structure(subclass: feature.subclass), road.flow)
+                        lineInfo[key] = (road.lanes, name(of: feature, in: file), Structure(subclass: feature.subclass), road.flow, variant)
                     }
                 case .area:
-                    if let area = makeArea(feature, in: file, featureClass: featureClass, viewport: viewport, visible: visible) {
-                        areas[featureClass, default: []].append(area)
+                    if var area = makeArea(feature, in: file, featureClass: featureClass, viewport: viewport, visible: visible) {
+                        area.variant = variantIndex(of: feature, class: featureClass, in: file)
+                        areas[StepKey(featureClass: featureClass, variant: area.variant), default: []].append(area)
                     }
                 case .point:
                     for part in feature.parts {
                         guard let first = part.points.first else { continue }
                         let position = viewport.screenPoint(for: first)
                         guard ScreenBounds(of: [position])?.intersects(visible) == true else { continue }
-                        points[featureClass, default: []].append(ScenePoint(
+                        var point = ScenePoint(
                             featureClass: featureClass, objectID: feature.objectID, position: position, name: name(of: feature, in: file),
-                            subclass: feature.subclass, population: featureClass == .place ? population(of: feature, in: file) : nil))
+                            subclass: feature.subclass, population: featureClass == .place ? population(of: feature, in: file) : nil)
+                        point.variant = variantIndex(of: feature, class: featureClass, in: file)
+                        points[StepKey(featureClass: featureClass, variant: point.variant), default: []].append(point)
                     }
                 }
             }
         }
 
-        var joined: [(key: LineKey, info: (lanes: Int?, name: String?, structure: Structure, flow: Int), polyline: [PackedPoint])] = []
+        var joined: [(key: LineKey, info: (lanes: Int?, name: String?, structure: Structure, flow: Int, variant: Int?), polyline: [PackedPoint])] = []
         // The ends of the lines that are drawn as bridges or tunnels: the lines on the ground that end there end flat.
         var structureEnds = Set<PackedPoint>()
         // The vertices in the middle of the roads: a road that ends at one meets another road side on (a T junction).
         var throughPoints = Set<PackedPoint>()
         for (key, pieces) in linePieces {
-            let info = lineInfo[key] ?? (nil, nil, .ground, 0)
-            let classStyle = style.style(for: key.featureClass)
+            let info = lineInfo[key] ?? (nil, nil, .ground, 0, nil)
+            let classStyle = style.style(for: key.featureClass, variant: info.variant)
             let drawn = classStyle?.drawnStructure(for: info.structure) ?? .ground
             let isRoad = classStyle?.stroke?.width.ground != nil
             for polyline in LineJoiner.join(pieces) {
@@ -114,7 +118,7 @@ public struct MapSceneBuilder: Sendable {
         for (key, info, polyline) in joined {
             let screen = polyline.map(viewport.screenPoint(for:))
             guard let bounds = ScreenBounds(of: screen), bounds.intersects(visible) else { continue }
-            let classStyle = style.style(for: key.featureClass)
+            let classStyle = style.style(for: key.featureClass, variant: info.variant)
             let onGround = (classStyle?.drawnStructure(for: info.structure) ?? .ground) == .ground
             let isRoad = classStyle?.stroke?.width.ground != nil
             // A road ends flat where a bridge or a tunnel starts, and where it meets the side of another road.
@@ -122,9 +126,11 @@ public struct MapSceneBuilder: Sendable {
                 guard onGround, let end else { return false }
                 return structureEnds.contains(end) || (isRoad && throughPoints.contains(end))
             }
-            built.append(SceneLine(
+            var sceneLine = SceneLine(
                 featureClass: key.featureClass, objectID: key.objectID, points: screen, lanes: info.lanes, name: info.name,
-                structure: info.structure, flatStart: endsFlat(polyline.first), flatEnd: endsFlat(polyline.last)))
+                structure: info.structure, flatStart: endsFlat(polyline.first), flatEnd: endsFlat(polyline.last))
+            sceneLine.variant = info.variant
+            built.append(sceneLine)
             ends.append((polyline.first, polyline.last))
             flows.append(info.flow)
             roadWidths.append(classStyle?.stroke?.width.ground == nil ? nil : classStyle?.stroke?.width.resolved(
@@ -132,32 +138,32 @@ public struct MapSceneBuilder: Sendable {
         }
         RoadTaper.apply(to: &built, nodes: ends, widths: roadWidths)
         // The strips between the carriageways of divided roads (one-way ways side by side; the `oneway` tag is in the detail band).
-        var medians: [FeatureClass: [SceneMedian]] = [:]
+        var medians: [StepKey: [SceneMedian]] = [:]
         for strip in DividedRoads.medians(lines: built, flows: flows, widths: roadWidths, metresPerPoint: viewport.metresPerPoint) {
-            medians[strip.featureClass, default: []].append(strip)
+            medians[StepKey(featureClass: strip.featureClass, variant: strip.variant), default: []].append(strip)
         }
-        var lines: [FeatureClass: [SceneLine]] = [:]
-        for line in built { lines[line.featureClass, default: []].append(line) }
+        var lines: [StepKey: [SceneLine]] = [:]
+        for line in built { lines[StepKey(featureClass: line.featureClass, variant: line.variant), default: []].append(line) }
         // Dictionary order is not stable; sort so the same input always gives the same scene.
-        for featureClass in lines.keys { lines[featureClass]?.sort { ($0.objectID, $0.points[0].x) < ($1.objectID, $1.points[0].x) } }
-        for featureClass in areas.keys { areas[featureClass]?.sort { $0.objectID < $1.objectID } }
-        for featureClass in points.keys { points[featureClass]?.sort { $0.objectID < $1.objectID } }
+        for key in lines.keys { lines[key]?.sort { ($0.objectID, $0.points[0].x) < ($1.objectID, $1.points[0].x) } }
+        for key in areas.keys { areas[key]?.sort { $0.objectID < $1.objectID } }
+        for key in points.keys { points[key]?.sort { $0.objectID < $1.objectID } }
 
         var steps: [SceneStep] = []
         for step in style.drawSteps(atZoom: viewport.zoom) {
-            let featureClass = step.featureClass
+            let key = StepKey(featureClass: step.featureClass, variant: step.variant)
             // A line is drawn in the steps of the structure its class has a style for: a class with no bridge style draws
             // its bridges on the ground.
-            let classStyle = style.style(for: featureClass)
-            let stepLines = (lines[featureClass] ?? []).filter { classStyle?.drawnStructure(for: $0.structure) == step.structure }
+            let classStyle = style.style(for: step)
+            let stepLines = (lines[key] ?? []).filter { classStyle?.drawnStructure(for: $0.structure) == step.structure }
             let sceneStep: SceneStep
-            let stepMedians = (medians[featureClass] ?? []).filter { classStyle?.drawnStructure(for: $0.structure) == step.structure }
+            let stepMedians = (medians[key] ?? []).filter { classStyle?.drawnStructure(for: $0.structure) == step.structure }
             switch step.part {
             case .casing:
                 sceneStep = SceneStep(step: step, lines: stepLines)
             case .body where step.structure == .ground:
                 sceneStep = SceneStep(
-                    step: step, lines: stepLines, areas: areas[featureClass] ?? [], points: points[featureClass] ?? [],
+                    step: step, lines: stepLines, areas: areas[key] ?? [], points: points[key] ?? [],
                     medians: stepMedians)
             case .body:
                 sceneStep = SceneStep(step: step, lines: stepLines, medians: stepMedians)
@@ -234,6 +240,18 @@ public struct MapSceneBuilder: Sendable {
         return nil
     }
 
+    /// The index of the variant of the class that the feature is in, or `nil`. Tags are read only for a class whose variants have tag
+    /// conditions; a band that does not hold a tag does not have it for the condition.
+    private func variantIndex(of feature: StoredFeature, class featureClass: FeatureClass, in file: FeatureStoreFile) -> Int? {
+        guard let classStyle = style.style(for: featureClass), !classStyle.variants.isEmpty else { return nil }
+        let needsTags = classStyle.variants.contains { !$0.tags.isEmpty }
+        return classStyle.variantIndex(subclass: feature.subclass, in: featureClass) { key in
+            guard needsTags else { return nil }
+            for tag in feature.tags where file.string(at: tag.key) == key { return file.string(at: tag.value) }
+            return nil
+        }
+    }
+
     private func roadTags(of feature: StoredFeature, in file: FeatureStoreFile) -> (lanes: Int?, flow: Int) {
         var lanes: Int?
         var oneway: String?
@@ -263,4 +281,10 @@ private struct LineKey: Hashable {
     var featureClass: FeatureClass
     var objectID: Int64
     var type: StoredObjectType
+}
+
+/// A class and one of its variants (`nil` for the features of the class that are in none).
+private struct StepKey: Hashable {
+    var featureClass: FeatureClass
+    var variant: Int?
 }

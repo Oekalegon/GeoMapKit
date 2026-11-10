@@ -29,6 +29,8 @@ public struct SceneLine: Sendable, Equatable {
     public var startWidth: Double?
     /// The width in points to blend to at the end; see ``startWidth``.
     public var endWidth: Double?
+    /// The index of the style variant of the class this feature is drawn with (see `ClassStyle.variants`), or `nil` for the class's own look.
+    public var variant: Int? = nil
 
     /// Creates a line.
     public init(
