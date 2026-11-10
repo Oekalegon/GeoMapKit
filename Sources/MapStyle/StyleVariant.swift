@@ -14,6 +14,8 @@ public struct StyleVariant: Sendable, Equatable {
     public var subclasses: [String]
     /// The tag conditions, all of which must be met.
     public var tags: [TagCondition]
+    /// Whether the features of this variant are not drawn at all (underground cables by default, say). They are still read; no step draws them.
+    public var hidden: Bool
     /// The area fill instead of the class's, if set.
     public var fill: FillStyle?
     /// The line or outline instead of the class's, if set.
@@ -35,13 +37,14 @@ public struct StyleVariant: Sendable, Equatable {
 
     /// Creates a variant.
     public init(
-        name: String, subclasses: [String] = [], tags: [TagCondition] = [], fill: FillStyle? = nil, stroke: StrokeStyle? = nil,
+        name: String, subclasses: [String] = [], tags: [TagCondition] = [], hidden: Bool = false, fill: FillStyle? = nil, stroke: StrokeStyle? = nil,
         point: PointStyle? = nil, label: LabelStyle? = nil, visibleZoom: ClosedRange<Double>? = nil, layer: Int? = nil,
         casingLayer: Int? = nil, bridge: BridgeStyle? = nil, tunnel: TunnelStyle? = nil
     ) {
         self.name = name
         self.subclasses = subclasses
         self.tags = tags
+        self.hidden = hidden
         self.fill = fill
         self.stroke = stroke
         self.point = point

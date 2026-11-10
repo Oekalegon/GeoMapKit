@@ -88,8 +88,18 @@ extension MapStyle {
                 stroke: .line(0x777777, ZoomValue((8, 0.6), (14, 1.4))), layer: 22,
                 bridge: BridgeStyle(casing: .init(color: .color(0x4F4F4F), extraPoints: ZoomValue((10, 0.4), (16, 1.2)))),
                 tunnel: TunnelStyle(opacity: 0.4, dash: [2, 3])),
+            // Power lines, and the towers, poles and portals along them (nodes, from zoom 15). Cables under the ground or the sea are not drawn
+            // (`location` is only in the detail band until a rebuild with rule table 21 kept tags, so below zoom 15 they still show).
             .powerLine: ClassStyle(
-                stroke: .line(0x9A9A9A, .constant(0.6)), visibleZoom: 13...24, layer: 23),
+                stroke: .line(0x9A9A9A, .constant(0.6)),
+                point: PointStyle(radius: ZoomValue((14, 1.2), (17, 2.4)), color: .color(0x6F6F6F), outlineWidth: 0),
+                visibleZoom: 13...24, layer: 23,
+                variants: [
+                    StyleVariant(name: "Underground and underwater", tags: [TagCondition(key: "location", values: ["underground", "underwater"])], hidden: true),
+                    StyleVariant(
+                        name: "Towers and portals", subclasses: ["tower", "portal"],
+                        point: PointStyle(radius: ZoomValue((14, 1.8), (17, 3.4)), color: .color(0x555555), outlineWidth: 0)),
+                ]),
             .aerialway: ClassStyle(
                 stroke: .line(0x555555, .constant(0.8), dash: [2, 3]), visibleZoom: 12...24, layer: 24),
             .piste: ClassStyle(

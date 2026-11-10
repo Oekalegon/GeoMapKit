@@ -20,7 +20,7 @@ extension TagCondition: Codable {
 
 extension StyleVariant: Codable {
     private enum Keys: String, CodingKey, CaseIterable {
-        case name, subclasses, tags, fill, stroke, point, label, visibleZoom, layer, casingLayer, bridge, tunnel
+        case name, subclasses, tags, hidden, fill, stroke, point, label, visibleZoom, layer, casingLayer, bridge, tunnel
     }
 
     public init(from decoder: Decoder) throws {
@@ -46,6 +46,7 @@ extension StyleVariant: Codable {
             name: try c.decodeIfPresent(String.self, forKey: .name) ?? "",
             subclasses: try c.decodeIfPresent([String].self, forKey: .subclasses) ?? [],
             tags: try c.decodeIfPresent([TagCondition].self, forKey: .tags) ?? [],
+            hidden: try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false,
             fill: try c.decodeIfPresent(FillStyle.self, forKey: .fill), stroke: try c.decodeIfPresent(StrokeStyle.self, forKey: .stroke),
             point: try c.decodeIfPresent(PointStyle.self, forKey: .point), label: try c.decodeIfPresent(LabelStyle.self, forKey: .label),
             visibleZoom: range, layer: layer, casingLayer: casingLayer,
@@ -57,6 +58,7 @@ extension StyleVariant: Codable {
         if !name.isEmpty { try c.encode(name, forKey: .name) }
         if !subclasses.isEmpty { try c.encode(subclasses, forKey: .subclasses) }
         if !tags.isEmpty { try c.encode(tags, forKey: .tags) }
+        if hidden { try c.encode(true, forKey: .hidden) }
         try c.encodeIfPresent(fill, forKey: .fill)
         try c.encodeIfPresent(stroke, forKey: .stroke)
         try c.encodeIfPresent(point, forKey: .point)

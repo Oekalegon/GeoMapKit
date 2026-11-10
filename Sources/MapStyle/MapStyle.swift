@@ -93,7 +93,7 @@ public struct MapStyle: Sendable, Equatable {
             // The features of the class that are in no variant, then each variant on its own look.
             let looks: [(variant: Int?, style: ClassStyle)] =
                 [(nil, classStyle)] + classStyle.variants.indices.map { ($0, classStyle.applying(classStyle.variants[$0])) }
-            for (variant, style) in looks where style.visibleZoom.contains(zoom) {
+            for (variant, style) in looks where style.visibleZoom.contains(zoom) && !(variant.map { classStyle.variants[$0].hidden } ?? false) {
                 let order = variant ?? -1
                 func add(_ layer: Int, _ phase: Int, _ part: DrawStep.Part, _ structure: Structure) {
                     steps.append((layer, phase, featureClass.rawValue, order, DrawStep(featureClass: featureClass, part: part, structure: structure, variant: variant)))
