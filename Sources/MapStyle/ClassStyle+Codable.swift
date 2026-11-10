@@ -1,5 +1,5 @@
 extension ClassStyle: Codable {
-    private enum Keys: String, CodingKey, CaseIterable { case fill, stroke, point, label, visibleZoom, layer, casingLayer, bridge, tunnel }
+    private enum Keys: String, CodingKey, CaseIterable { case fill, stroke, point, label, visibleZoom, layer, casingLayer, bridge, tunnel, variants }
 
     public init(from decoder: Decoder) throws {
         try decoder.requireKnownKeys(Keys.self)
@@ -27,6 +27,7 @@ extension ClassStyle: Codable {
             visibleZoom: range, layer: layer, casingLayer: casingLayer,
             bridge: try c.decodeIfPresent(BridgeStyle.self, forKey: .bridge),
             tunnel: try c.decodeIfPresent(TunnelStyle.self, forKey: .tunnel))
+        variants = try c.decodeIfPresent([StyleVariant].self, forKey: .variants) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -40,5 +41,7 @@ extension ClassStyle: Codable {
         try c.encodeIfPresent(casingLayer, forKey: .casingLayer)
         try c.encodeIfPresent(bridge, forKey: .bridge)
         try c.encodeIfPresent(tunnel, forKey: .tunnel)
+        // Only written when there are variants, so that a style without them is the same file as before (older readers refuse unknown keys).
+        if !variants.isEmpty { try c.encode(variants, forKey: .variants) }
     }
 }

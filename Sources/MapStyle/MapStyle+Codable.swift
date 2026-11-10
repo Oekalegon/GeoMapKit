@@ -22,7 +22,19 @@ extension MapStyle: Codable {
                         codingPath: raw.codingPath + [key],
                         debugDescription: "unknown feature class '\(key.stringValue)'; known: \(byName.keys.sorted().joined(separator: ", "))"))
             }
-            classes[featureClass] = try raw.decode(ClassStyle.self, forKey: key)
+            let classStyle = try raw.decode(ClassStyle.self, forKey: key)
+            // A typo in a subclass name would give a variant that never matches: refuse it, naming the names the class has.
+            for variant in classStyle.variants {
+                for name in variant.subclasses where SubclassNames.numbers(of: name, in: featureClass).isEmpty {
+                    let known = SubclassNames.names(of: featureClass)
+                    throw DecodingError.dataCorrupted(
+                        .init(
+                            codingPath: raw.codingPath + [key],
+                            debugDescription: "unknown subclass '\(name)' for class '\(key.stringValue)'; known: "
+                                + (known.isEmpty ? "none (select by tags)" : known.joined(separator: ", "))))
+                }
+            }
+            classes[featureClass] = classStyle
         }
         // Style files written before `countryBorder` existed draw national borders with the boundary style, as they did
         // when those borders were still classed as boundaries; without this they would lose them.
