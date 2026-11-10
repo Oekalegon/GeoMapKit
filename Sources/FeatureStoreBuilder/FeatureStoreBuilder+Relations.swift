@@ -4,13 +4,12 @@ import OSMPBF
 extension FeatureStoreBuilder {
     /// Stores every relation in the relation table and assembles multipolygons into features.
     ///
+    /// - Parameter borders: The index of the border relations, built here when the first untagged member way needs it.
     /// - Returns: The IDs of the ways that must not be stored separately.
     func storeRelations(
-        of extract: OSMExtract, shore: inout ShoreContext, into emitter: inout FeatureEmitter
+        of extract: OSMExtract, borders: inout BorderNames?, shore: inout ShoreContext, into emitter: inout FeatureEmitter
     ) throws -> Set<Int64> {
         var suppressed = Set<Int64>()
-        // Built when the first untagged member way needs it.
-        var borders: BorderNames?
         for position in extract.relations.indices {
             if position % 1024 == 0 { try Task.checkCancellation() }
             let item = extract.relations[position]

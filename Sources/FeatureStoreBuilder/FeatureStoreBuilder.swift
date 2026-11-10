@@ -76,8 +76,10 @@ public struct FeatureStoreBuilder: Sendable {
         let sea = try range.flatMap { try prepareSea(of: extract, columns: $0.columns, rows: $0.rows, into: &emitter) }
         shore.sea = sea.map { SeaLookup(rings: $0.whole.rings) }
 
-        let suppressed = try storeRelations(of: extract, shore: &shore, into: &emitter)
-        try storeWays(of: extract, suppressed: suppressed, shore: &shore, into: &emitter)
+        // The index of the border relations, built by whichever step needs it first and shared with the other.
+        var borders: BorderNames?
+        let suppressed = try storeRelations(of: extract, borders: &borders, shore: &shore, into: &emitter)
+        try storeWays(of: extract, suppressed: suppressed, borders: &borders, shore: &shore, into: &emitter)
         try storeNodes(of: extract, into: &emitter)
         if let range, let sea { try storeSea(sea, columns: range.columns, rows: range.rows, into: &emitter) }
         return BuildResult(data: try emitter.writer.data(), report: emitter.report)
