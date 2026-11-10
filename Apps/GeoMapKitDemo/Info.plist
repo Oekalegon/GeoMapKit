@@ -37,6 +37,18 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>The map shows where you are and can be centred on you.</string>
+	<key>NSUbiquitousContainers</key>
+	<dict>
+		<key>iCloud.org.oekalegon.GeoMapKitDemo</key>
+		<dict>
+			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
+			<true/>
+			<key>NSUbiquitousContainerName</key>
+			<string>GeoMapKit</string>
+			<key>NSUbiquitousContainerSupportedFolderLevels</key>
+			<string>Any</string>
+		</dict>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

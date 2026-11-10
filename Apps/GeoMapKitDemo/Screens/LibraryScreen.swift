@@ -10,6 +10,7 @@ import AppKit
 struct LibraryScreen: View {
     @Environment(WatchLink.self) private var watch
     @Environment(MapLibrary.self) private var library
+    @Environment(StyleSync.self) private var sync
     @Environment(\.dismiss) private var dismiss
 
     private enum ImportKind: Identifiable {
@@ -68,6 +69,17 @@ struct LibraryScreen: View {
                     ForEach(library.styles) { style in styleRow(style.name, choice: .user(style.id), item: style) }
                 } header: { Text("Styles") } footer: {
                     Text("A style is chosen for the map that is open. Touch and hold a style to change it (a built-in style is copied first).")
+                }
+
+                Section {
+                    Toggle("Keep styles in iCloud", isOn: Binding(get: { sync.isEnabled }, set: { sync.isEnabled = $0 }))
+                    Text(sync.status.sentence).font(.footnote).foregroundStyle(.secondary)
+                    if let migration = sync.migration, !migration.copied.isEmpty {
+                        Text("\(migration.copied.count) style\(migration.copied.count == 1 ? "" : "s") from this device were copied to iCloud; the copies here stay as a backup.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                } header: { Text("iCloud") } footer: {
+                    Text("The styles are shared with your other devices that use this app and the same Apple ID. Maps stay on the device.")
                 }
             }
             .navigationTitle("Library")

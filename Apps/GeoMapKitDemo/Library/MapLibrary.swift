@@ -28,7 +28,8 @@ final class MapLibrary {
     }
 
     let mapsDirectory: URL
-    let stylesDirectory: URL
+    /// The folder of the styles: the local one, or the one in iCloud once ``StyleSync`` has switched to it.
+    private(set) var stylesDirectory: URL
     private let defaults: UserDefaults
 
     private enum Keys {
@@ -93,6 +94,14 @@ final class MapLibrary {
         let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
         let urls = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles])) ?? []
         return urls.compactMap { url in (try? url.resourceValues(forKeys: keys)).map { (url, $0) } }
+    }
+
+    /// Keeps the styles in another folder from now on (the one in iCloud), and reads it.
+    func useStylesDirectory(_ folder: URL) {
+        guard folder != stylesDirectory else { return }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        stylesDirectory = folder
+        reload()
     }
 
     func url(of map: MapItem) -> URL { mapsDirectory.appendingPathComponent(map.id) }
