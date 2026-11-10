@@ -24,6 +24,19 @@ struct FeatureEmitter {
         return columns.contains(tile.x) && rows.contains(tile.y)
     }
 
+    /// The tags kept in every band, by class (the values only, and only where the feature has them).
+    ///
+    /// A style selects by tag with `StyleVariant`; the lower bands hold no tags but these, so only these can be selected by at zoom 14 and
+    /// below. They are the surface and the difficulty of the paths, tracks and roads a runner chooses between, and the kind of railway.
+    static let keptTags: [FeatureClass: [String]] = [
+        .path: ["surface", "smoothness", "sac_scale", "mtb:scale", "trail_visibility", "tracktype"],
+        .track: ["tracktype", "surface", "smoothness", "sac_scale", "mtb:scale", "trail_visibility"],
+        .roadMajor: ["surface"],
+        .roadMinor: ["surface", "smoothness"],
+        .roadService: ["surface"],
+        .railway: ["gauge", "electrified", "usage", "service"],
+    ]
+
     mutating func emit(_ spec: FeatureSpec) throws {
         let classification = spec.classification
         if profile == .watch && !classification.showsOnWatch {
@@ -51,6 +64,12 @@ struct FeatureEmitter {
             let population = ClassifierTagArray(spec.tags).value(forKey: "population"), PlacePopulation.population(population) != nil
         {
             valueTags.append(StoredTag(key: writer.intern("population"), value: writer.intern(population)))
+        }
+        // The tags a style may select by (question 55: the surface and difficulty of a path, the gauge of a track) are kept in every band,
+        // as values only, so a style that colours paths by surface does it at zoom 12 as well as at zoom 15.
+        let tagArray = ClassifierTagArray(spec.tags)
+        for key in Self.keptTags[classification.featureClass] ?? [] {
+            if let value = tagArray.value(forKey: key) { valueTags.append(StoredTag(key: writer.intern(key), value: writer.intern(value))) }
         }
         for band in ZoomBand.allCases where band >= classification.minimumBand && band <= spec.lastBand {
             if profile == .watch && band == .overview { continue }
