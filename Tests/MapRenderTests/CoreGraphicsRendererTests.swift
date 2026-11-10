@@ -47,6 +47,31 @@ struct CoreGraphicsRendererTests {
         return zip(pixel.prefix(3), expected).allSatisfy { abs(Int($0) - Int($1)) <= 2 }
     }
 
+    private func rectangle(_ west: Double, _ north: Double, _ east: Double, _ south: Double) -> [ScreenPoint] {
+        [ScreenPoint(x: west, y: north), ScreenPoint(x: east, y: north), ScreenPoint(x: east, y: south), ScreenPoint(x: west, y: south), ScreenPoint(x: west, y: north)]
+    }
+
+    private func scene(of areas: [SceneArea]) -> MapScene {
+        MapScene(viewport: viewport, band: .detail, steps: [SceneStep(step: DrawStep(featureClass: .waterArea, part: .body), areas: areas)], cellCount: 1)
+    }
+
+    @Test("Two pieces of one object that meet at a cell border, between two pixels, leave no light seam")
+    func noSeamBetweenPiecesOfOneObject() throws {
+        // The border is at x 20.3: the pixel column 20 is 30% in one piece and 70% in the other. Filled one by one that makes 79% water
+        // and a thin light line; filled as one path it is all water.
+        let left = SceneArea(featureClass: .waterArea, objectID: 7, rings: [rectangle(10, 10, 20.3, 30)], outline: [])
+        let right = SceneArea(featureClass: .waterArea, objectID: 7, rings: [rectangle(20.3, 10, 40, 30)], outline: [])
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene(of: [left, right]), style: .standard, scale: 1))
+        let water = try #require(MapStyle.standard.style(for: .waterArea)?.fill?.color.value(atZoom: 16))
+        for y in [15, 20, 25] { #expect(close(pixel(image, x: 20, y: y), to: water), "the seam at row \(y)") }
+        // The pieces of one object are filled together, so a piece that is empty under the even-odd rule draws nothing, not its border.
+        let ring = rectangle(50, 10, 70, 30)
+        let hollow = SceneArea(featureClass: .waterArea, objectID: 8, rings: [ring, ring], outline: [])
+        let hollowImage = try pixels(of: CoreGraphicsRenderer().pngData(for: scene(of: [hollow]), style: .standard, scale: 1))
+        #expect(close(pixel(hollowImage, x: 50, y: 20), to: MapStyle.standard.background), "no line along the border of an empty piece")
+        #expect(close(pixel(hollowImage, x: 60, y: 20), to: MapStyle.standard.background))
+    }
+
     @Test func pngHasTheRightSizeAndSignature() throws {
         let png = try CoreGraphicsRenderer().pngData(for: scene(), style: .standard, scale: 2)
         #expect(Array(png.prefix(8)) == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
