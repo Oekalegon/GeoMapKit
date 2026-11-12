@@ -82,7 +82,7 @@ extension ToolRunner {
                     }
                 }
                 let key = LevelTile(x: tile.x, y: tile.y)
-                if let block = kept[key], block.derivedFrom == origins, fileSize(at: directory.appendingPathComponent(block.file)) == block.bytes {
+                if !request.rebuild, let block = kept[key], block.derivedFrom == origins, fileSize(at: directory.appendingPathComponent(block.file)) == block.bytes {
                     outcomes[position] = LevelOutcome(topZoom: topZoom, x: tile.x, y: tile.y, status: .upToDate)
                     progress(outcomes[position]!)
                 } else {

@@ -77,6 +77,25 @@ struct LevelBuilderTests {
         #expect(none == nil, "a line of 0.01 degree alone is left out")
     }
 
+    @Test func waysThatMeetAreOneRoadJudgedAsAWholeAndOnlyAStubOfHalfAPixelIsLeftOut() throws {
+        // At zoom 8 a pixel is 0.0055 degree. Two ways of 0.01 degree that meet are 0.02 degree, over three pixels: kept, as one line.
+        var w = writer()
+        let a = CellRect(tile: cell(0, 0))
+        let lat = (a.north + a.south) / 2
+        let x0 = a.west + 50_000
+        try road(10, [pt(x0, lat), pt(x0 + 100_000, lat)], before: false, after: false, in: cell(0, 0), to: &w)
+        try road(11, [pt(x0 + 100_000, lat), pt(x0 + 200_000, lat)], before: false, after: false, in: cell(0, 0), to: &w)
+        // A stub of 0.0005 degree (a tenth of a pixel) at the end of the road.
+        try road(12, [pt(x0 + 200_000, lat), pt(x0 + 205_000, lat)], before: false, after: false, in: cell(0, 0), to: &w)
+        let (result, file) = try level(w)
+        let report = try #require(result?.report)
+        #expect(report.droppedAsSmall == 1, "the stub is left out, the two ways are not")
+        #expect(report.linesJoined == 1, "the two ways are joined into one")
+        let levelCell = try #require(TileID.containing(Coordinate(latitude: Double(lat) / 1e7, longitude: Double(x0) / 1e7), zoom: 10))
+        let features = try #require(file).features(in: levelCell, band: .overview)
+        #expect(features.count == 1 && features[0].parts[0].points.count == 2)
+    }
+
     @Test func classesOfTheLevelOnlyAreRead() throws {
         var w = writer()
         let a = CellRect(tile: cell(0, 0))

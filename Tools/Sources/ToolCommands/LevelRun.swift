@@ -15,17 +15,20 @@ public struct LevelRequest: Sendable {
     public var margin: Int
     /// The style whose visible classes at the top zoom decide what a level holds.
     public var style: MapStyle
+    /// Whether to build every level block again, also where its base blocks are the same (after a change of how a level is built).
+    public var rebuild: Bool
 
     /// Creates a request.
     public init(
         directory: URL, topZooms: [Int] = [9, 8, 7, 6, 5, 4, 3], jobs: Int = 2, margin: Int = LevelBuilder.defaultMargin,
-        style: MapStyle = .standard
+        style: MapStyle = .standard, rebuild: Bool = false
     ) {
         self.directory = directory
         self.topZooms = topZooms
         self.jobs = jobs
         self.margin = margin
         self.style = style
+        self.rebuild = rebuild
     }
 }
 
