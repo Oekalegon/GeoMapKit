@@ -91,4 +91,6 @@ public struct LevelRunReport: Sendable {
     public let areaEndsJoined: Int
     /// How many of those were joined along a line of a cell border.
     public let areaEndsJoinedAlongBorder: Int
+    /// The area chains that were closed on themselves because the gap between their ends is small against the chain.
+    public let areaChainsClosedBySmallGap: Int
 }

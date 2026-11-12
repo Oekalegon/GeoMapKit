@@ -99,6 +99,38 @@ struct LevelDissolveTests {
         #expect(result.rings.count == 3, "the two small rings and the long one")
     }
 
+    /// The long U-shaped chain of the test above, with `columnsOfGap` cells between its two ends and `columns` cells of length.
+    private func uChain(columns: Int32, columnsOfGap: Int32) -> [LevelRing] {
+        let rect = CellRect(tile: west)
+        let b = rect.east, south = rect.south
+        let cellWidth = rect.east - rect.west, cellHeight = rect.north - rect.south
+        let top = south + cellHeight
+        let ring = LevelRing(
+            cell: west,
+            points: [
+                pt(b, south), pt(b, top), pt(b - columns * cellWidth, top), pt(b - columns * cellWidth, south),
+                pt(b - columnsOfGap * cellWidth, south), pt(b, south),
+            ], artificialEdges: [0..<1, 4..<5])
+        func small(_ cell: TileID) -> LevelRing {
+            let r = CellRect(tile: cell)
+            let lon = r.west / 2 + r.east / 2, lat = r.north / 2 + r.south / 2
+            return LevelRing(cell: cell, points: [pt(lon, lat), pt(lon + 100, lat), pt(lon + 100, lat + 100), pt(lon, lat + 100), pt(lon, lat)], artificialEdges: [])
+        }
+        return [ring, small(east), small(TileID(zoom: 13, x: west.x, y: west.y + 1)!)]
+    }
+
+    @Test func theGapOfAChainIsClosedOnlyWithinFourCellsAndFiveShareOfItsExtent() {
+        // Six cells apart on a chain of 200 cells: more than four cells, so not a seam.
+        let tooWide = LevelDissolve.rings(of: uChain(columns: 200, columnsOfGap: 6), region: everything, snapRadians: snap)
+        #expect(tooWide.open.count == 1 && tooWide.closedBySmallGap == 0)
+        // Three cells apart on a chain of 40 cells: within four cells, but more than 5 % of the extent (3 of 40 is 7.5 %).
+        let tooLong = LevelDissolve.rings(of: uChain(columns: 40, columnsOfGap: 3), region: everything, snapRadians: snap)
+        #expect(tooLong.open.count == 1 && tooLong.closedBySmallGap == 0)
+        // Three cells apart on a chain of 100 cells: closed.
+        let seam = LevelDissolve.rings(of: uChain(columns: 100, columnsOfGap: 3), region: everything, snapRadians: snap)
+        #expect(seam.open.isEmpty && seam.closedBySmallGap == 1)
+    }
+
     @Test func aNeighbourThatHoldsNothingOfTheFeatureDoesNotHideTheEdgeFacingIt() {
         // Only the west half: the east cell holds none of this feature (an open sea far from a coast has no sea piece), so the edge
         // down the border stays and the ring closes by itself.

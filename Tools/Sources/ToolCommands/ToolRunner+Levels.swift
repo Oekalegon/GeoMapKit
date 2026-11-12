@@ -47,7 +47,7 @@ extension ToolRunner {
         var states: [Int: StoreManifest.Level] = Dictionary(uniqueKeysWithValues: manifest.levels.map { ($0.topZoom, $0) })
         var tasks: [LevelTask] = []
         var outcomes: [Int: LevelOutcome] = [:]
-        var openChains = 0, endsJoined = 0, endsAlongBorder = 0
+        var openChains = 0, endsJoined = 0, endsAlongBorder = 0, closedBySmallGap = 0
         var position = 0
         for topZoom in request.topZooms.sorted(by: >) {
             let blockZoom = min(topZoom + 2, manifest.blockZoom)
@@ -134,6 +134,7 @@ extension ToolRunner {
                     openChains += built.openAreaChains
                     endsJoined += built.joinedBySnap + built.joinedAlongBorder
                     endsAlongBorder += built.joinedAlongBorder
+                    closedBySmallGap += built.closedBySmallGap
                     outcomes[task.position] = LevelOutcome(
                         topZoom: topZoom, x: task.tile.x, y: task.tile.y, status: .built(bytes: built.bytes, features: built.features, seconds: built.seconds),
                         openAreaChains: built.openAreaChains)
@@ -152,7 +153,8 @@ extension ToolRunner {
         return LevelRunReport(
             outcomes: outcomes.keys.sorted().compactMap { outcomes[$0] }, summaries: summaries, manifestURL: manifestURL,
             totalTime: clock.now - started, peakFootprint: ProcessMemory.peakFootprintBytes(), openAreaChains: openChains,
-            areaEndsJoined: endsJoined, areaEndsJoinedAlongBorder: endsAlongBorder)
+            areaEndsJoined: endsJoined, areaEndsJoinedAlongBorder: endsAlongBorder,
+            areaChainsClosedBySmallGap: closedBySmallGap)
     }
 
     // MARK: Level blocks
@@ -175,6 +177,7 @@ extension ToolRunner {
             var openAreaChains: Int
             var joinedBySnap: Int
             var joinedAlongBorder: Int
+            var closedBySmallGap: Int
         }
         var task: LevelTask
         var file: String
@@ -205,7 +208,7 @@ extension ToolRunner {
             block: BuiltLevelBlock.Block(
                 bytes: Int64(result.data.count), features: result.report.featuresWritten, seconds: seconds,
                 openAreaChains: result.report.openAreaChains, joinedBySnap: result.report.joinedBySnap,
-                joinedAlongBorder: result.report.joinedAlongBorder))
+                joinedAlongBorder: result.report.joinedAlongBorder, closedBySmallGap: result.report.closedBySmallGap))
     }
 
     private static func fileSize(at url: URL) -> Int64? {

@@ -34,7 +34,8 @@ struct LevelDissolveResult {
 /// right edge). A chain that is still open and whose own end is only a few cells from its own start, small against the chain (the
 /// coast of a bay that runs along the border of two blocks, which two blocks simplify apart: the Wash is the case that was seen), is
 /// closed on itself: the straight line that closes it changes the shape less than the gap, and left open the whole sea of the block
-/// is only outlined. Each join is counted. What still does not close is returned as open chains; a feature with more than
+/// is only outlined. This applies to every area class, and the straight line is the one an incomplete chain gets anyway. Each join is
+/// counted. What still does not close is returned as open chains; a feature with more than
 /// ``maximumOpenChains`` of them is not joined at all.
 enum LevelDissolve {
     /// How many cells of zoom 13 an open end may be from the start of another chain on the same line of a border to be joined to it

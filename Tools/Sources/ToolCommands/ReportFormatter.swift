@@ -159,7 +159,7 @@ public enum ReportFormatter {
         for summary in report.summaries {
             lines.append("  level \(summary.topZoom) (cells of zoom \(summary.storageZoom)): \(summary.blocks) block\(summary.blocks == 1 ? "" : "s"), \(Formatting.bytes(summary.bytes))")
         }
-        lines.append("Area chains that did not close (drawn as outlines): \(report.openAreaChains); area ends joined to another chain: \(report.areaEndsJoined), \(report.areaEndsJoinedAlongBorder) of them along a border")
+        lines.append("Area chains that did not close (drawn as outlines): \(report.openAreaChains); area ends joined to another chain: \(report.areaEndsJoined), \(report.areaEndsJoinedAlongBorder) of them along a border; chains closed on a small gap: \(report.areaChainsClosedBySmallGap)")
         lines.append("Manifest: \(report.manifestURL.path)")
         lines.append("Total: \(Formatting.seconds(report.totalTime)), peak memory footprint \(report.peakFootprint.map(Formatting.bytes) ?? "n/a")")
         return lines.joined(separator: "\n")
