@@ -235,7 +235,7 @@ do {
         guard parsed.positional.count == 1 else { throw ToolError("fill-sea needs the folder of a set of blocks") }
         let report = try await ToolRunner.fillOpenSea(
             folder: URL(fileURLWithPath: parsed.positional[0]), cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) })
-        print("Open sea: \(report.created.count) blocks written, \(report.extended.count) blocks extended, \(report.left.count) left as they are.")
+        print("Open sea: \(report.created.count) blocks written, \(report.extended.count) blocks extended, \(report.left.count) left as they are (no neighbour shows sea).")
         for position in report.created { print("  sea block \(position.x)/\(position.y)") }
     case "compare":
         let parsed = try CommandLineArguments(rest, knownOptions: ["limit", "inner"])

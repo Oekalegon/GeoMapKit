@@ -81,7 +81,7 @@ public enum OpenSea {
     ///   - manifest: The manifest; it is not changed here.
     ///   - folder: The folder of the manifest.
     ///   - covered: The blocks that a source file covers at least in part, with the source files each was built from. A block that is
-    ///     not here (no data at all) is never changed.
+    ///     not here (no data at all) is not changed by the first rule; only `outside` blocks are filled without a source file.
     ///   - outside: The blocks that no source outline touches at all, inside the area of the set (the caller leaves out what lies
     ///     beyond it). They are filled as described above. Empty for none.
     ///   - now: The time recorded for the blocks that are written.

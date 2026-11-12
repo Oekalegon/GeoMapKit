@@ -9,7 +9,7 @@ import ToolSupport
 extension ToolRunner {
     /// Fills the blocks of a set that no source outline touches with sea (``OpenSea``, question 61).
     ///
-    /// The blocks of the grid inside the bounding box of the set whose tile is touched by no region below a continent in the Geofabrik index hold no land,
+    /// The blocks of the grid inside the bounding box of the set whose tile is touched by no region without regions below it in the Geofabrik index (a leaf) hold no land,
     /// so they are open sea; they are given their sea where they touch a block that shows sea. This is the hole in the middle of a sea
     /// between the blocks of the coasts around it, which `build-region` does not see because it only plans the blocks of its own area.
     /// The files are written, and the manifest after each; the levels of the blocks that change are out of date (`build-levels` finds
@@ -38,9 +38,11 @@ extension ToolRunner {
         let index = try await (catalog ?? GeofabrikCatalog(
             directory: directory, downloader: downloader ?? URLSessionDownloader(userAgent: userAgent))).index()
 
-        // The regions of a continent have no parent and their outlines take in the whole sea around them (Europe covers the North Sea
-        // entirely): only the regions below them say where there is data.
-        let leaves = try RegionIndex(regions: index.regions.filter { $0.parentID != nil })
+        // A region that has regions below it (a continent, or a country cut into states) is the sum of those, and a continent outline takes
+        // in the whole sea around it (Europe covers the North Sea entirely): only the regions with none below them say where there is
+        // data. A top-level region with no children (Russia in the Geofabrik index has some, a small island state has none) counts.
+        let parents = Set(index.regions.compactMap(\.parentID))
+        let leaves = try RegionIndex(regions: index.regions.filter { !parents.contains($0.id) })
         var columns = first.x...first.x, rows = first.y...first.y
         for block in manifest.blocks {
             columns = min(columns.lowerBound, block.x)...max(columns.upperBound, block.x)
