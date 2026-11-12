@@ -398,7 +398,7 @@ extension ToolRunner {
                 bands: file.bands, attribution: file.attribution))
     }
 
-    private static func write(_ manifest: StoreManifest, to url: URL) throws {
+    static func write(_ manifest: StoreManifest, to url: URL) throws {
         do {
             try manifest.jsonData().write(to: url, options: .atomic)
         } catch {
