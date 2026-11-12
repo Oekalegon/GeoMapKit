@@ -15,11 +15,17 @@ struct LevelChain {
 /// in the cell, and at a low zoom that is most of the file. Two chains are one where they meet at a point at which no other
 /// chain of the group ends: the group is the class, the subclass (with the bridge and tunnel bits) and the name, so a road that
 /// changes its name, its grade or goes over a bridge is not joined across. A junction (three or more chains) joins nothing.
-/// The joined line is written under the key of its first chain. Where a chain has to be turned round to continue the next, it is.
+/// The joined line is written under the smallest key of the chains that cross the border of the block (the ways that both of two
+/// neighbouring blocks see whole), or, where none does, of all its chains. Two blocks read different slices of a road, so the
+/// smallest key of all its ways would differ between them; the ways at the border are the same in both, and a name is placed once.
+/// The direction of a joined line is arbitrary: the ways are turned to continue each other. Where a chain has to be turned round to continue the next, it is.
 enum LevelChainMerger {
-    /// - Parameter chains: The chains of a level block, in a fixed order.
+    /// - Parameters:
+    ///   - chains: The chains of a level block, in a fixed order.
+    ///   - block: The block the level is built for; the chains that cross its border give a joined line its key. `nil` takes the
+    ///     smallest key of all the chains.
     /// - Returns: The chains with the continuing ones joined, in the order of their first chain.
-    static func merge(_ chains: [LevelChain]) -> [LevelChain] {
+    static func merge(_ chains: [LevelChain], block: CellRect? = nil) -> [LevelChain] {
         struct Group: Hashable {
             var classID: UInt8
             var subclass: UInt8
@@ -55,37 +61,54 @@ enum LevelChainMerger {
         }
         var visited = [Bool](repeating: false, count: chains.count)
         var merged: [LevelChain] = []
-        /// Follows the chains from one end of `index` outwards, collecting the points in order.
-        func walk(from index: Int, enteringAtStart: Bool) -> [PackedPoint] {
+        /// Follows the chains from one end of `index` outwards, collecting the points in order and the chain with the smallest key.
+        func crosses(_ chain: LevelChain) -> Bool {
+            guard let block else { return false }
+            var inside = false, outside = false
+            for point in chain.line {
+                if point.longitude >= block.west && point.longitude <= block.east && point.latitude >= block.south && point.latitude <= block.north {
+                    inside = true
+                } else {
+                    outside = true
+                }
+                if inside && outside { return true }
+            }
+            return false
+        }
+        func walk(from index: Int, enteringAtStart: Bool) -> (points: [PackedPoint], smallest: Int) {
             var points: [PackedPoint] = []
+            var smallest = index
+            var smallestCrossing: Int?
             var current = index
             var atStart = enteringAtStart
             while !visited[current] {
                 visited[current] = true
+                if chains[current].key < chains[smallest].key { smallest = current }
+                if crosses(chains[current]), smallestCrossing.map({ chains[current].key < chains[$0].key }) ?? true { smallestCrossing = current }
                 let line = atStart ? chains[current].line : chains[current].line.reversed()
                 points.append(contentsOf: points.isEmpty ? line[...] : line.dropFirst())
                 guard let next = neighbour(of: current, atStart: !atStart) else { break }
                 current = next.chain
                 atStart = next.atStart
             }
-            return points
+            return (points, smallestCrossing ?? smallest)
+        }
+        func joined(from index: Int, enteringAtStart: Bool) -> LevelChain {
+            let path = walk(from: index, enteringAtStart: enteringAtStart)
+            var chain = chains[path.smallest]
+            chain.line = path.points
+            return chain
         }
         // The chains that have a free end first, so a path is followed from its beginning; what is left are closed loops.
         for index in chains.indices where !visited[index] && chains[index].line.count >= 2 {
             if neighbour(of: index, atStart: true) == nil {
-                var chain = chains[index]
-                chain.line = walk(from: index, enteringAtStart: true)
-                merged.append(chain)
+                merged.append(joined(from: index, enteringAtStart: true))
             } else if neighbour(of: index, atStart: false) == nil {
-                var chain = chains[index]
-                chain.line = walk(from: index, enteringAtStart: false)
-                merged.append(chain)
+                merged.append(joined(from: index, enteringAtStart: false))
             }
         }
         for index in chains.indices where !visited[index] {
-            var chain = chains[index]
-            if chain.line.count >= 2 { chain.line = walk(from: index, enteringAtStart: true) }
-            merged.append(chain)
+            merged.append(chains[index].line.count >= 2 ? joined(from: index, enteringAtStart: true) : chains[index])
         }
         return merged
     }

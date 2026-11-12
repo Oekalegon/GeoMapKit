@@ -76,7 +76,7 @@ extension LevelOutput {
             judged.append(LevelChain(key: item.key, attributes: item.attributes, line: item.line))
         }
         let chainsBefore = judged.count
-        let joined = LevelChainMerger.merge(judged)
+        let joined = LevelChainMerger.merge(judged, block: CellRect(tile: tile))
         report.linesJoined += chainsBefore - joined.count
         for chain in joined {
             let (key, attributes, line) = (chain.key, chain.attributes, chain.line)

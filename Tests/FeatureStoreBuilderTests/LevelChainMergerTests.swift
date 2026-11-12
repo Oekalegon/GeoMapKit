@@ -27,6 +27,27 @@ struct LevelChainMergerTests {
         #expect(merged[0].line == [a, b, c, d])
     }
 
+    @Test func theJoinedLineHasTheSmallestKeyWhateverTheOrderOfTheWays() {
+        let a = pt(0, 0), b = pt(10, 0), c = pt(20, 0), d = pt(30, 0)
+        let ways = [chain(7, [a, b]), chain(3, [b, c]), chain(9, [c, d])]
+        #expect(LevelChainMerger.merge(ways).map(\.key.id) == [3])
+        #expect(LevelChainMerger.merge(ways.reversed()).map(\.key.id) == [3])
+        // Two blocks that read a different part of the road: one meets the ways 9 and 7 only.
+        #expect(LevelChainMerger.merge([ways[2], ways[0]]).map(\.key.id).sorted() == [7, 9])
+    }
+
+    @Test func theJoinedLineIsNamedByTheWayThatCrossesTheBorderOfTheBlock() {
+        let block = CellRect(tile: TileID(zoom: 13, x: 4_000, y: 2_400)!)
+        let lat = block.south + (block.north - block.south) / 2
+        let inside = block.west + 1_000, outside = block.east + 1_000
+        // Way 8 lies in the block, way 5 crosses its east border, way 2 lies outside: the road is named by the one that crosses, not
+        // by the smallest of all, which a neighbouring block (that reads another slice) may not see.
+        let ways = [chain(8, [pt(inside, lat), pt(inside + 100, lat)]), chain(5, [pt(inside + 100, lat), pt(outside, lat)]),
+            chain(2, [pt(outside, lat), pt(outside + 100, lat)])]
+        #expect(LevelChainMerger.merge(ways, block: block).map(\.key.id) == [5])
+        #expect(LevelChainMerger.merge(ways).map(\.key.id) == [2], "without a block it is the smallest")
+    }
+
     @Test func aJunctionJoinsNothing() {
         let hub = pt(10, 0)
         let merged = LevelChainMerger.merge([chain(1, [pt(0, 0), hub]), chain(2, [hub, pt(20, 0)]), chain(3, [hub, pt(10, 10)])])
