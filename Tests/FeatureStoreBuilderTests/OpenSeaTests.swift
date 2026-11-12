@@ -180,6 +180,55 @@ struct OpenSeaTests {
         #expect(try file.features(in: cells(of: sparse)[0], band: .detail).count == 1)
     }
 
+    @Test func blocksNoOutlineTouchesAreSeaWhereTheyTouchSeaAndTheLandAtTheirBorderDoesNotStopThem() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), landBlock = Position(x: 12, y: 11)
+        let hole = [Position(x: 11, y: 10), Position(x: 11, y: 11), Position(x: 11, y: 12)]
+        let before = try manifest([write(.sea, at: seaBlock, in: folder), write(.land, at: landBlock, in: folder)])
+        // The group also borders a block of land: for a block that no outline touches that says only that the land stops there.
+        let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: [:], outside: Set(hole))
+        #expect(Set(report.created) == Set(hole) && report.left.isEmpty)
+        try after.validate()
+        let file = try FeatureStoreFile(contentsOf: folder.appendingPathComponent("blocks/8-11-12.gmk"))
+        try file.verify()
+        #expect(try file.cells().count == 1024)
+        #expect(try file.features(in: cells(of: hole[2])[7], band: .overview).first?.classID == FeatureClass.sea.rawValue)
+    }
+
+    @Test func blocksNoOutlineTouchesAreLeftWhenNothingNextToThemShowsSea() throws {
+        let folder = try folder()
+        let landBlock = Position(x: 10, y: 10)
+        let next = Position(x: 11, y: 10), alone = Position(x: 30, y: 30)
+        let before = try manifest([write(.land, at: landBlock, in: folder)])
+        let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: [:], outside: [next, alone])
+        #expect(!report.changed && after == before)
+        #expect(Set(report.left) == [next, alone])
+    }
+
+    @Test func blocksNoOutlineTouchesFollowTheBlocksTheFirstRuleMadeSea() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), covered1 = Position(x: 11, y: 10), outside1 = Position(x: 12, y: 10)
+        let before = try manifest([write(.sea, at: seaBlock, in: folder)])
+        let (_, report) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, covered1]), outside: [outside1])
+        #expect(Set(report.created) == [covered1, outside1])
+    }
+
+    @Test func aBlockOutsideThatAlreadyHasSeaOrACoastlineIsNotTouched() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), land = Position(x: 11, y: 10)
+        let before = try manifest([write(.sea, at: seaBlock, in: folder), write(.land, at: land, in: folder)])
+        let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: [:], outside: [land])
+        #expect(!report.changed && after == before)
+    }
+
+    @Test func aSparseBlockNoOutlineTouchesGetsTheSea() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), sparse = Position(x: 11, y: 10)
+        let before = try manifest([write(.sea, at: seaBlock, in: folder), write(.sparse, at: sparse, in: folder)])
+        let (_, report) = try OpenSea.fill(manifest: before, folder: folder, covered: [:], outside: [sparse])
+        #expect(report.extended == [sparse])
+    }
+
     @Test func aSecondRunChangesNothing() throws {
         let folder = try folder()
         let seaBlock = Position(x: 10, y: 10), open = Position(x: 11, y: 10), sparse = Position(x: 9, y: 10)

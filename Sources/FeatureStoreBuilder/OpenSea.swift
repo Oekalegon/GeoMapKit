@@ -18,6 +18,13 @@ import GeoCore
 /// - A group that touches only land, only blocks that are not covered by a source file, or nothing, is left as it is: the data
 ///   there is land without a coastline, or unknown, and unknown must stay empty.
 ///
+/// **Blocks that no source outline touches** (`outside`, 2026-11-12, question 61). Geofabrik extracts cover every piece of land, so a
+/// block that none of their outlines touches holds no land: it is sea. These blocks are not candidates of the rule above (they are
+/// not in `covered`), and the land verdicts of their neighbours mean nothing for them (a neighbour with a cell of land at the border
+/// says only that the land stops there: across the border there is no outline, so no land). A connected group of such blocks is sea
+/// when it touches a block that shows sea (a sea square at the shared border) or a block that the first rule made sea; a group that
+/// touches nothing that shows sea is left (it may be a gap in the index).
+///
 /// A sea block is written as the cell square of class `sea` in every cell and every band of the manifest (the reader picks the band
 /// from the manifest, not from the file, so a file with only the overview band would show nothing at a high zoom). A sparse block
 /// that already has a file (borders, sea limits) is written again with the sea added.
@@ -74,7 +81,9 @@ public enum OpenSea {
     ///   - manifest: The manifest; it is not changed here.
     ///   - folder: The folder of the manifest.
     ///   - covered: The blocks that a source file covers at least in part, with the source files each was built from. A block that is
-    ///     not here (no data at all) is never changed.
+    ///     not here (no data at all) is not changed by the first rule; only `outside` blocks are filled without a source file.
+    ///   - outside: The blocks that no source outline touches at all, inside the area of the set (the caller leaves out what lies
+    ///     beyond it). They are filled as described above. Empty for none.
     ///   - now: The time recorded for the blocks that are written.
     ///   - persist: Called with the manifest after each block is written, so that the manifest on disk always matches the files (a
     ///     run that stops half way leaves a set that opens). The default does nothing.
@@ -82,7 +91,7 @@ public enum OpenSea {
     /// - Throws: `FeatureStoreError` for a block that cannot be read (a block that cannot be read is never replaced), the errors of
     ///   `persist` and the file errors.
     public static func fill(
-        manifest: StoreManifest, folder: URL, covered: [Position: [StoreManifest.Source]], now: Date = Date(),
+        manifest: StoreManifest, folder: URL, covered: [Position: [StoreManifest.Source]], outside: Set<Position> = [], now: Date = Date(),
         persist: (StoreManifest) throws -> Void = { _ in }
     ) throws -> (manifest: StoreManifest, report: Report) {
         var report = Report()
@@ -128,6 +137,34 @@ public enum OpenSea {
                 report.left.append(contentsOf: group)
                 if verdicts.contains(.sea) || verdicts.contains(.conflict) { report.conflicting.append(contentsOf: group) }
             }
+        }
+        // Blocks that no outline touches: sea, where the group touches a block that shows sea.
+        var outsideCandidates = Set<Position>()
+        for position in outside where !known.contains(position) && !candidates.contains(position) {
+            if let block = blocks[position], try hasSeaOrCoastline(try open(block)) { continue }
+            outsideCandidates.insert(position)
+        }
+        let firstRule = Set(sea)
+        var seenOutside = Set<Position>()
+        for start in outsideCandidates.sorted() where !seenOutside.contains(start) {
+            var group: [Position] = []
+            var queue = [start]
+            seenOutside.insert(start)
+            var touchesSea = false
+            while let position = queue.popLast() {
+                group.append(position)
+                for (dx, dy, side) in [(-1, 0, Side.east), (1, 0, .west), (0, -1, .south), (0, 1, .north)] {
+                    let next = Position(x: position.x + dx, y: position.y + dy)
+                    if outsideCandidates.contains(next) {
+                        if seenOutside.insert(next).inserted { queue.append(next) }
+                    } else if firstRule.contains(next) {
+                        touchesSea = true
+                    } else if known.contains(next), !touchesSea, let block = blocks[next] {
+                        if try border(of: try open(block), side: side, position: next, blockZoom: manifest.blockZoom) == .sea { touchesSea = true }
+                    }
+                }
+            }
+            if touchesSea { sea.append(contentsOf: group) } else { report.left.append(contentsOf: group) }
         }
         report.left.sort()
         report.conflicting.sort()

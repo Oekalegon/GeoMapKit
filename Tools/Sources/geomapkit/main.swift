@@ -83,6 +83,12 @@ GeoMapKit tools
       Each job uses memory in proportion to the area it reads (not measured for
       the coarse levels: start with --jobs 2).
 
+  geomapkit fill-sea <folder> [--cache DIR]
+      Give the blocks of a set that no source outline touches their sea. Geofabrik extracts cover every piece of
+      land, so such a block is open sea; it is filled where it touches a block that shows sea. This closes the holes in
+      the middle of a sea (the North Sea, the Baltic) that build-region does not see, because it only plans the blocks
+      of its own area. The levels of the blocks that change are out of date: run build-levels afterwards.
+
   geomapkit compare <first> <second> [--limit N] [--inner N]
       Compare two stores (a .gmk file or a manifest.json) in the cells both
       hold, and list the features that differ: a check that blocks give the
@@ -224,6 +230,13 @@ do {
             fflush(stdout)
         })
         print(ReportFormatter.text(for: levelReport))
+    case "fill-sea":
+        let parsed = try CommandLineArguments(rest, knownOptions: ["cache"])
+        guard parsed.positional.count == 1 else { throw ToolError("fill-sea needs the folder of a set of blocks") }
+        let report = try await ToolRunner.fillOpenSea(
+            folder: URL(fileURLWithPath: parsed.positional[0]), cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) })
+        print("Open sea: \(report.created.count) blocks written, \(report.extended.count) blocks extended, \(report.left.count) left as they are (no neighbour shows sea).")
+        for position in report.created { print("  sea block \(position.x)/\(position.y)") }
     case "compare":
         let parsed = try CommandLineArguments(rest, knownOptions: ["limit", "inner"])
         guard parsed.positional.count == 2 else { throw ToolError("compare needs two stores") }
