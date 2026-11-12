@@ -68,6 +68,8 @@ public enum LevelBuilder {
                 firstFile = firstFile ?? file
                 report.cellsRead += 1
                 for feature in try file.features(in: cell, band: .overview, classes: readClasses) {
+                    // A river name is read for the sake of the water lines; it is not a class of the level.
+                    if spec.classes.contains(feature.classID), !spec.holds(classID: feature.classID, subclass: feature.subclass) { continue }
                     report.featuresRead += 1
                     collected.add(feature, in: cell, of: file)
                 }

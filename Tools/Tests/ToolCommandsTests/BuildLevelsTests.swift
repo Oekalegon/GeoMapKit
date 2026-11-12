@@ -107,6 +107,9 @@ struct BuildLevelsTests {
         _ = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]))
         let again = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]))
         #expect(built(again) == 0 && again.outcomes.allSatisfy { $0.status == .upToDate })
+        // --rebuild builds every level block again, also where nothing changed.
+        let forced = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6], rebuild: true))
+        #expect(built(forced) == again.outcomes.count && !forced.outcomes.contains { $0.status == .upToDate })
 
         // The base block is another build (another size, another content): its levels are out of date.
         let other = try blocks(extraRoad: true)

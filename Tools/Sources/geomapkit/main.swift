@@ -67,7 +67,7 @@ GeoMapKit tools
       ends. --no-progress turns it off. Afterwards the sea of blocks of open sea (no coastline
       in them) is added from what their neighbours show; --no-open-sea skips that.
 
-  geomapkit build-levels <folder> [--levels 9,8,7,6,5,4,3] [--jobs N] [--margin 32]
+  geomapkit build-levels <folder> [--levels 9,8,7,6,5,4,3] [--jobs N] [--margin 32] [--rebuild]
       Add coarse levels to a set of blocks, for views of hundreds of kilometres
       (levels 9 to 3 by default)
       (the blocks hold the cells of zoom 13, which are too many to draw then).
@@ -78,7 +78,8 @@ GeoMapKit tools
       again (version 2) after every file. A level file is made from the blocks
       with a margin of --margin cells around it (so that a road across the
       border of a block is judged whole), and is left alone when those blocks
-      and the classes are the same, so a run that was stopped can be run again.
+      and the classes are the same, so a run that was stopped can be run again;
+      --rebuild builds every level block again (after the way levels are built changed).
       Each job uses memory in proportion to the area it reads (not measured for
       the coarse levels: start with --jobs 2).
 
@@ -204,7 +205,7 @@ do {
         clearBar()
         print(ReportFormatter.text(for: report, blockZoom: request.blockZoom))
     case "build-levels":
-        let parsed = try CommandLineArguments(rest, knownOptions: ["levels", "jobs", "margin"])
+        let parsed = try CommandLineArguments(rest, knownOptions: ["levels", "jobs", "margin"], knownFlags: ["rebuild"])
         guard parsed.positional.count == 1 else { throw ToolError("build-levels needs the folder of a set of blocks") }
         var topZooms = [9, 8, 7, 6, 5, 4, 3]
         if let text = parsed.value(for: "levels") {
@@ -217,7 +218,7 @@ do {
         }
         let levelRequest = LevelRequest(
             directory: URL(fileURLWithPath: parsed.positional[0]), topZooms: topZooms, jobs: try whole("jobs", 2, in: 1...64),
-            margin: try whole("margin", 32, in: 0...256))
+            margin: try whole("margin", 32, in: 0...256), rebuild: parsed.hasFlag("rebuild"))
         let levelReport = try await ToolRunner.buildLevels(levelRequest, progress: { outcome in
             print(ReportFormatter.line(for: outcome))
             fflush(stdout)

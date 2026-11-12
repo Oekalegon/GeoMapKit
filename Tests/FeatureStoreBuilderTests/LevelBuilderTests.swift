@@ -77,6 +77,25 @@ struct LevelBuilderTests {
         #expect(none == nil, "a line of 0.01 degree alone is left out")
     }
 
+    @Test func waysThatMeetAreOneRoadJudgedAsAWholeAndOnlyAStubOfHalfAPixelIsLeftOut() throws {
+        // At zoom 8 a pixel is 0.0055 degree. Two ways of 0.01 degree that meet are 0.02 degree, over three pixels: kept, as one line.
+        var w = writer()
+        let a = CellRect(tile: cell(0, 0))
+        let lat = (a.north + a.south) / 2
+        let x0 = a.west + 50_000
+        try road(10, [pt(x0, lat), pt(x0 + 100_000, lat)], before: false, after: false, in: cell(0, 0), to: &w)
+        try road(11, [pt(x0 + 100_000, lat), pt(x0 + 200_000, lat)], before: false, after: false, in: cell(0, 0), to: &w)
+        // A stub of 0.0005 degree (a tenth of a pixel) at the end of the road.
+        try road(12, [pt(x0 + 200_000, lat), pt(x0 + 205_000, lat)], before: false, after: false, in: cell(0, 0), to: &w)
+        let (result, file) = try level(w)
+        let report = try #require(result?.report)
+        #expect(report.droppedAsSmall == 1, "the stub is left out, the two ways are not")
+        #expect(report.linesJoined == 1, "the two ways are joined into one")
+        let levelCell = try #require(TileID.containing(Coordinate(latitude: Double(lat) / 1e7, longitude: Double(x0) / 1e7), zoom: 10))
+        let features = try #require(file).features(in: levelCell, band: .overview)
+        #expect(features.count == 1 && features[0].parts[0].points.count == 2)
+    }
+
     @Test func classesOfTheLevelOnlyAreRead() throws {
         var w = writer()
         let a = CellRect(tile: cell(0, 0))
@@ -366,6 +385,49 @@ struct LevelBuilderTests {
         let right = try crossing(TileID(zoom: 8, x: 5, y: 74)!, last: false)
         #expect(left == right, "the line crosses the border of the blocks at the same point in both")
         #expect(left.longitude == w.east)
+    }
+
+    @Test func aRoadOfSeveralWaysAcrossTheBorderOfTwoLevelBlocksMeetsOnItAndIsNamedOnce() throws {
+        // Three ways of one road (ids 31, 32, 33): the middle one lies across the border of the blocks (4, 74) and (5, 74). Each block
+        // reads the ways it needs with a small margin (the west one never sees way 31, the east one never way 33) and joins them; both
+        // must cross the border at the same point and name the road by the same way, the one that crosses.
+        let west = TileID(zoom: 13, x: 32 * 4 + 31, y: 32 * 74 + 5)!
+        let w = CellRect(tile: west)
+        let lat = (w.north + w.south) / 2
+        let width = w.east - w.west
+        let nodes = [
+            pt(w.east - 14 * width, lat), pt(w.east - 7 * width, lat + 3_000), pt(w.east - width / 3, lat - 9_000),
+            pt(w.east + width / 3, lat + 9_000), pt(w.east + 7 * width, lat - 3_000), pt(w.east + 14 * width, lat),
+        ]
+        var source = writer()
+        for (id, way) in [(Int64(33), nodes[0...1]), (32, nodes[1...4]), (31, nodes[4...5])] {
+            for (cell, piece) in CellSplitter.split(line: Array(way), zoom: 13) {
+                try source.add(
+                    StoredFeature(
+                        classID: FeatureClass.roadMajor.rawValue, kind: .line, objectType: .way, objectID: id, flags: piece.flags,
+                        offsetAlongLine: piece.offsetCentimetres, parts: [GeometryPart(points: piece.points)]),
+                    band: .overview, cell: cell)
+            }
+        }
+        let file = try FeatureStoreFile(data: try source.data())
+        let spec = try LevelSpec(topZoom: 8, classes: [FeatureClass.roadMajor.rawValue])
+        // The joined line may run either way (the ways of a road are turned to continue each other), so the point on the border is
+        // looked for, not the last point.
+        func onBorder(_ tile: TileID) throws -> (point: PackedPoint, id: Int64) {
+            let result = try #require(try LevelBuilder.build(from: file, spec: spec, tile: tile, margin: 4))
+            let built = try FeatureStoreFile(data: result.data)
+            for cell in try built.cells() {
+                for feature in try built.features(in: cell, band: .overview) {
+                    if let point = feature.parts[0].points.first(where: { $0.longitude == w.east }) { return (point, feature.objectID) }
+                }
+            }
+            Issue.record("the road does not reach the border of the block")
+            return (pt(0, 0), 0)
+        }
+        let left = try onBorder(TileID(zoom: 8, x: 4, y: 74)!)
+        let right = try onBorder(TileID(zoom: 8, x: 5, y: 74)!)
+        #expect(left.point == right.point, "the road crosses the border at the same point")
+        #expect(left.id == 32 && right.id == 32, "both blocks name the joined road by the way that crosses the border")
     }
 
     @Test func anAreaCutByTheBorderOfTwoLevelBlocksMeetsOnIt() throws {
