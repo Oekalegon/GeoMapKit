@@ -69,7 +69,34 @@ struct LevelDissolveTests {
         let southCell = TileID(zoom: 13, x: west.x, y: west.y + 1)!
         let result = LevelDissolve.rings(of: [corner, small(east), small(southCell)], region: everything, snapRadians: snap)
         #expect(result.open.count == 1 && result.joinedBySnap == 0 && result.joinedAlongBorder == 0)
+        #expect(result.closedBySmallGap == 0, "the gap is as big as the chain: not a seam, so the chain stays open")
         #expect(result.rings.count == 2, "the two small rings are closed")
+    }
+
+    @Test func aLongChainWhoseEndsAreACellApartOnDifferentLinesIsClosedOnItself() {
+        // The coast of a bay along the border of two blocks: a ring that runs 100 cells out and back, and whose two ends, one on the
+        // east border and one on the south border, are about a cell apart (two blocks simplified the coast apart). The gap is small
+        // against the chain, so it closes on itself and is filled; without that the whole sea of the block is only outlined.
+        let rect = CellRect(tile: west)
+        let b = rect.east, south = rect.south
+        let cellWidth = rect.east - rect.west, cellHeight = rect.north - rect.south
+        let top = south + cellHeight
+        let ring = LevelRing(
+            cell: west,
+            points: [
+                pt(b, south), pt(b, top), pt(b - 100 * cellWidth, top), pt(b - 100 * cellWidth, south), pt(b - cellWidth, south),
+                pt(b, south),
+            ], artificialEdges: [0..<1, 4..<5])
+        func small(_ cell: TileID) -> LevelRing {
+            let r = CellRect(tile: cell)
+            let lon = r.west / 2 + r.east / 2, lat = r.north / 2 + r.south / 2
+            return LevelRing(cell: cell, points: [pt(lon, lat), pt(lon + 100, lat), pt(lon + 100, lat + 100), pt(lon, lat + 100), pt(lon, lat)], artificialEdges: [])
+        }
+        let southCell = TileID(zoom: 13, x: west.x, y: west.y + 1)!
+        let result = LevelDissolve.rings(of: [ring, small(east), small(southCell)], region: everything, snapRadians: snap)
+        #expect(result.open.isEmpty && result.closedBySmallGap == 1)
+        #expect(result.joinedBySnap == 0 && result.joinedAlongBorder == 0)
+        #expect(result.rings.count == 3, "the two small rings and the long one")
     }
 
     @Test func aNeighbourThatHoldsNothingOfTheFeatureDoesNotHideTheEdgeFacingIt() {
