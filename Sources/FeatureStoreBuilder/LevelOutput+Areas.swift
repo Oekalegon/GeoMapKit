@@ -33,6 +33,7 @@ extension LevelOutput {
             let dissolved = LevelDissolve.rings(of: rings, region: region, snapRadians: 2 * spec.tolerance)
             report.joinedBySnap += dissolved.joinedBySnap
             report.joinedAlongBorder += dissolved.joinedAlongBorder
+            report.closedBySmallGap += dissolved.closedBySmallGap
             report.openAreaChains += dissolved.open.count
 
             // A water area that is a ditch or a canal (thin) or a pond (small) is left out at this zoom, with its outline: a polder is

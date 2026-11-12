@@ -12,6 +12,8 @@ struct LevelDissolveResult {
     var joinedBySnap = 0
     /// How many ends were joined to a start on the same line of a border (within a few cells or at any distance).
     var joinedAlongBorder = 0
+    /// How many chains were closed on themselves because their two ends are a small gap apart compared with the chain.
+    var closedBySmallGap = 0
 }
 
 /// Joins the rings of an area feature that the cell clip cut apart.
@@ -29,7 +31,11 @@ struct LevelDissolveResult {
 /// join is therefore joined, nearest first, to a chain that starts within a pixel of its end at the top zoom of the level; then to
 /// one on the same line of a cell border within ``maximumBorderGapCells`` cells; then to one on the same line of a cell border at any
 /// distance (the ring is cut at the block afterwards, so the join only has to close it, and along the edge of the data it is the
-/// right edge). Each join is counted. What still does not close is returned as open chains; a feature with more than
+/// right edge). A chain that is still open and whose own end is only a few cells from its own start, small against the chain (the
+/// coast of a bay that runs along the border of two blocks, which two blocks simplify apart: the Wash is the case that was seen), is
+/// closed on itself: the straight line that closes it changes the shape less than the gap, and left open the whole sea of the block
+/// is only outlined. This applies to every area class, and the straight line is the one an incomplete chain gets anyway. Each join is
+/// counted. What still does not close is returned as open chains; a feature with more than
 /// ``maximumOpenChains`` of them is not joined at all.
 enum LevelDissolve {
     /// How many cells of zoom 13 an open end may be from the start of another chain on the same line of a border to be joined to it
@@ -38,6 +44,11 @@ enum LevelDissolve {
     /// The most open chains of one feature that are joined; a feature with more is left as it is (the number of pairs grows with the
     /// square).
     static let maximumOpenChains = 1_000
+    /// How many cells of zoom 13 the two ends of one chain may be apart to close it on itself, when that gap is also at most
+    /// ``smallGapShare`` of the extent of the chain.
+    static let maximumSmallGapCells = 4
+    /// The share of the extent of a chain (its longer side, as a distance) that the gap between its ends may be at most.
+    static let smallGapShare = 0.05
 
     /// - Parameters:
     ///   - rings: The rings of the pieces of one feature, with their cell.
@@ -104,6 +115,16 @@ enum LevelDissolve {
                 sameBorderLine(end, start) && distance <= Double(maximumBorderGapCells) * cellUnits(atLatitude: end.latitude)
             }
             join(&pending, into: &result, counter: \.joinedAlongBorder) { end, start, _ in sameBorderLine(end, start) }
+            var stillOpen: [[PackedPoint]] = []
+            for chain in pending {
+                if let first = chain.first, isSmallGap(chain) {
+                    result.rings.append(chain + [first])
+                    result.closedBySmallGap += 1
+                } else {
+                    stillOpen.append(chain)
+                }
+            }
+            pending = stillOpen
         }
         result.open = pending.filter { $0.count >= 3 }
         return result
@@ -162,6 +183,21 @@ enum LevelDissolve {
     }
 
     // MARK: Geometry
+
+    /// Whether the two ends of a chain are a few cells apart, and that is small against the chain itself.
+    private static func isSmallGap(_ chain: [PackedPoint]) -> Bool {
+        guard chain.count >= 3, let first = chain.first, let last = chain.last else { return false }
+        let gap = distance(first, last)
+        guard gap <= Double(maximumSmallGapCells) * cellUnits(atLatitude: first.latitude) else { return false }
+        var west = Int32.max, east = Int32.min, south = Int32.max, north = Int32.min
+        for point in chain {
+            west = min(west, point.longitude); east = max(east, point.longitude)
+            south = min(south, point.latitude); north = max(north, point.latitude)
+        }
+        let cosine = cos(Double(first.latitude) * 1e-7 * .pi / 180)
+        let extent = max(Double(Int64(east) - Int64(west)) * cosine, Double(Int64(north) - Int64(south)))
+        return gap <= smallGapShare * extent
+    }
 
     /// The distance of two points in units of 1e-7 degree of latitude (a degree of longitude is shorter by the cosine of the latitude).
     private static func distance(_ a: PackedPoint, _ b: PackedPoint) -> Double {

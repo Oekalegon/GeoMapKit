@@ -22,13 +22,15 @@ public struct LevelReport: Sendable, Equatable, CustomStringConvertible {
     public var joinedBySnap = 0
     /// Ends of area chains that were joined to a start on the same line of a cell border.
     public var joinedAlongBorder = 0
+    /// Area chains closed on themselves, because the gap between their two ends is small against the chain.
+    public var closedBySmallGap = 0
 
     /// Creates an empty report.
     public init() {}
 
     public var description: String {
         "\(cellsRead) source cells, \(featuresRead) features read; \(featuresWritten) features, \(verticesWritten) vertices in \(cellsWritten) cells written; "
-            + "\(linesJoined) lines joined, \(droppedAsSmall) dropped as small, \(joinedBySnap + joinedAlongBorder) area ends joined (\(joinedAlongBorder) along a border), "
+            + "\(linesJoined) lines joined, \(droppedAsSmall) dropped as small, \(joinedBySnap + joinedAlongBorder) area ends joined (\(joinedAlongBorder) along a border), \(closedBySmallGap) chains closed on a small gap, "
             + "\(openAreaChains) open area chains"
     }
 }
