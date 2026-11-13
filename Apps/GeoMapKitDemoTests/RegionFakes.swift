@@ -3,10 +3,13 @@ import GeoCore
 import Regions
 
 /// A region with a plain outline, for tests.
-func fakeRegion(_ id: String, _ name: String, parent: String?) -> SourceRegion {
+///
+/// `west` is where the outline starts (it is 4 degrees wide): regions that should not be neighbours are far apart, so that the plan
+/// of one does not need the file of another.
+func fakeRegion(_ id: String, _ name: String, parent: String?, west: Double = 3) -> SourceRegion {
     let ring = [
-        Coordinate(latitude: 50, longitude: 3), Coordinate(latitude: 50, longitude: 7),
-        Coordinate(latitude: 54, longitude: 7), Coordinate(latitude: 54, longitude: 3),
+        Coordinate(latitude: 50, longitude: west), Coordinate(latitude: 50, longitude: west + 4),
+        Coordinate(latitude: 54, longitude: west + 4), Coordinate(latitude: 54, longitude: west),
     ]
     return SourceRegion(
         id: id, name: name, parentID: parent, pbfURL: URL(string: "https://download.example.org/\(id).osm.pbf")!,
@@ -19,12 +22,12 @@ struct FakeCatalog: RegionCatalog {
     func index() async throws -> RegionIndex {
         if fails { throw URLError(.notConnectedToInternet) }
         return try RegionIndex(regions: [
-            fakeRegion("europe", "Europe", parent: nil),
+            fakeRegion("europe", "Europe", parent: nil, west: 50),
             fakeRegion("europe/netherlands", "Netherlands", parent: "europe"),
             fakeRegion("europe/netherlands/zuid-holland", "Zuid-Holland", parent: "europe/netherlands"),
             fakeRegion("europe/netherlands/noord-brabant", "Noord-Brabant", parent: "europe/netherlands"),
-            fakeRegion("europe/belgium", "België", parent: "europe"),
-            fakeRegion("africa", "Africa", parent: nil),
+            fakeRegion("europe/belgium", "België", parent: "europe", west: 20),
+            fakeRegion("africa", "Africa", parent: nil, west: 80),
         ])
     }
 }

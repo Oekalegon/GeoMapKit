@@ -80,6 +80,23 @@ struct RegionPickerModelTests {
         #expect(model.plan == .none)
     }
 
+    @Test("A country at a border brings its neighbours into the plan, so nobody has to tick them")
+    func neighboursArePlanned() async throws {
+        let border = BorderCatalog()
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-picker-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let model = RegionPickerModel(catalog: border, downloader: Network(), cache: SourceCache(directory: folder, availableCapacity: { _ in 100_000_000_000 }))
+        await model.load()
+        model.setSelected("europe/home", true)
+        await model.makePlan()
+        guard case .ready(let plan) = model.plan else { Issue.record("no plan: \(model.plan)"); return }
+        #expect(plan.items.map(\.region.id).sorted() == ["europe/home", "europe/italy/sud", "europe/next"])
+        let sud = try #require(plan.items.first { $0.region.id == "europe/italy/sud" }?.region)
+        let home = try #require(plan.items.first { $0.region.id == "europe/home" }?.region)
+        #expect(model.isNeighbour(sud) && !model.isNeighbour(home))
+        #expect(model.displayName(of: sud) == "Sud (Italy)")
+    }
+
     @Test("Without a selection there is nothing to check")
     func emptySelection() async {
         let (model, _, folder) = make()
@@ -278,5 +295,19 @@ struct RegionPickerModelTests {
         guard case .failed = model.download else { Issue.record("it did not fail"); return }
         await model.askSizes()
         #expect(model.download == .idle)
+    }
+}
+
+/// Home with two neighbours across its borders (one of them a part of a country, named just "Sud") and a country far away.
+private struct BorderCatalog: RegionCatalog {
+    func index() async throws -> RegionIndex {
+        try RegionIndex(regions: [
+            fakeRegion("europe", "Europe", parent: nil, west: 100),
+            fakeRegion("europe/home", "Home", parent: "europe", west: 3),
+            fakeRegion("europe/next", "Next", parent: "europe", west: 7),
+            fakeRegion("europe/italy", "Italy", parent: "europe", west: -20),
+            fakeRegion("europe/italy/sud", "Sud", parent: "europe/italy", west: -1),
+            fakeRegion("europe/far", "Far", parent: "europe", west: 60),
+        ])
     }
 }

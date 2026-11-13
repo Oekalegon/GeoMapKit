@@ -65,7 +65,9 @@ extension MapBuilder {
             case .stale:
                 records[region.id] = record
                 warnings.append("\(region.name) was last checked more than 30 days ago; check whether it has changed.")
-            case .missing, .damaged: missing.append("\(region.name) (\(region.id))")
+            case .missing, .damaged:
+                let parent = region.parentID.flatMap { index.region(withID: $0)?.name }.map { " in \($0)" } ?? ""
+                missing.append("\(region.name)\(parent) (\(region.id))")
             }
         }
         guard missing.isEmpty else {
@@ -256,6 +258,27 @@ extension MapBuilder {
             let share = index.regions(covering: tileBox(tile), samplesPerSide: 16).coveredShare
             return BlockTask(position: position, tile: tile, cutBox: box, regions: index.regions(covering: box).regions, coveredShare: share)
         }
+    }
+
+    /// The source regions whose files a build of an area reads: the regions of its blocks, neighbours across a border included
+    /// (a block is cut with a margin, so a block at the border needs the file on the other side).
+    ///
+    /// This is the same answer the build uses, so downloading these files means ``buildRegion(_:catalog:downloader:userAgent:progress:onProgress:)``
+    /// finds them in the cache.
+    ///
+    /// - Parameters:
+    ///   - area: The area.
+    ///   - blockZoom: The zoom of the block grid.
+    ///   - margin: The margin of the cut, in degrees.
+    ///   - index: The region index.
+    /// - Returns: The regions, sorted by id; empty when no region covers the area.
+    /// - Throws: ``MapBuilderError`` for an area that is invalid, too large or names an unknown region.
+    public static func requiredRegions(area: BlockRequest.Area, blockZoom: Int = 8, margin: Double = 0.1, in index: RegionIndex) throws -> [SourceRegion] {
+        var found: [String: SourceRegion] = [:]
+        for task in try plannedBlocks(area: area, blockZoom: blockZoom, margin: margin, in: index) {
+            for region in task.regions { found[region.id] = region }
+        }
+        return found.values.sorted { $0.id < $1.id }
     }
 
     private struct BuiltBlock: Sendable {

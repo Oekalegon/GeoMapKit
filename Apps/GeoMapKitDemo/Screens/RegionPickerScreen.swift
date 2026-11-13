@@ -116,7 +116,7 @@ struct RegionPickerScreen: View {
         case .ready(let plan):
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(plan.items, id: \.region.id) { item in
-                    Text("\(item.region.name): \(describe(item))").font(.footnote)
+                    Text("\(model.displayName(of: item.region))\(model.isNeighbour(item.region) ? " (neighbour, needed at the border)" : ""): \(describe(item))").font(.footnote)
                 }
                 if !plan.needsDownload { Text("Everything is held already; the map is built from the files you have.").font(.footnote) }
                 if plan.hasUnknownSizes { Text("The server gave no size for some files.").font(.footnote).foregroundStyle(.secondary) }
