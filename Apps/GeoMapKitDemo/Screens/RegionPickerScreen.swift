@@ -7,8 +7,8 @@ import SwiftUI
 ///
 /// The list is the Geofabrik tree. Choosing a region chooses the whole region. "Get maps" asks the server what the files would cost
 /// and shows the plan with the free space; nothing is downloaded until "Start" is pressed. Start downloads the files, builds the
-/// blocks and the levels and puts the map in the library, with progress for each stage and a cancel in every one. A stopped run
-/// continues where it stopped. Nothing here limits the size.
+/// blocks and the levels and puts the map in the library. The screen closes on Start and the run goes on in the background, with its
+/// progress in the status bar (``BuildStatusBar``). A stopped run continues where it stopped. Nothing here limits the size.
 struct RegionPickerScreen: View {
     let build: MapBuildModel
     @Environment(\.dismiss) private var dismiss
@@ -26,11 +26,9 @@ struct RegionPickerScreen: View {
             footer.padding(12)
         }
         .frame(minWidth: 520, minHeight: 600)
-        // Esc and a click outside do not close the screen while a download or a build runs.
-        .interactiveDismissDisabled(build.isRunning)
         .task { await model.load() }
-        // A run belongs to this screen: when it goes away the run stops (what was downloaded and built is kept).
-        .onDisappear { build.cancel() }
+        // A run goes on in the background when this screen closes (the status bar shows it); sizes that are still being asked are not wanted.
+        .onDisappear { if !build.isRunning { model.cancelPlan() } }
     }
 
     @ViewBuilder private var content: some View {
@@ -49,7 +47,7 @@ struct RegionPickerScreen: View {
                     Text(node.region.name)
                 }
             }
-            .disabled(build.isRunning || model.download == .downloading)
+            .disabled(build.isRunning)
         }
     }
 
@@ -61,50 +59,36 @@ struct RegionPickerScreen: View {
                 Text("\(model.coveredSelections.map(\.name).joined(separator: ", ")) is part of a larger region that is selected, and is not downloaded on its own.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            if build.stage == .idle {
-                if model.plan == .none, model.download == .idle {
-                    Text("Tick the regions you want, then press Get maps. You see the download size first; nothing is downloaded until you press Start.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                planView
-                downloadView
-            } else {
-                buildView
+            if model.plan == .none, model.download == .idle {
+                Text("Tick the regions you want, then press Get maps. You see the download size first; nothing is downloaded until you press Start. The map is then built in the background: the progress is in the bar at the bottom of the window.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
+            planView
+            downloadView
             HStack {
                 actions
                 Spacer()
-                Button("Done") { dismiss() }.disabled(build.isRunning)
+                Button("Done") { dismiss() }
             }
         }
     }
 
-    /// The buttons for the step the flow is in.
+    /// The buttons for the step the flow is in. Start closes the screen: the run goes on in the background.
     @ViewBuilder private var actions: some View {
-        switch build.stage {
-        case .idle:
-            switch model.step {
-            case .downloading:
-                EmptyView()
-            case .confirm(let plan):
-                Button("Start: download \(RegionPickerModel.size(plan.bytesToDownload)) and build the map") { build.start() }
-                    .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-                Button("Cancel") { model.cancelPlan() }
-            case .allHeld:
-                Button("Build the map") { build.start() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-                Button("Back") { model.cancelPlan() }
-            case .chooseRegions, .askSizes, .planning:
-                Button("Get maps") { Task { await model.askSizes() } }
-                    .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-                    .disabled(model.step != .askSizes)
-            }
-        case .checking, .downloading, .buildingBlocks, .buildingLevels, .registering:
-            Button("Cancel") { build.cancel() }
-        case .done:
+        switch model.step {
+        case .downloading:
             EmptyView()
-        case .cancelled, .failed:
-            Button("Continue") { build.start() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-            Button("Back") { build.dismissResult() }
+        case .confirm(let plan):
+            Button("Start: download \(RegionPickerModel.size(plan.bytesToDownload)) and build the map") { build.start(); dismiss() }
+                .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+            Button("Cancel") { model.cancelPlan() }
+        case .allHeld:
+            Button("Build the map") { build.start(); dismiss() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+            Button("Back") { model.cancelPlan() }
+        case .chooseRegions, .askSizes, .planning:
+            Button("Get maps") { Task { await model.askSizes() } }
+                .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                .disabled(model.step != .askSizes)
         }
     }
 
@@ -128,113 +112,10 @@ struct RegionPickerScreen: View {
     @ViewBuilder private var downloadView: some View {
         switch model.download {
         case .idle: EmptyView()
-        case .downloading: downloadProgress
+        case .downloading: DownloadProgressList(model: model)
         case .cancelled: Text("Cancelled. What arrived is kept and the download goes on from there.").font(.footnote)
         case .done: Text("Downloaded.").font(.footnote)
         case .failed(let message): Text(message).font(.footnote).foregroundStyle(.red)
-        }
-    }
-
-    private var downloadProgress: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(model.progress.keys.sorted(), id: \.self) { id in
-                if let item = model.progress[id] {
-                    if let size = item.size, size > 0 {
-                        ProgressView(value: Double(item.received), total: Double(size)) {
-                            Text("\(id): \(RegionPickerModel.size(item.received)) of \(RegionPickerModel.size(size))").font(.footnote)
-                        }
-                    } else {
-                        Text("\(id): \(RegionPickerModel.size(item.received))").font(.footnote)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: Build
-
-    /// The stages of a run, each with what it is doing.
-    @ViewBuilder private var buildView: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            stageRow("Download", state: state(of: .downloading), detail: downloadDetail) {
-                if build.stage == .downloading { downloadProgress }
-            }
-            stageRow("Blocks", state: state(of: .buildingBlocks), detail: blocksDetail) {
-                if build.stage == .buildingBlocks, let progress = build.blocks { ProgressView(value: progress.fraction) }
-                else if build.stage == .buildingBlocks { ProgressView().controlSize(.small) }
-            }
-            stageRow("Levels", state: state(of: .buildingLevels), detail: build.levelBlocksDone > 0 ? "\(build.levelBlocksDone) level blocks" : nil) {
-                if build.stage == .buildingLevels { ProgressView().controlSize(.small) }
-            }
-            stageRow("Library", state: state(of: .registering), detail: nil) { EmptyView() }
-            switch build.stage {
-            case .done(_, let name):
-                Text("The map \u{201C}\(name)\u{201D} is in the library and open.").font(.footnote).bold()
-            case .cancelled:
-                Text("Cancelled. What was downloaded and built is kept; Continue goes on from there.").font(.footnote)
-            case .failed(let message):
-                Text(message).font(.footnote).foregroundStyle(.red)
-            default:
-                EmptyView()
-            }
-            ForEach(build.warnings, id: \.self) { Text($0).font(.footnote).foregroundStyle(.orange) }
-        }
-    }
-
-    private enum RowState { case waiting, running, finished, stopped }
-
-    /// The order of the stages, to tell which have been passed.
-    private func rank(_ stage: MapBuildModel.Stage) -> Int {
-        switch stage {
-        case .idle: 0
-        case .checking: 1
-        case .downloading: 2
-        case .buildingBlocks: 3
-        case .buildingLevels: 4
-        case .registering: 5
-        case .done: 6
-        case .cancelled, .failed: -1
-        }
-    }
-
-    private func state(of stage: MapBuildModel.Stage) -> RowState {
-        let current = rank(build.stage)
-        if current < 0 { return .stopped }
-        let mine = rank(stage)
-        return current > mine ? .finished : (current == mine ? .running : .waiting)
-    }
-
-    private var downloadDetail: String? {
-        if build.stage == .checking { return "checking the files" }
-        return build.downloadedFiles ? nil : "nothing to download"
-    }
-
-    private var blocksDetail: String? {
-        guard let progress = build.blocks else { return nil }
-        var text = "\(progress.finished) of \(progress.total) blocks"
-        if build.stage == .buildingBlocks, let remaining = progress.remaining {
-            text += ", about \(Duration.UnitsFormatStyle(allowedUnits: [.hours, .minutes], width: .abbreviated).format(remaining)) left"
-        }
-        return text
-    }
-
-    private func stageRow<Extra: View>(_ title: String, state: RowState, detail: String?, @ViewBuilder extra: () -> Extra) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Image(systemName: symbol(state)).foregroundStyle(state == .finished ? Color.green : Color.secondary)
-                Text(title).font(.footnote).bold(state == .running)
-                if let detail { Text(detail).font(.footnote).foregroundStyle(.secondary) }
-            }
-            extra()
-        }
-    }
-
-    private func symbol(_ state: RowState) -> String {
-        switch state {
-        case .waiting: "circle"
-        case .running: "circle.dotted"
-        case .finished: "checkmark.circle.fill"
-        case .stopped: "pause.circle"
         }
     }
 

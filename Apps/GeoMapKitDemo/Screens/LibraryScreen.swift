@@ -40,8 +40,7 @@ struct LibraryScreen: View {
     @State private var renaming: Renaming?
     @State private var newName = ""
     #if os(macOS)
-    @State private var builder: MapBuildModel?
-    @State private var pickerProblem: String?
+    @Environment(MapBuildHost.self) private var builds
     #endif
 
     /// The type of a `.gmk` file, declared by the app (see the project's `Info.plist`).
@@ -126,50 +125,30 @@ struct LibraryScreen: View {
         .frame(minWidth: 420, minHeight: 480)
         // A sheet on the Mac shows no toolbar, so the buttons are in the sheet itself.
         .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 0) {
+            BuildStatusBar()
             HStack {
                 Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
                 Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
-                Button { openPicker() } label: { Label("Get maps…", systemImage: "arrow.down.circle") }
+                Button { builds.openPicker() } label: { Label("Get maps…", systemImage: "arrow.down.circle") }
+                    .disabled(builds.isBusy)
+                    .help(builds.isBusy ? "A map is being built; the bar at the bottom shows it." : "Download regions and build a map")
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
             .padding(12)
             .background(.bar)
+            }
         }
-        .sheet(item: $builder) { RegionPickerScreen(build: $0) }
-        .alert("Get maps", isPresented: Binding(get: { pickerProblem != nil }, set: { if !$0 { pickerProblem = nil } })) {
-            Button("OK") { pickerProblem = nil }
-        } message: { Text(pickerProblem ?? "") }
+        .sheet(isPresented: Bindable(builds).showsPicker) {
+            if let model = builds.model { RegionPickerScreen(build: model) }
+        }
+        .alert("Get maps", isPresented: Binding(get: { builds.problem != nil }, set: { if !$0 { builds.problem = nil } })) {
+            Button("OK") { builds.problem = nil }
+        } message: { Text(builds.problem ?? "") }
         #endif
     }
 
-    #if os(macOS)
-    /// The picker for regions: the Geofabrik list and the source files go to the cache folder of the app.
-    private func openPicker() {
-        do {
-            builder = try makeBuilder()
-        } catch {
-            pickerProblem = "The folder for the source files cannot be used: \(error)"
-        }
-    }
-
-    /// The picker and the build: the Geofabrik list and the source files go to the cache folder of the app, and the maps are built in
-    /// `Maps` next to it and added to this library.
-    private func makeBuilder() throws -> MapBuildModel {
-        let directory = try SourceCache.defaultDirectory()
-        let downloader = URLSessionDownloader(userAgent: MapBuildTools.userAgent)
-        let catalog = GeofabrikCatalog(directory: directory, downloader: downloader)
-        let picker = RegionPickerModel(catalog: catalog, downloader: downloader, cache: SourceCache(directory: directory))
-        let library = library
-        return MapBuildModel(
-            picker: picker, catalog: catalog, mapsRoot: directory.deletingLastPathComponent().appendingPathComponent("Maps", isDirectory: true)
-        ) { folder, name in
-            let id = try library.addBuilt(folder: folder, name: name)
-            library.selectedMapID = id
-            return id
-        }
-    }
-    #endif
 
     // MARK: Adding
 
