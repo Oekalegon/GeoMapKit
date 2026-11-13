@@ -115,8 +115,12 @@ final class MapBuildModel: Identifiable {
     }
 
     /// Sets the map the next run adds to, or `nil` for a map of its own. Does nothing while a run is going or its end is shown.
+    ///
+    /// A change of the target also clears the selection: what was ticked for another map, or left from an earlier visit, must not end up
+    /// in this one.
     func setTarget(_ target: Target?) {
-        guard stage == .idle else { return }
+        guard stage == .idle, target != self.target else { return }
+        picker.clearSelection()
         self.target = target
     }
 

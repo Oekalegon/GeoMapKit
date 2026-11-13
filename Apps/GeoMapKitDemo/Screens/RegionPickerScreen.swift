@@ -9,6 +9,9 @@ import SwiftUI
 /// and shows the plan with the free space; nothing is downloaded until "Start" is pressed. Start downloads the files, builds the
 /// blocks and the levels and puts the map in the library. The screen closes on Start and the run goes on in the background, with its
 /// progress in the status bar (``BuildStatusBar``). A stopped run continues where it stopped. Nothing here limits the size.
+///
+/// Opened for a map the app built (``MapBuildModel/target``), it is titled "Add regions to …" and the run builds the chosen regions into
+/// that map's folder: the map keeps its entry and its name.
 struct RegionPickerScreen: View {
     let build: MapBuildModel
     /// Called when a run is started, so that the screen behind (the library) can close too and leave the map free.

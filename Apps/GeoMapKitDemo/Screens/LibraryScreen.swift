@@ -142,7 +142,7 @@ struct LibraryScreen: View {
                 Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
                 Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
                 Button { builds.openPicker() } label: { Label("Get maps…", systemImage: "arrow.down.circle") }
-                    .disabled(builds.isBusy)
+                    .disabled(builds.isBusy).help(builds.isBusy ? "A map is being built; wait for it, or dismiss its result." : "")
                     .help(builds.isBusy ? "A map is being built; the bar at the bottom shows it." : "Download regions and build a map")
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
@@ -221,7 +221,7 @@ struct LibraryScreen: View {
             #if os(macOS)
             if library.builtFolder(of: map) != nil {
                 Button { addRegion(to: map) } label: { Label("Add a region…", systemImage: "plus.square.on.square") }
-                    .disabled(builds.isBusy)
+                    .disabled(builds.isBusy).help(builds.isBusy ? "A map is being built; wait for it, or dismiss its result." : "")
                 Button(role: .destructive) { askToDeleteFiles(of: map) } label: { Label("Delete map and files…", systemImage: "trash.fill") }
                     .disabled(cannotDeleteFiles(of: map)).help(cannotDeleteFiles(of: map) ? "Open another map, or stop the build, first." : "")
             }
@@ -232,7 +232,7 @@ struct LibraryScreen: View {
             #if os(macOS)
             if library.builtFolder(of: map) != nil {
                 Button { addRegion(to: map) } label: { Label("Add a region…", systemImage: "plus.square.on.square") }
-                    .disabled(builds.isBusy)
+                    .disabled(builds.isBusy).help(builds.isBusy ? "A map is being built; wait for it, or dismiss its result." : "")
                 Button(role: .destructive) { askToDeleteFiles(of: map) } label: { Label("Delete map and files…", systemImage: "trash.fill") }
                     .disabled(cannotDeleteFiles(of: map)).help(cannotDeleteFiles(of: map) ? "Open another map, or stop the build, first." : "")
             }
