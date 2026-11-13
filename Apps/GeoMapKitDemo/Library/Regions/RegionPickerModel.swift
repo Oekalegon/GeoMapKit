@@ -1,4 +1,5 @@
 import Foundation
+import MapBuilder
 import Observation
 import Regions
 
@@ -127,15 +128,27 @@ final class RegionPickerModel: Identifiable {
 
     // MARK: Plan
 
-    /// Makes the plan for the selection: asks the server for the size of each file that is not held and downloads nothing.
+    /// Makes the plan for the selection: the files of the selected regions and of the neighbours the build reads across their borders
+    /// (the blocks at a border are cut with a margin), so the user is never asked to pick neighbours. Asks the server for the size of
+    /// each file that is not held and downloads nothing.
     func makePlan() async {
         let regions = effectiveRegions
-        guard !regions.isEmpty else { return }
+        guard !regions.isEmpty, let index else { return }
         planTask?.cancel()
         plan = .planning
         let task = Task { [manager] in
             do {
-                let made = try await manager.plan(for: RegionSelection(regions: regions, coveredShare: 1))
+                // Looking up the blocks of a large region takes a while, so it is not done on the main actor.
+                let ids = regions.map(\.id)
+                // (The lookup itself is not cancellable: a cancel is seen when it is done.) The selected regions come first, the
+                // neighbours after them, each by name. If no region covers anything the selection is planned as it is, and the build
+                // says that nothing covers the area.
+                let found = try await Task.detached { try MapBuilder.requiredRegions(area: .regions(ids), in: index) }.value
+                try Task.checkCancellation()
+                let chosen = Set(ids)
+                let byName: (SourceRegion, SourceRegion) -> Bool = { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                let needed = found.filter { chosen.contains($0.id) }.sorted(by: byName) + found.filter { !chosen.contains($0.id) }.sorted(by: byName)
+                let made = try await manager.plan(for: RegionSelection(regions: needed.isEmpty ? regions : needed, coveredShare: 1))
                 guard !Task.isCancelled else { return }
                 self.plan = .ready(made)
             } catch is CancellationError {
@@ -146,6 +159,15 @@ final class RegionPickerModel: Identifiable {
         }
         planTask = task
         await task.value
+    }
+
+    /// Whether a region of the plan is there only because the build reads it across a border: it was not selected.
+    func isNeighbour(_ region: SourceRegion) -> Bool { !selection.contains(region.id) }
+
+    /// The name of a region as the user knows it: with the region it lies in when that tells more ("Sud (Italy)").
+    func displayName(of region: SourceRegion) -> String {
+        guard let parentID = region.parentID, let parent = index?.region(withID: parentID), !region.name.contains(parent.name) else { return region.name }
+        return "\(region.name) (\(parent.name))"
     }
 
     /// The free space on the volume of the source cache, in bytes, or `nil` if the system does not say.

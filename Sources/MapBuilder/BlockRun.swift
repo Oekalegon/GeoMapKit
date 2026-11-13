@@ -37,9 +37,14 @@ public struct BlockRequest: Sendable {
     /// Whether the sea of open-sea blocks is added after the build (question 53); `false` leaves the holes, for a comparison.
     public var fillsOpenSea: Bool
 
+    /// The zoom of the block grid when a request does not say.
+    public static let defaultBlockZoom = 8
+    /// The margin of the cut, in degrees, when a request does not say.
+    public static let defaultMargin = 0.1
+
     /// Creates a request.
     public init(
-        area: Area, output: URL, blockZoom: Int = 8, jobs: Int = 1, margin: Double = 0.1, profile: BuildProfile = .full,
+        area: Area, output: URL, blockZoom: Int = BlockRequest.defaultBlockZoom, jobs: Int = 1, margin: Double = BlockRequest.defaultMargin, profile: BuildProfile = .full,
         cacheDirectory: URL? = nil, rebuild: Bool = false, fillsOpenSea: Bool = true
     ) {
         self.rebuild = rebuild
