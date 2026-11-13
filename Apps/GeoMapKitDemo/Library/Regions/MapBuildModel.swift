@@ -16,7 +16,10 @@ final class MapBuildModel: Identifiable {
 
     /// Where the run is.
     enum Stage: Equatable {
-        case idle, downloading, buildingBlocks, buildingLevels, registering
+        case idle
+        /// The files are checked: the plan says what is held and what is missing.
+        case checking
+        case downloading, buildingBlocks, buildingLevels, registering
         /// The map is in the library under this id and name.
         case done(mapID: String, name: String)
         case cancelled
@@ -66,7 +69,7 @@ final class MapBuildModel: Identifiable {
     /// Whether a stage is running.
     var isRunning: Bool {
         switch stage {
-        case .downloading, .buildingBlocks, .buildingLevels, .registering: true
+        case .checking, .downloading, .buildingBlocks, .buildingLevels, .registering: true
         case .idle, .done, .cancelled, .failed: false
         }
     }
@@ -83,14 +86,15 @@ final class MapBuildModel: Identifiable {
         levelBlocksDone = 0
         downloadedFiles = false
         warnings = []
-        stage = .downloading
+        stage = .checking
         task = Task { await run(regions) }
     }
 
     /// Stops the run in whatever stage it is in. What was downloaded and built is kept.
     func cancel() {
         guard isRunning else { return }
-        picker.cancelDownload()
+        // While the sizes are asked there is no download yet: the question to the server is what has to stop.
+        if stage == .checking { picker.cancelPlan() } else { picker.cancelDownload() }
         task?.cancel()
     }
 
@@ -111,14 +115,19 @@ final class MapBuildModel: Identifiable {
             picker.selectionLocked = false
         }
         do {
+            // A cancel that came before this task began must not start the question to the server.
+            try Task.checkCancellation()
             // The plan says what is held and what is missing; after an earlier run it is made again here.
             if case .ready = picker.plan {} else { await picker.makePlan() }
+            // A cancel while the sizes were asked must not go on to the download.
+            try Task.checkCancellation()
             guard case .ready(let plan) = picker.plan else {
                 if case .failed(let message) = picker.plan { stage = .failed(message) } else { stage = .cancelled }
                 return
             }
             if plan.needsDownload {
                 downloadedFiles = true
+                stage = .downloading
                 picker.startDownload()
                 await picker.waitForDownload()
                 switch picker.download {
@@ -194,7 +203,8 @@ final class MapBuildModel: Identifiable {
     }
 
     /// How many blocks to build at once: half the cores, at most 4 (as the command-line tool), and no more than the memory allows at
-    /// about 3 GB for each (a block takes about 0.75 GB; the run over Østlandet and Sweden peaked at 4.2 GB with 4 jobs).
+    /// 3 GB for each. That is a safety factor: a block takes about 0.75 GB and the run over Østlandet and Sweden peaked at 4.2 GB with
+    /// 4 jobs, about 1 GB for each. The same number is used for the level blocks.
     nonisolated static func defaultJobs(
         cores: Int = ProcessInfo.processInfo.activeProcessorCount, memory: UInt64 = ProcessInfo.processInfo.physicalMemory
     ) -> Int {

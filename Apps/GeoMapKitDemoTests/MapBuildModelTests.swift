@@ -219,6 +219,40 @@ struct MapBuildModelTests {
         #expect(r.build.stage == .idle && !r.build.isRunning)
     }
 
+    @Test("A cancel before the run began, or while the sizes are asked, stops it before any download")
+    func cancelWhileChecking() async {
+        let counter = DownloadCounter()
+        let r = await rig(network: FakeNetwork(metadataWaits: true, counter: counter))
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        r.build.start()
+        #expect(r.build.stage == .checking)
+        r.build.cancel()   // at once: the task has not begun
+        await r.build.waitForRun()
+        #expect(r.build.stage == .cancelled)
+        #expect(await counter.count == 0)
+        // Once more, with the question to the server under way.
+        r.build.dismissResult()
+        r.build.start()
+        await waitUntil { r.picker.plan == .planning }
+        r.build.cancel()
+        await r.build.waitForRun()
+        #expect(r.build.stage == .cancelled)
+        #expect(await counter.count == 0, "no download started")
+        #expect(await r.calls.list.isEmpty && r.registered.entries.isEmpty && !r.picker.selectionLocked)
+    }
+
+    @Test("A cancel in the levels stage keeps the blocks and puts nothing in the library")
+    func cancelInLevels() async {
+        let r = await rig(levels: { try await Task.sleep(for: .seconds(60)) })
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        r.build.start()
+        await waitUntil { r.build.stage == .buildingLevels && r.build.levelBlocksDone > 0 }
+        r.build.cancel()
+        await r.build.waitForRun()
+        #expect(r.build.stage == .cancelled && r.registered.entries.isEmpty)
+        #expect(await r.calls.list == ["blocks europe-belgium jobs 2", "levels europe-belgium"])
+    }
+
     // MARK: Names
 
     @Test("The map is named after its regions")

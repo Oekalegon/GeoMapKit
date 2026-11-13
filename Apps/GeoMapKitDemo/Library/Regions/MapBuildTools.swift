@@ -11,10 +11,13 @@ struct MapBuildTools: Sendable {
     /// Builds the levels of a set of blocks; called with each level block when it is done.
     var buildLevels: @Sendable (LevelRequest, @escaping @Sendable (LevelOutcome) -> Void) async throws -> LevelRunReport
 
+    /// The name the app gives itself to the servers it asks.
+    static let userAgent = "GeoMapKitDemo"
+
     /// The real builds of `MapBuilder`.
     static let live = MapBuildTools(
         buildBlocks: { request, catalog, progress in
-            try await MapBuilder.buildRegion(request, catalog: catalog, userAgent: "GeoMapKitDemo", onProgress: { progress($0) })
+            try await MapBuilder.buildRegion(request, catalog: catalog, userAgent: userAgent, onProgress: { progress($0) })
         },
         buildLevels: { request, progress in
             try await MapBuilder.buildLevels(request, progress: { progress($0) })

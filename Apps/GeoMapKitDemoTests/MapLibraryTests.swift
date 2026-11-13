@@ -235,4 +235,16 @@ struct MapLibraryTests {
         let id = try library.addBuilt(folder: second, name: "Liechtenstein")
         #expect(library.maps.count == 2 && library.maps.contains { $0.id == id })
     }
+
+    @Test func buildingAMapAgainTellsTheOpenMapToLoadAgain() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = library(root)
+        let blocks = try blockSet(named: "built", in: root)
+        let before = library.mapRevision
+        let first = try library.addBuilt(folder: blocks, name: "Liechtenstein")
+        #expect(library.mapRevision == before + 1)
+        let again = try library.addBuilt(folder: blocks, name: "Liechtenstein")
+        #expect(first == again && library.mapRevision == before + 2, "the same map, but its files changed")
+    }
 }

@@ -98,7 +98,7 @@ struct RegionPickerScreen: View {
                     .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
                     .disabled(model.step != .askSizes)
             }
-        case .downloading, .buildingBlocks, .buildingLevels, .registering:
+        case .checking, .downloading, .buildingBlocks, .buildingLevels, .registering:
             Button("Cancel") { build.cancel() }
         case .done:
             EmptyView()
@@ -156,7 +156,7 @@ struct RegionPickerScreen: View {
     /// The stages of a run, each with what it is doing.
     @ViewBuilder private var buildView: some View {
         VStack(alignment: .leading, spacing: 6) {
-            stageRow("Download", state: state(of: .downloading), detail: build.downloadedFiles ? nil : "nothing to download") {
+            stageRow("Download", state: state(of: .downloading), detail: downloadDetail) {
                 if build.stage == .downloading { downloadProgress }
             }
             stageRow("Blocks", state: state(of: .buildingBlocks), detail: blocksDetail) {
@@ -187,11 +187,12 @@ struct RegionPickerScreen: View {
     private func rank(_ stage: MapBuildModel.Stage) -> Int {
         switch stage {
         case .idle: 0
-        case .downloading: 1
-        case .buildingBlocks: 2
-        case .buildingLevels: 3
-        case .registering: 4
-        case .done: 5
+        case .checking: 1
+        case .downloading: 2
+        case .buildingBlocks: 3
+        case .buildingLevels: 4
+        case .registering: 5
+        case .done: 6
         case .cancelled, .failed: -1
         }
     }
@@ -201,6 +202,11 @@ struct RegionPickerScreen: View {
         if current < 0 { return .stopped }
         let mine = rank(stage)
         return current > mine ? .finished : (current == mine ? .running : .waiting)
+    }
+
+    private var downloadDetail: String? {
+        if build.stage == .checking { return "checking the files" }
+        return build.downloadedFiles ? nil : "nothing to download"
     }
 
     private var blocksDetail: String? {

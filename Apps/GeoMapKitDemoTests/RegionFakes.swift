@@ -29,6 +29,12 @@ struct FakeCatalog: RegionCatalog {
     }
 }
 
+/// Counts the downloads a fake network was asked for.
+actor DownloadCounter {
+    private(set) var count = 0
+    func hit() { count += 1 }
+}
+
 /// A network that serves files of a fixed size, or waits until the download is cancelled.
 struct FakeNetwork: Downloader {
     var size: Int64 = 3_000
@@ -36,15 +42,20 @@ struct FakeNetwork: Downloader {
     var waits = false
     var failsDownload = false
     var failsMetadata = false
+    /// Waits (for a cancel) when asked about a file: the sizes are slow to come.
+    var metadataWaits = false
+    var counter: DownloadCounter?
 
     func metadata(of url: URL, ifNoneMatch etag: String?) async throws -> RemoteMetadata {
         if failsMetadata { throw URLError(.notConnectedToInternet) }
+        if metadataWaits { try await Task.sleep(for: .seconds(60)) }
         return .info(RemoteFileInfo(size: size, etag: "\"e\""))
     }
 
     func download(
         from url: URL, to file: URL, resumeFrom offset: Int64, ifRange etag: String?, progress: @Sendable (Int64) -> Void
     ) async throws -> RemoteFileInfo {
+        await counter?.hit()
         if failsDownload { throw URLError(.networkConnectionLost) }
         let handle = try FileHandle(forWritingTo: file)
         defer { try? handle.close() }

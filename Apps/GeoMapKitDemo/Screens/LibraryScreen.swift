@@ -157,7 +157,7 @@ struct LibraryScreen: View {
     /// `Maps` next to it and added to this library.
     private func makeBuilder() throws -> MapBuildModel {
         let directory = try SourceCache.defaultDirectory()
-        let downloader = URLSessionDownloader(userAgent: "GeoMapKitDemo")
+        let downloader = URLSessionDownloader(userAgent: MapBuildTools.userAgent)
         let catalog = GeofabrikCatalog(directory: directory, downloader: downloader)
         let picker = RegionPickerModel(catalog: catalog, downloader: downloader, cache: SourceCache(directory: directory))
         let library = library
