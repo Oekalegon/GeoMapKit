@@ -107,6 +107,9 @@ struct MapBuildModelTests {
         r.build.start()
         await r.build.waitForRun()
         r.build.dismissResult()
+        // A finished map clears the selection: the same region is ticked again.
+        #expect(!r.picker.isSelected("europe/belgium"))
+        r.picker.setSelected("europe/belgium", true)
         r.build.start()
         await r.build.waitForRun()
         #expect(!r.build.downloadedFiles, "the file is held")

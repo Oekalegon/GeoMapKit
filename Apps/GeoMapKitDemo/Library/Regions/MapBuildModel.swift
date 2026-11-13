@@ -74,6 +74,19 @@ final class MapBuildModel: Identifiable {
         }
     }
 
+    /// The part of the files downloaded so far, or `nil` when the sizes are not known.
+    var downloadFraction: Double? {
+        let sizes = picker.progress.values.compactMap(\.size).reduce(0, +)
+        guard sizes > 0 else { return nil }
+        let received = picker.progress.values.reduce(Int64(0)) { $0 + min($1.received, $1.size ?? $1.received) }
+        return min(Double(received) / Double(sizes), 1)
+    }
+
+    /// What the status bar says.
+    var summary: BuildStatusSummary {
+        .make(stage: stage, downloadFraction: downloadFraction, blocks: blocks, levelBlocksDone: levelBlocksDone)
+    }
+
     // MARK: Run
 
     /// Starts the run for the regions that are selected, or goes on with one that was stopped.
@@ -98,9 +111,11 @@ final class MapBuildModel: Identifiable {
         task?.cancel()
     }
 
-    /// Clears the end of a run (cancelled, failed or done), back to the picker.
+    /// Clears the end of a run (cancelled, failed or done), back to the picker. After a finished map the selection is cleared too.
     func dismissResult() {
         guard !isRunning else { return }
+        // A finished map starts the next choice from nothing; after a cancel or an error the selection stays for Continue.
+        if case .done = stage { picker.clearSelection() }
         stage = .idle
     }
 

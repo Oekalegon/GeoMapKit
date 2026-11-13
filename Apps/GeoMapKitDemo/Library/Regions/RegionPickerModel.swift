@@ -110,6 +110,16 @@ final class RegionPickerModel: Identifiable {
         download = .idle
     }
 
+    /// Unticks everything and forgets the plan and the download state: for the next map, after a run is done.
+    func clearSelection() {
+        guard download != .downloading, !selectionLocked else { return }
+        planTask?.cancel()
+        selection = []
+        plan = .none
+        download = .idle
+        progress = [:]
+    }
+
     /// The selected regions that are to be downloaded: a region below a selected one is part of that one's file and is left out.
     var effectiveRegions: [SourceRegion] {
         guard let index else { return [] }

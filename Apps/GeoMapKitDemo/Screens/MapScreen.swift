@@ -8,6 +8,9 @@ import SwiftUI
 struct MapScreen: View {
     @Environment(MapLibrary.self) private var library
     @Environment(WatchLink.self) private var watch
+    #if os(macOS)
+    @Environment(MapBuildHost.self) private var builds
+    #endif
     @State private var opened: OpenedMap?
     @State private var center = Coordinate(latitude: 59.9, longitude: 10.7)
     @State private var zoom = 3.0
@@ -23,6 +26,15 @@ struct MapScreen: View {
     /// The user pressed "centre on me" before there was a position: the first one that comes is where the map goes.
     @State private var centreWhenFound = false
     @Environment(\.scenePhase) private var scenePhase
+
+    /// The library, with what it needs from the environment.
+    @ViewBuilder private var libraryScreen: some View {
+        #if os(macOS)
+        LibraryScreen().environment(library).environment(watch).environment(builds)
+        #else
+        LibraryScreen().environment(library).environment(watch)
+        #endif
+    }
 
     var body: some View {
         NavigationStack {
@@ -59,6 +71,10 @@ struct MapScreen: View {
                         .onTapGesture { self.message = nil }
                 }
             }
+            #if os(macOS)
+            // A map build goes on in the background; its progress is here, whatever map is open.
+            .safeAreaInset(edge: .bottom, spacing: 0) { BuildStatusBar() }
+            #endif
             .navigationTitle(library.maps.first { $0.id == library.selectedMapID }?.name ?? "GeoMapKit")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -71,7 +87,7 @@ struct MapScreen: View {
                 library.styleToEdit = nil
                 startEditing(id)
             }
-        }) { LibraryScreen().environment(library).environment(watch) }
+        }) { libraryScreen }
         #if os(iOS)
         .confirmationDialog("Send it to the Watch?", isPresented: Binding(get: { offerToSend != nil }, set: { if !$0 { offerToSend = nil } }), titleVisibility: .visible) {
             Button("Send to the Watch") {
