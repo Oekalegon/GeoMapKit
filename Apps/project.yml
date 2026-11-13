@@ -43,6 +43,8 @@ targets:
         product: MapRender
       - package: GeoMapKit
         product: MapUI
+      - package: GeoMapKit
+        product: Regions
       - target: GeoMapKitDemoWatch
         platformFilter: iOS
     settings:
@@ -128,6 +130,8 @@ targets:
         product: MapStyle
       - package: GeoMapKit
         product: FeatureStore
+      - package: GeoMapKit
+        product: Regions
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
