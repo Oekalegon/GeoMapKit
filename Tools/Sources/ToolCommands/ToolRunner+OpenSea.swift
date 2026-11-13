@@ -7,7 +7,8 @@ import Regions
 import ToolSupport
 
 extension ToolRunner {
-    /// Fills the blocks of a set that no source outline touches with sea (``OpenSea``, question 61).
+    /// Fills the open sea of a set (``OpenSea``, questions 61 and 62): the blocks that no source outline touches, the empty or border-only
+    /// blocks inside the outline of a big region, and the empty cells between the islands of a block with a coast.
     ///
     /// The blocks of the grid inside the bounding box of the set whose tile is touched by no region without regions below it in the Geofabrik index (a leaf) hold no land,
     /// so they are open sea; they are given their sea where they touch a block that shows sea. This is the hole in the middle of a sea
@@ -48,17 +49,34 @@ extension ToolRunner {
             columns = min(columns.lowerBound, block.x)...max(columns.upperBound, block.x)
             rows = min(rows.lowerBound, block.y)...max(rows.upperBound, block.y)
         }
+        // Every other position of the grid inside the set has no file or no coast: the neighbours of each group decide (question 62).
         var outside = Set<OpenSea.Position>()
+        var covered: [OpenSea.Position: [StoreManifest.Source]] = [:]
         for y in rows {
             for x in columns {
                 guard let tile = TileID(zoom: manifest.blockZoom, x: x, y: y) else { continue }
                 let box = BoundingBox(
                     south: tile.southEast.latitude, west: tile.northWest.longitude, north: tile.northWest.latitude, east: tile.southEast.longitude)
-                if leaves.regions(covering: box, samplesPerSide: 16).coveredShare == 0 { outside.insert(OpenSea.Position(x: x, y: y)) }
+                let position = OpenSea.Position(x: x, y: y)
+                if leaves.regions(covering: box, samplesPerSide: 16).coveredShare == 0 { outside.insert(position) } else { covered[position] = [] }
             }
         }
-        let (_, report) = try OpenSea.fill(manifest: manifest, folder: folder, covered: [:], outside: outside) { updated in
-            try Self.write(updated, to: manifestURL)
+        // The empty cells of a coast block first: along the border of a block they would read as land and stop the block rule. Then the
+        // block rule; the new sea blocks are squares to spread from. Repeated until nothing changes (a few rounds at most).
+        var current = manifest
+        var report = OpenSea.Report()
+        for _ in 0..<6 {
+            let cells = try OpenSea.fillEmptyCells(manifest: current, folder: folder) { updated in try Self.write(updated, to: manifestURL) }
+            let blocks = try OpenSea.fill(manifest: cells.manifest, folder: folder, covered: covered, outside: outside) { updated in
+                try Self.write(updated, to: manifestURL)
+            }
+            current = blocks.manifest
+            for (position, count) in cells.cellsFilled { report.cellsFilled[position, default: 0] += count }
+            report.created += blocks.report.created
+            report.extended += blocks.report.extended
+            report.left = blocks.report.left
+            report.conflicting = blocks.report.conflicting
+            if cells.cellsFilled.isEmpty && !blocks.report.changed { break }
         }
         return report
     }
