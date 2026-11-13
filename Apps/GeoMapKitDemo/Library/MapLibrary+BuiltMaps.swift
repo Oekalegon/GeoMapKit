@@ -29,7 +29,8 @@ extension MapLibrary {
         guard selectedMapID != map.id else {
             throw LibraryError.failed(map.name, "it is the map that is open; open another map first")
         }
-        if let buildingFolder, buildingFolder.standardizedFileURL.resolvingSymlinksInPath() == folder {
+        // Paths, not URLs: the two come from different places (a bookmark and a computed name) and can differ in a trailing slash.
+        if let buildingFolder, buildingFolder.standardizedFileURL.resolvingSymlinksInPath().path == folder.standardizedFileURL.path {
             throw LibraryError.failed(map.name, "a build is writing to it; stop the build first")
         }
         do { try FileManager.default.removeItem(at: folder) } catch {

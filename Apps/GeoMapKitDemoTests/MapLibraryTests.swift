@@ -274,8 +274,29 @@ struct MapLibraryTests {
         library.selectedMapID = nil
         #expect(throws: LibraryError.self) { try library.deleteWithFiles(map, buildingFolder: folder) }
         #expect(FileManager.default.fileExists(atPath: folder.path) && library.maps.count == 1)
+        // The same folder written another way (a trailing slash) is the same folder.
+        #expect(throws: LibraryError.self) { try library.deleteWithFiles(map, buildingFolder: URL(fileURLWithPath: folder.path + "/")) }
         try library.deleteWithFiles(map, buildingFolder: root.appendingPathComponent("Built/other"))
         #expect(library.maps.isEmpty)
+    }
+
+    @Test func aLinkInsideTheBuiltMapsThatLeadsOutsideIsNotTheAppsToDelete() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let outside = try blockSet(named: "outside", in: root)
+        let builtRoot = root.appendingPathComponent("Built")
+        try FileManager.default.createDirectory(at: builtRoot, withIntermediateDirectories: true)
+        let escape = builtRoot.appendingPathComponent("escape")
+        try FileManager.default.createSymbolicLink(at: escape, withDestinationURL: outside)
+        let library = library(root)
+        library.builtMapsRoot = builtRoot
+        // A bookmark cannot be made of a link itself, so the map is added by the real path; the link in `Built` must not make it the app's.
+        try library.addBuilt(folder: outside, name: "Escape")
+        let map = try #require(library.maps.first)
+        #expect(library.builtFolder(of: map) == nil)
+        library.selectedMapID = nil
+        #expect(throws: LibraryError.self) { try library.deleteWithFiles(map) }
+        #expect(FileManager.default.fileExists(atPath: outside.appendingPathComponent("manifest.json").path))
     }
 
     @Test func aFailedDeletionKeepsTheMapInTheLibrary() throws {

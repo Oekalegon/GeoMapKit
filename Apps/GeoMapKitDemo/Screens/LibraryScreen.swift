@@ -221,6 +221,7 @@ struct LibraryScreen: View {
             #if os(macOS)
             if library.builtFolder(of: map) != nil {
                 Button(role: .destructive) { askToDeleteFiles(of: map) } label: { Label("Delete map and files…", systemImage: "trash.fill") }
+                    .disabled(cannotDeleteFiles(of: map)).help(cannotDeleteFiles(of: map) ? "Open another map, or stop the build, first." : "")
             }
             #endif
         }
@@ -229,6 +230,7 @@ struct LibraryScreen: View {
             #if os(macOS)
             if library.builtFolder(of: map) != nil {
                 Button(role: .destructive) { askToDeleteFiles(of: map) } label: { Label("Delete map and files…", systemImage: "trash.fill") }
+                    .disabled(cannotDeleteFiles(of: map)).help(cannotDeleteFiles(of: map) ? "Open another map, or stop the build, first." : "")
             }
             #endif
         }
@@ -331,7 +333,18 @@ struct LibraryScreen: View {
         filesSize = nil
         deletingFiles = map
         guard let folder = library.builtFolder(of: map) else { return }
-        Task { filesSize = await Task.detached { MapLibrary.size(ofFolder: folder) }.value }
+        Task {
+            let size = await Task.detached { MapLibrary.size(ofFolder: folder) }.value
+            // A late answer for a map that is no longer asked about is dropped.
+            if deletingFiles?.id == map.id { filesSize = size }
+        }
+    }
+
+    /// Whether Delete map and files would be refused now: the map is the open one, or a build writes to its folder.
+    private func cannotDeleteFiles(of map: MapItem) -> Bool {
+        if library.selectedMapID == map.id { return true }
+        guard let working = builds.model?.workingFolder, let folder = library.builtFolder(of: map) else { return false }
+        return working.standardizedFileURL.resolvingSymlinksInPath().path == folder.standardizedFileURL.path
     }
 
     private func deleteFiles(of map: MapItem) {
