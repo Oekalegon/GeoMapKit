@@ -277,4 +277,18 @@ struct RegionPickerModelTests {
             items: [PlanItem(region: Self.region("x", "X", parent: nil), action: .useCached, size: 1_000_000_000)], coveredShare: 1)
         #expect(model.spaceNote(for: done)?.contains("roughly") == true, "files that are held still need room for the maps")
     }
+
+    @Test("The plan can be dropped, and then there is nothing to start")
+    func planDropped() async {
+        let (model, _, folder) = make()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await model.load()
+        model.setSelected("europe/belgium", true)
+        await model.makePlan()
+        model.cancelPlan()
+        #expect(model.plan == .none && model.download == .idle)
+        model.startDownload()
+        #expect(model.download == .idle, "without a plan nothing starts")
+        #expect(model.isSelected("europe/belgium"), "the selection stays")
+    }
 }

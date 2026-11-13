@@ -170,4 +170,56 @@ struct MapLibraryTests {
         try FileManager.default.removeItem(at: source)
         #expect(throws: (any Error).self) { try library.open(map) }
     }
+
+    /// A set of one block in a folder: the block file and a manifest.
+    private func blockSet(named name: String, in root: URL) throws -> URL {
+        let blocks = root.appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: blocks.appendingPathComponent("blocks"), withIntermediateDirectories: true)
+        let block = try storeFile(named: "8-136-75.gmk", in: blocks.appendingPathComponent("blocks"))
+        let data = try Data(contentsOf: block)
+        let manifest = StoreManifest(
+            formatVersion: try FeatureStoreFile(data: data).formatVersion, classifierVersion: 0, storageZoom: 13, blockZoom: 8, bands: [.detail],
+            profile: "full", attribution: "© OpenStreetMap contributors, ODbL",
+            blocks: [StoreManifest.Block(x: 136, y: 75, file: "blocks/8-136-75.gmk", bytes: Int64(data.count), builtAt: Date())])
+        try manifest.jsonData().write(to: blocks.appendingPathComponent("manifest.json"))
+        return blocks
+    }
+
+    @Test func aMapTheAppBuiltIsAddedUnderItsNameAndOpens() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocks = try blockSet(named: "built", in: root)
+        let library = library(root)
+        let id = try library.addBuilt(folder: blocks, name: "Netherlands and Belgium")
+        let map = try #require(library.maps.first)
+        #expect(map.id == id && map.name == "Netherlands and Belgium" && map.kind == .blocks)
+        #expect(try library.open(map).source is StoreSet)
+    }
+
+    @Test func buildingTheSameFolderAgainDoesNotAddASecondMap() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocks = try blockSet(named: "built", in: root)
+        let library = library(root)
+        let first = try library.addBuilt(folder: blocks, name: "Liechtenstein")
+        let again = try library.addBuilt(folder: blocks, name: "Liechtenstein")
+        #expect(first == again && library.maps.count == 1)
+        // Another folder with the same name gets a name of its own.
+        let other = try blockSet(named: "other", in: root)
+        try library.addBuilt(folder: other, name: "Liechtenstein")
+        #expect(library.maps.count == 2 && Set(library.maps.map(\.id)).count == 2)
+    }
+
+    @Test func aBuiltFolderWithoutAManifestOrWithABadNameIsRefused() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = library(root)
+        let empty = root.appendingPathComponent("Empty")
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        #expect(throws: LibraryError.self) { try library.addBuilt(folder: empty, name: "Nothing") }
+        let blocks = try blockSet(named: "built", in: root)
+        #expect(throws: LibraryError.self) { try library.addBuilt(folder: blocks, name: "a/b") }
+        #expect(throws: LibraryError.self) { try library.addBuilt(folder: blocks, name: "  ") }
+        #expect(library.maps.isEmpty)
+    }
 }

@@ -160,6 +160,14 @@ final class RegionPickerModel: Identifiable {
         return nil
     }
 
+    /// Drops the plan: the user looked at the sizes and does not go on.
+    func cancelPlan() {
+        guard download != .downloading else { return }
+        planTask?.cancel()
+        plan = .none
+        download = .idle
+    }
+
     // MARK: Download
 
     /// Downloads the files of the plan that is ready, with progress; a download that was cancelled or stopped goes on after the

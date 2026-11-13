@@ -140,10 +140,7 @@ final class MapLibrary {
             let manifest = url.appendingPathComponent("manifest.json")
             guard FileManager.default.fileExists(atPath: manifest.path) else { throw LibraryError.noManifest(name) }
             do { _ = try StoreSet(manifestURL: manifest) } catch { throw LibraryError.failed(name, "\(error)") }
-            let bookmark = try Self.bookmark(for: url)
-            let target = uniqueURL(in: mapsDirectory, name: url.lastPathComponent, ext: Self.linkExtension)
-            try JSONEncoder().encode(Link(bookmark: bookmark, kind: .folder)).write(to: target, options: .atomic)
-            return target.lastPathComponent
+            return try linkFolder(url, name: url.lastPathComponent)
         }
         switch url.pathExtension.lowercased() {
         case "gmk":
@@ -171,6 +168,51 @@ final class MapLibrary {
         default:
             throw LibraryError.notAMap(name)
         }
+    }
+
+    /// Writes the link to a folder of blocks into the library and returns its file name there.
+    private func linkFolder(_ folder: URL, name: String) throws -> String {
+        let bookmark = try Self.bookmark(for: folder)
+        let target = uniqueURL(in: mapsDirectory, name: name, ext: Self.linkExtension)
+        try JSONEncoder().encode(Link(bookmark: bookmark, kind: .folder)).write(to: target, options: .atomic)
+        return target.lastPathComponent
+    }
+
+    /// Adds a set of blocks that the app built itself (question 63): the folder stays where it is and the library links to it.
+    ///
+    /// A folder that the library already links to is not added a second time, so building the same regions again updates the map
+    /// that is there.
+    ///
+    /// - Parameters:
+    ///   - folder: The folder with `manifest.json` and the block files.
+    ///   - name: The name for the map: what the user sees, and the start of its file name in the library.
+    /// - Returns: The id of the map in the library (new, or the one that already linked to this folder).
+    /// - Throws: ``LibraryError`` for a name that cannot be a file name, a folder without a readable manifest, or a file error.
+    @discardableResult
+    func addBuilt(folder: URL, name: String) throws -> String {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.isValidName(name) else { throw LibraryError.failed(name, "that is not a name a map can have") }
+        let manifest = folder.appendingPathComponent("manifest.json")
+        guard FileManager.default.fileExists(atPath: manifest.path) else { throw LibraryError.noManifest(folder.lastPathComponent) }
+        do { _ = try StoreSet(manifestURL: manifest) } catch { throw LibraryError.failed(name, "\(error)") }
+        let wanted = folder.standardizedFileURL.resolvingSymlinksInPath().path
+        if let known = maps.first(where: { $0.kind == .blocks && linkedFolder(of: $0)?.path == wanted }) { return known.id }
+        let id = try linkFolder(folder, name: name)
+        reload()
+        return id
+    }
+
+    /// The folder a link in the library leads to, or `nil` if it cannot be resolved. No access is started.
+    private func linkedFolder(of map: MapItem) -> URL? {
+        guard let link = try? JSONDecoder().decode(Link.self, from: Data(contentsOf: url(of: map))) else { return nil }
+        #if os(macOS)
+        let options: URL.BookmarkResolutionOptions = .withSecurityScope
+        #else
+        let options: URL.BookmarkResolutionOptions = []
+        #endif
+        var stale = false
+        return (try? URL(resolvingBookmarkData: link.bookmark, options: options, relativeTo: nil, bookmarkDataIsStale: &stale))?
+            .standardizedFileURL.resolvingSymlinksInPath()
     }
 
     /// A file name in a folder that is not taken: `name.ext`, or `name 2.ext` and so on.

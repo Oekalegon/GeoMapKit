@@ -21,6 +21,8 @@ struct RegionPickerScreen: View {
             footer.padding(12)
         }
         .frame(minWidth: 520, minHeight: 600)
+        // Esc and a click outside do not close the screen while a download runs.
+        .interactiveDismissDisabled(model.download == .downloading)
         .task { await model.load() }
         // A download belongs to this screen: when it goes away the download stops (what arrived is kept).
         .onDisappear { model.cancelDownload() }
@@ -52,19 +54,34 @@ struct RegionPickerScreen: View {
                 Text("\(model.coveredSelections.map(\.name).joined(separator: ", ")) is part of a larger region that is selected, and is not downloaded on its own.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
+            if model.plan == .none, model.download == .idle {
+                Text("Tick the regions you want, then press Get maps. You see the download size first; nothing is downloaded until you press Start.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             planView
             downloadView
             HStack {
-                Button("Check size") { Task { await model.makePlan() } }
-                    .disabled(model.effectiveRegions.isEmpty || model.download == .downloading || model.plan == .planning)
-                if case .ready(let plan) = model.plan, plan.needsDownload {
-                    Button("Download \(RegionPickerModel.size(plan.bytesToDownload))") { model.startDownload() }
-                        .disabled(model.download == .downloading)
-                }
-                if model.download == .downloading { Button("Cancel") { model.cancelDownload() } }
+                actions
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction).disabled(model.download == .downloading)
+                Button("Done") { dismiss() }.disabled(model.download == .downloading)
             }
+        }
+    }
+
+    /// The buttons for the step the flow is in: Get maps (ask the sizes), then Start or Back, and Cancel while downloading.
+    @ViewBuilder private var actions: some View {
+        if model.download == .downloading {
+            Button("Cancel download") { model.cancelDownload() }
+        } else if case .ready(let plan) = model.plan {
+            if plan.needsDownload {
+                Button("Start: download \(RegionPickerModel.size(plan.bytesToDownload))") { model.startDownload() }
+                    .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+            }
+            Button(plan.needsDownload ? "Cancel" : "Back") { model.cancelPlan() }
+        } else {
+            Button("Get maps") { Task { await model.makePlan() } }
+                .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                .disabled(model.effectiveRegions.isEmpty || model.plan == .planning)
         }
     }
 
