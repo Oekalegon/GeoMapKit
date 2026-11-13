@@ -4,34 +4,35 @@ import Foundation
 import GeoCore
 import OSMPBF
 import Regions
-import ToolSupport
 
-extension ToolRunner {
+
+extension MapBuilder {
     /// Builds a big area as blocks: one store file for each tile of a coarse grid, and a manifest that lists them.
     ///
     /// Each block is built on its own: its area is cut, with a margin, from the source files its tile needs, and only the cells of
     /// the tile are written. Up to `jobs` blocks are built at once. The source files must be in the cache (see `fetch`); nothing
     /// is downloaded. A block that is already in the manifest, built from the same source files, is left as it is, so a run that
     /// was stopped can be run again. The manifest is written after each block, so it lists only blocks that are complete. When the
-    /// blocks are done, the sea of blocks of open sea is added from what their neighbours show (``OpenSea``, question 53) unless
+    /// blocks are done, the sea of blocks of open sea is added from what their neighbours show (`OpenSea`, question 53) unless
     /// ``BlockRequest/fillsOpenSea`` is off.
     ///
     /// - Parameters:
     ///   - request: What to build.
     ///   - catalog: The list of regions, or `nil` for the Geofabrik index kept in the cache folder.
     ///   - downloader: The network for the region index, or `nil` for `URLSession`.
+    ///   - userAgent: The user agent of that `URLSession`; an app passes its own name.
     ///   - progress: Called when a block is done, from the calling task.
     ///   - onProgress: Called with the state of the whole run when it starts, whenever a block starts and whenever one is done, from the
     ///     calling task. A progress bar is drawn from it.
     /// - Returns: The report.
-    /// - Throws: ``ToolError`` for a bad request, an unknown region or source files that are not in the cache; the errors of the
+    /// - Throws: ``MapBuilderError`` for a bad request, an unknown region or source files that are not in the cache; the errors of the
     ///   cutter, the builder and the files; `CancellationError`.
     public static func buildRegion(
-        _ request: BlockRequest, catalog: (any RegionCatalog)? = nil, downloader: (any Downloader)? = nil,
+        _ request: BlockRequest, catalog: (any RegionCatalog)? = nil, downloader: (any Downloader)? = nil, userAgent: String = MapBuilder.defaultUserAgent,
         progress: (BlockOutcome) -> Void = { _ in }, onProgress: (BlockProgress) -> Void = { _ in }
     ) async throws -> BlockRunReport {
-        guard (0...13).contains(request.blockZoom) else { throw ToolError("--block-zoom must be from 0 to 13") }
-        guard request.margin >= 0, request.margin <= 2, request.margin.isFinite else { throw ToolError("--margin must be from 0 to 2 degrees") }
+        guard (0...13).contains(request.blockZoom) else { throw MapBuilderError("The block zoom must be from 0 to 13") }
+        guard request.margin >= 0, request.margin <= 2, request.margin.isFinite else { throw MapBuilderError("The margin must be from 0 to 2 degrees") }
         let clock = ContinuousClock()
         let started = clock.now
         let cacheDirectory = try request.cacheDirectory ?? SourceCache.defaultDirectory()
@@ -51,7 +52,7 @@ extension ToolRunner {
                 tasks.append(planned)
             }
         }
-        guard !tasks.isEmpty else { throw ToolError("No source region covers this area.") }
+        guard !tasks.isEmpty else { throw MapBuilderError("No source region covers this area.") }
 
         // Every source file has to be in the cache already.
         var warnings: [String] = []
@@ -63,13 +64,13 @@ extension ToolRunner {
             case .current: records[region.id] = record
             case .stale:
                 records[region.id] = record
-                warnings.append("\(region.name) was last checked more than 30 days ago; run 'geomapkit sources' to see whether it has changed.")
+                warnings.append("\(region.name) was last checked more than 30 days ago; check whether it has changed.")
             case .missing, .damaged: missing.append("\(region.name) (\(region.id))")
             }
         }
         guard missing.isEmpty else {
-            throw ToolError(
-                "These source files are not in the cache: \(missing.joined(separator: ", ")). Run 'geomapkit fetch' with the same --region or area, and --yes, first.")
+            throw MapBuilderError(
+                "These source files are not in the cache: \(missing.joined(separator: ", ")). Download them first.")
         }
 
         let blocksFolder = request.output.appendingPathComponent("blocks", isDirectory: true)
@@ -77,7 +78,7 @@ extension ToolRunner {
         do {
             try FileManager.default.createDirectory(at: blocksFolder, withIntermediateDirectories: true)
         } catch {
-            throw ToolError("Cannot create \(blocksFolder.path): \(error.localizedDescription)")
+            throw MapBuilderError("Cannot create \(blocksFolder.path): \(error.localizedDescription)")
         }
 
         // Blocks from an earlier run that fit this one are kept; a manifest of another build is started again.
@@ -222,7 +223,7 @@ extension ToolRunner {
         }
         // A manifest that exists after a run in which nothing was built (everything up to date, or empty) is the one that was there.
         guard FileManager.default.fileExists(atPath: manifestURL.path) else {
-            throw ToolError("Nothing was built: every block of this area is empty.")
+            throw MapBuilderError("Nothing was built: every block of this area is empty.")
         }
         return BlockRunReport(
             outcomes: outcomes.keys.sorted().compactMap { outcomes[$0] }, manifestURL: manifestURL, totalTime: clock.now - started,
@@ -233,17 +234,22 @@ extension ToolRunner {
 
     private struct BlockKey: Hashable { var x: Int; var y: Int }
 
-    struct BlockTask: Sendable {
-        var position: Int
-        var tile: TileID
-        var cutBox: BoundingBox
-        var regions: [SourceRegion]
+    /// One block of a plan (``plannedBlocks(area:blockZoom:margin:in:)``): which tile, which box is cut and which regions are needed.
+    public struct BlockTask: Sendable {
+        /// The place of the block in the plan, counted from 0 in the order of the tiles.
+        public let position: Int
+        /// The tile of the block, at the block zoom.
+        public let tile: TileID
+        /// The box that is cut for the block, in degrees: the tile plus the margin.
+        public let cutBox: BoundingBox
+        /// The regions whose source files the cut needs; empty when no region covers the block.
+        public let regions: [SourceRegion]
         /// The share of the tile (not the cut) that the outlines of the regions cover; 0 when no source file has data there.
-        var coveredShare: Double = 0
+        public internal(set) var coveredShare: Double = 0
     }
 
     /// The blocks of an area with, for each, the box that is cut and the regions whose files it needs (none if no region covers it).
-    static func plannedBlocks(area: BlockRequest.Area, blockZoom: Int, margin: Double, in index: RegionIndex) throws -> [BlockTask] {
+    public static func plannedBlocks(area: BlockRequest.Area, blockZoom: Int, margin: Double, in index: RegionIndex) throws -> [BlockTask] {
         try blockTiles(for: area, blockZoom: blockZoom, in: index).enumerated().map { position, tile in
             let box = cutBox(of: tile, margin: margin)
             // The tile alone decides whether the data there is known: the margin only reaches into the next block.
@@ -276,17 +282,17 @@ extension ToolRunner {
         var named: [SourceRegion] = []
         switch area {
         case .tiles(let tiles):
-            guard !tiles.isEmpty else { throw ToolError("--tiles needs at least one tile") }
+            guard !tiles.isEmpty else { throw MapBuilderError("At least one tile is needed") }
             guard let other = tiles.first(where: { $0.zoom != zoom }) else { return tiles }
-            throw ToolError("--tiles takes tiles of the block zoom (\(zoom)); \(other.zoom)/\(other.x)/\(other.y) is not one")
+            throw MapBuilderError("The tiles must be tiles of the block zoom (\(zoom)); \(other.zoom)/\(other.x)/\(other.y) is not one")
         case .box(let area):
-            guard area.isValid else { throw ToolError("The area is not valid") }
+            guard area.isValid else { throw MapBuilderError("The area is not valid") }
             box = area
         case .regions(let ids):
-            guard !ids.isEmpty else { throw ToolError("--region needs at least one region id") }
+            guard !ids.isEmpty else { throw MapBuilderError("At least one region id is needed") }
             for id in ids {
                 guard let region = index.region(withID: id) else {
-                    throw ToolError("The region index has no region '\(id)'. Run 'geomapkit sources' with an area to see the ids of the regions.")
+                    throw MapBuilderError("The region index has no region '\(id)'. Look up the ids of the regions in the region index.")
                 }
                 named.append(region)
             }
@@ -297,11 +303,11 @@ extension ToolRunner {
         // A box this large at this zoom would be thousands of blocks; the regions of the whole world are not what this is for.
         let columnsAcross = (box.east - box.west) / 360 * Double(1 << zoom)
         guard columnsAcross < 1_000, (box.north - box.south) / 170 * Double(1 << zoom) < 1_000 else {
-            throw ToolError("This area is too large for blocks of zoom \(zoom): use a smaller area or a lower --block-zoom.")
+            throw MapBuilderError("This area is too large for blocks of zoom \(zoom): use a smaller area or a lower block zoom.")
         }
         guard let northWest = TileID.containing(Coordinate(latitude: min(box.north, TileID.maximumLatitude), longitude: box.west), zoom: zoom),
             let southEast = TileID.containing(Coordinate(latitude: max(box.south, -TileID.maximumLatitude), longitude: min(box.east, 179.999999)), zoom: zoom)
-        else { throw ToolError("The area is not valid") }
+        else { throw MapBuilderError("The area is not valid") }
         var tiles: [TileID] = []
         for y in northWest.y...southEast.y {
             for x in northWest.x...southEast.x {
@@ -324,9 +330,9 @@ extension ToolRunner {
                 tiles.append(tile)
             }
         }
-        guard !tiles.isEmpty else { throw ToolError("No block lies in this area.") }
+        guard !tiles.isEmpty else { throw MapBuilderError("No block lies in this area.") }
         guard tiles.count <= 2_000 else {
-            throw ToolError("This area is \(tiles.count) blocks of zoom \(zoom); the limit is 2,000. Use a smaller area or a lower --block-zoom.")
+            throw MapBuilderError("This area is \(tiles.count) blocks of zoom \(zoom); the limit is 2,000. Use a smaller area or a lower block zoom.")
         }
         return tiles
     }
@@ -382,7 +388,7 @@ extension ToolRunner {
         do {
             try result.data.write(to: target, options: .atomic)
         } catch {
-            throw ToolError("Cannot write \(target.path): \(error.localizedDescription)")
+            throw MapBuilderError("Cannot write \(target.path): \(error.localizedDescription)")
         }
         let seconds = Double((clock.now - started).components.seconds) + Double((clock.now - started).components.attoseconds) / 1e18
         return BuiltBlock(
@@ -402,7 +408,7 @@ extension ToolRunner {
         do {
             try manifest.jsonData().write(to: url, options: .atomic)
         } catch {
-            throw ToolError("Cannot write \(url.path): \(error.localizedDescription)")
+            throw MapBuilderError("Cannot write \(url.path): \(error.localizedDescription)")
         }
     }
 }

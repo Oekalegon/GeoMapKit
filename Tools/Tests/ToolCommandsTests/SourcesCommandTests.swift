@@ -1,5 +1,5 @@
-import Foundation
 import FeatureStore
+import Foundation
 import GeoCore
 import Regions
 import Testing

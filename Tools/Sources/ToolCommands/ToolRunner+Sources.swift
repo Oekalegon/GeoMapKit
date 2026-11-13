@@ -1,6 +1,7 @@
-import Foundation
 import FeatureStoreBuilder
+import Foundation
 import GeoCore
+import MapBuilder
 import Regions
 import ToolSupport
 
@@ -161,7 +162,7 @@ extension ToolRunner {
         let directory = try cacheDirectory ?? SourceCache.defaultDirectory()
         let network = downloader ?? URLSessionDownloader(userAgent: userAgent)
         let index = try await (catalog ?? GeofabrikCatalog(directory: directory, downloader: network)).index()
-        let blocks = try plannedBlocks(area: .regions(ids), blockZoom: blockZoom, margin: margin, in: index)
+        let blocks = try MapBuilder.plannedBlocks(area: .regions(ids), blockZoom: blockZoom, margin: margin, in: index)
         // The files, the one that most blocks need first.
         var uses: [String: (region: SourceRegion, blocks: Int)] = [:]
         for block in blocks { for region in block.regions { uses[region.id, default: (region, 0)].blocks += 1 } }

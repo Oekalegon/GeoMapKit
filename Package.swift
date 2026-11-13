@@ -22,6 +22,7 @@ let package = Package(
         .library(name: "MapRender", targets: ["MapRender"]),
         .library(name: "MapUI", targets: ["MapUI"]),
         .library(name: "Regions", targets: ["Regions"]),
+        .library(name: "MapBuilder", targets: ["MapBuilder"]),
     ],
     targets: [
         // Web Mercator maths, tile coordinates, geometry.
@@ -48,6 +49,9 @@ let package = Package(
         // Region manifest, downloads, attribution.
         .target(name: "Regions", dependencies: ["GeoCore", "FeatureStore"]),
 
+        // The build pipeline: blocks, levels and open sea from source files in the cache. Shared by the command-line tool and the apps.
+        .target(name: "MapBuilder", dependencies: ["GeoCore", "OSMPBF", "FeatureStore", "FeatureStoreBuilder", "MapStyle", "Regions"]),
+
         // Builds small PBF files for tests (test-only; no product).
         .target(name: "PBFTestSupport", path: "Tests/PBFTestSupport"),
 
@@ -58,6 +62,7 @@ let package = Package(
         .testTarget(name: "MapRenderTests", dependencies: ["MapRender", "MapStyle", "FeatureStore", "GeoCore"]),
         .testTarget(name: "MapUITests", dependencies: ["MapUI", "MapRender", "MapStyle", "FeatureStore", "GeoCore"]),
         .testTarget(name: "FeatureStoreTests", dependencies: ["FeatureStore", "GeoCore"]),
+        .testTarget(name: "MapBuilderTests", dependencies: ["MapBuilder", "MapStyle", "FeatureStore", "FeatureStoreBuilder", "GeoCore", "OSMPBF", "Regions"]),
         .testTarget(name: "RegionsTests", dependencies: ["Regions", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]

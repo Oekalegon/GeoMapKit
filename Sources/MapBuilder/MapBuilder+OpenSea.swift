@@ -4,10 +4,10 @@ import Foundation
 import GeoCore
 import OSMPBF
 import Regions
-import ToolSupport
 
-extension ToolRunner {
-    /// Fills the open sea of a set (``OpenSea``, questions 61 and 62): the blocks that no source outline touches, the empty or border-only
+
+extension MapBuilder {
+    /// Fills the open sea of a set (`OpenSea`, questions 61 and 62): the blocks that no source outline touches, the empty or border-only
     /// blocks inside the outline of a big region, and the empty cells between the islands of a block with a coast.
     ///
     /// The blocks of the grid inside the bounding box of the set whose tile is touched by no region without regions below it in the Geofabrik index (a leaf) hold no land,
@@ -21,20 +21,22 @@ extension ToolRunner {
     ///   - cacheDirectory: The cache folder with the region index, or `nil` for the default one.
     ///   - catalog: The list of regions, or `nil` for the Geofabrik index kept in the cache folder.
     ///   - downloader: The network for the region index, or `nil` for `URLSession`.
+    ///   - userAgent: The user agent of that `URLSession`; an app passes its own name.
     /// - Returns: What was done.
-    /// - Throws: ``ToolError`` for a folder with no usable manifest, a profile that is not `full` and the errors of the files.
+    /// - Throws: ``MapBuilderError`` for a folder with no usable manifest, a profile that is not `full` and the errors of the files.
     public static func fillOpenSea(
-        folder: URL, cacheDirectory: URL? = nil, catalog: (any RegionCatalog)? = nil, downloader: (any Downloader)? = nil
+        folder: URL, cacheDirectory: URL? = nil, catalog: (any RegionCatalog)? = nil, downloader: (any Downloader)? = nil,
+        userAgent: String = MapBuilder.defaultUserAgent
     ) async throws -> OpenSea.Report {
         let manifestURL = folder.appendingPathComponent("manifest.json")
         let manifest: StoreManifest
         do {
             manifest = try StoreManifest(json: try Data(contentsOf: manifestURL))
         } catch {
-            throw ToolError("Cannot read \(manifestURL.path): \(error.localizedDescription)")
+            throw MapBuilderError("Cannot read \(manifestURL.path): \(error.localizedDescription)")
         }
-        guard manifest.profile == "full" else { throw ToolError("Only a set of the full profile has open sea to fill.") }
-        guard let first = manifest.blocks.first else { throw ToolError("The set has no blocks.") }
+        guard manifest.profile == "full" else { throw MapBuilderError("Only a set of the full profile has open sea to fill.") }
+        guard let first = manifest.blocks.first else { throw MapBuilderError("The set has no blocks.") }
         let directory = try cacheDirectory ?? SourceCache.defaultDirectory()
         let index = try await (catalog ?? GeofabrikCatalog(
             directory: directory, downloader: downloader ?? URLSessionDownloader(userAgent: userAgent))).index()

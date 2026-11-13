@@ -1,5 +1,5 @@
-import OSMPBF
 import GeoCore
+import OSMPBF
 
 /// Counts describing an extract.
 public struct ExtractSummary: Equatable, Sendable {

@@ -1,10 +1,11 @@
-import Foundation
-import Testing
 import FeatureStore
 import FeatureStoreBuilder
+import Foundation
 import GeoCore
+import MapBuilder
 import MapStyle
 import OSMPBF
+import Testing
 import ToolSupport
 @testable import ToolCommands
 

@@ -20,6 +20,7 @@ Status: early. The design is in [docs/design/architecture.md](docs/design/archit
 | `MapStyle` | Style model (placeholder) |
 | `MapRender` | Renderer (placeholder) |
 | `Regions` | Region manifest, downloads, attribution (placeholder) |
+| `MapBuilder` | The build pipeline (blocks, levels, open sea), shared by the tool and the apps |
 
 All library targets build for iOS, iPadOS, macOS and watchOS 26, in Swift 6 language mode.
 

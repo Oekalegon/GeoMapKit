@@ -1,6 +1,7 @@
 import FeatureStoreBuilder
 import Foundation
 import GeoCore
+import MapBuilder
 import OSMPBF
 import Regions
 import ToolCommands
@@ -196,8 +197,8 @@ do {
         // The bar is on standard error, only when that is a terminal; the block lines stay on standard output.
         let showBar = ProgressBar.isUsableTerminal && !parsed.hasFlag("no-progress")
         func clearBar() { if showBar { FileHandle.standardError.write(Data("\r\u{1B}[2K".utf8)) } }
-        let report = try await ToolRunner.buildRegion(
-            request,
+        let report = try await MapBuilder.buildRegion(
+            request, userAgent: ToolRunner.userAgent,
             progress: { outcome in
                 clearBar()
                 print(ReportFormatter.line(for: outcome, blockZoom: request.blockZoom))
@@ -225,7 +226,7 @@ do {
         let levelRequest = LevelRequest(
             directory: URL(fileURLWithPath: parsed.positional[0]), topZooms: topZooms, jobs: try whole("jobs", 2, in: 1...64),
             margin: try whole("margin", 32, in: 0...256), rebuild: parsed.hasFlag("rebuild"))
-        let levelReport = try await ToolRunner.buildLevels(levelRequest, progress: { outcome in
+        let levelReport = try await MapBuilder.buildLevels(levelRequest, progress: { outcome in
             print(ReportFormatter.line(for: outcome))
             fflush(stdout)
         })
@@ -233,8 +234,9 @@ do {
     case "fill-sea":
         let parsed = try CommandLineArguments(rest, knownOptions: ["cache"])
         guard parsed.positional.count == 1 else { throw ToolError("fill-sea needs the folder of a set of blocks") }
-        let report = try await ToolRunner.fillOpenSea(
-            folder: URL(fileURLWithPath: parsed.positional[0]), cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) })
+        let report = try await MapBuilder.fillOpenSea(
+            folder: URL(fileURLWithPath: parsed.positional[0]), cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) },
+            userAgent: ToolRunner.userAgent)
         print("Open sea: \(report.created.count) blocks written, \(report.extended.count) blocks extended, \(report.left.count) left as they are (no neighbour shows sea).")
         for position in report.created { print("  sea block \(position.x)/\(position.y)") }
         if !report.cellsFilled.isEmpty {

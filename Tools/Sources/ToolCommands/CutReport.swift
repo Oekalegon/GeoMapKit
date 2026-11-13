@@ -1,4 +1,5 @@
 import GeoCore
+import MapBuilder
 
 /// The result of cutting an area out of a file.
 public struct CutReport: Sendable {

@@ -13,7 +13,7 @@ let package = Package(
         // Argument parsing and formatting, kept apart from the executable so it can be tested.
         .target(
             name: "ToolSupport",
-            dependencies: [.product(name: "GeoCore", package: "GeoMapKit")]
+            dependencies: [.product(name: "GeoCore", package: "GeoMapKit"), .product(name: "MapBuilder", package: "GeoMapKit")]
         ),
         // The commands: they run the library and return reports, so they can be tested.
         .target(
@@ -27,6 +27,7 @@ let package = Package(
                 .product(name: "MapStyle", package: "GeoMapKit"),
                 .product(name: "MapRender", package: "GeoMapKit"),
                 .product(name: "Regions", package: "GeoMapKit"),
+                .product(name: "MapBuilder", package: "GeoMapKit"),
             ]
         ),
         // A Mac test app for MapView: swift run mapviewer [file.gmk].

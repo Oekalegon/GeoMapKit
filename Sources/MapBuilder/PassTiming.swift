@@ -11,6 +11,7 @@ public struct PassTiming: Equatable, Sendable {
     /// The peak heap footprint so far, in bytes, when the stage started.
     public let peakMemoryAtStart: Int64
 
+    /// Makes the timing of one pass.
     public init(pass: AreaCutter.Pass, duration: Duration, peakMemoryAtStart: Int64) {
         self.pass = pass
         self.duration = duration

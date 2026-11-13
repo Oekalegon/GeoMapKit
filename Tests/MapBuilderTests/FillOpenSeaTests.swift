@@ -3,11 +3,11 @@ import FeatureStoreBuilder
 import Foundation
 import GeoCore
 import Regions
-import ToolSupport
+
 import Testing
 
 @testable import FeatureStoreBuilder
-@testable import ToolCommands
+@testable import MapBuilder
 
 /// The open sea between the blocks of a set that no region below a continent touches.
 @Suite("Fill open sea")
@@ -87,13 +87,13 @@ struct FillOpenSeaTests {
         // The continent covers everything; only the country covers the land block.
         let catalog = FixedCatalog(regions: [region("europe", parent: nil, nil), region("country", parent: "europe", TileID(zoom: 8, x: 133, y: 80))])
 
-        let report = try await ToolRunner.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: catalog)
+        let report = try await MapBuilder.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: catalog)
         #expect(Set(report.created.map { [$0.x, $0.y] }) == [[131, 80], [132, 80]])
         let written = try StoreManifest(json: try Data(contentsOf: folder.appendingPathComponent("manifest.json")))
         try written.validate()
         #expect(written.blocks.count == 4)
 
-        let again = try await ToolRunner.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: catalog)
+        let again = try await MapBuilder.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: catalog)
         #expect(!again.changed)
     }
 
@@ -119,7 +119,7 @@ struct FillOpenSeaTests {
                 Coordinate(latitude: 75, longitude: 0),
             ])])
         let catalog = FixedCatalog(regions: [region("europe", parent: nil, nil), region("state", parent: "europe", TileID(zoom: 8, x: 133, y: 80)), island])
-        let report = try await ToolRunner.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: catalog)
+        let report = try await MapBuilder.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: catalog)
         #expect(!report.changed)
     }
 
@@ -144,9 +144,9 @@ struct FillOpenSeaTests {
                 Coordinate(latitude: 40, longitude: 0), Coordinate(latitude: 40, longitude: 60), Coordinate(latitude: 75, longitude: 60),
                 Coordinate(latitude: 75, longitude: 0),
             ])])
-        let report = try await ToolRunner.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: FixedCatalog(regions: [big]))
+        let report = try await MapBuilder.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: FixedCatalog(regions: [big]))
         #expect(report.created.map { [$0.x, $0.y] } == [[131, 80]])
-        let again = try await ToolRunner.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: FixedCatalog(regions: [big]))
+        let again = try await MapBuilder.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: FixedCatalog(regions: [big]))
         #expect(!again.changed, "a second run changes nothing")
     }
 
@@ -163,8 +163,8 @@ struct FillOpenSeaTests {
             formatVersion: format, classifierVersion: 16, storageZoom: 13, blockZoom: 8, bands: [.overview, .mid, .detail],
             profile: "watch", attribution: "© OpenStreetMap contributors, ODbL", blocks: [one])
         try manifest.jsonData().write(to: folder.appendingPathComponent("manifest.json"))
-        await #expect(throws: ToolError.self) {
-            try await ToolRunner.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: FixedCatalog(regions: [self.region("europe", parent: nil, nil)]))
+        await #expect(throws: MapBuilderError.self) {
+            try await MapBuilder.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: FixedCatalog(regions: [self.region("europe", parent: nil, nil)]))
         }
     }
 }
