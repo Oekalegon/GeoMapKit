@@ -28,7 +28,9 @@ final class MapBuildHost {
     var isRunning: Bool { model?.isRunning ?? false }
 
     /// Opens the picker, unless a run is going or its result is still there.
-    func openPicker() {
+    ///
+    /// - Parameter adding: The map the chosen regions are added to, or `nil` to make a map of their own.
+    func openPicker(adding: MapBuildModel.Target? = nil) {
         guard !isBusy else { return }
         if model == nil {
             do { model = try make() } catch {
@@ -36,6 +38,7 @@ final class MapBuildHost {
                 return
             }
         }
+        model?.setTarget(adding)
         showsPicker = true
     }
 }

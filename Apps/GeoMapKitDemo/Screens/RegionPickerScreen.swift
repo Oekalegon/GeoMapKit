@@ -9,6 +9,9 @@ import SwiftUI
 /// and shows the plan with the free space; nothing is downloaded until "Start" is pressed. Start downloads the files, builds the
 /// blocks and the levels and puts the map in the library. The screen closes on Start and the run goes on in the background, with its
 /// progress in the status bar (``BuildStatusBar``). A stopped run continues where it stopped. Nothing here limits the size.
+///
+/// Opened for a map the app built (``MapBuildModel/target``), it is titled "Add regions to …" and the run builds the chosen regions into
+/// that map's folder: the map keeps its entry and its name.
 struct RegionPickerScreen: View {
     let build: MapBuildModel
     /// Called when a run is started, so that the screen behind (the library) can close too and leave the map free.
@@ -21,6 +24,9 @@ struct RegionPickerScreen: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
+            if let target = build.target {
+                Text("Add regions to \u{201C}\(target.name)\u{201D}").font(.headline).padding([.horizontal, .top], 12)
+            }
             TextField("Search regions", text: $model.search)
                 .textFieldStyle(.roundedBorder)
                 .padding([.horizontal, .top], 12)
@@ -31,7 +37,7 @@ struct RegionPickerScreen: View {
         .frame(minWidth: 520, minHeight: 600)
         .task { await model.load() }
         // A run goes on in the background when this screen closes (the status bar shows it); sizes that are still being asked are not wanted.
-        .onDisappear { if !build.isRunning { model.cancelPlan() } }
+        .onDisappear { if !build.isRunning { model.cancelPlan(); build.setTarget(nil) } }
         .confirmationDialog(downloadAgainTitle, isPresented: $askingDownloadAgain, titleVisibility: .visible) {
             Button("Delete the files and download again", role: .destructive) { startRun(.downloadAgain) }
         } message: {

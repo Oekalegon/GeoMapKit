@@ -197,6 +197,84 @@ struct MapBuildModelTests {
         #expect(r.build.stage == .cancelled && r.build.rebuildPending)
     }
 
+    @Test("Regions added to a map are built into its folder, and the map keeps its name")
+    func addingToAMap() async {
+        let r = await rig(select: [])
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        let folder = r.root.appendingPathComponent("Maps/greece", isDirectory: true)
+        r.build.setTarget(.init(folder: folder, name: "Greece"))
+        r.picker.setSelected("europe/belgium", true)
+        r.build.start()
+        #expect(r.build.target == nil && r.build.runTarget?.name == "Greece")
+        #expect(r.build.workingFolder == folder, "a delete of that map is refused while it is written")
+        await r.build.waitForRun()
+        #expect(r.build.stage == .done(mapID: "map-1", name: "Greece"))
+        #expect(await r.calls.list == ["blocks greece jobs 2", "levels greece"])
+        #expect(r.registered.entries.first?.folder == folder && r.registered.entries.first?.name == "Greece")
+        #expect(r.build.workingFolder == nil)
+        r.build.dismissResult()
+        #expect(r.build.runTarget == nil, "the next run is a map of its own")
+    }
+
+    @Test("Continue after a cancel keeps the map that regions are added to, and a target is not set during a run")
+    func addingToAMapSurvivesACancel() async {
+        let r = await rig(blocks: { _ in try await Task.sleep(for: .seconds(60)) }, select: [])
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        let folder = r.root.appendingPathComponent("Maps/greece", isDirectory: true)
+        r.build.setTarget(.init(folder: folder, name: "Greece"))
+        r.picker.setSelected("europe/belgium", true)
+        r.build.start()
+        r.build.setTarget(nil)
+        r.build.setTarget(.init(folder: folder.appendingPathComponent("x"), name: "Other"))
+        #expect(r.build.target == nil, "no target is taken while a run is going")
+        await waitUntil { r.build.stage == .buildingBlocks }
+        r.build.cancel()
+        await r.build.waitForRun()
+        #expect(r.build.stage == .cancelled && r.build.runTarget?.folder == folder)
+        r.build.start()
+        await waitUntil { r.build.stage == .buildingBlocks }
+        #expect(r.build.workingFolder == folder)
+        r.build.cancel()
+        await r.build.waitForRun()
+    }
+
+    @Test("A new target starts from an empty selection, and the host sets it only when it is free")
+    func theHostSetsTheTarget() async {
+        let r = await rig()
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        #expect(r.picker.isSelected("europe/belgium"), "left from an earlier visit")
+        let host = MapBuildHost { r.build }
+        let greece = MapBuildModel.Target(folder: r.root.appendingPathComponent("Maps/greece"), name: "Greece")
+        host.openPicker(adding: greece)
+        #expect(host.showsPicker && r.build.target == greece)
+        #expect(!r.picker.isSelected("europe/belgium"), "nothing is ticked that was meant for another map")
+        // Closing the picker without starting leaves no target, and no ticks for the next map.
+        r.picker.setSelected("europe/belgium", true)
+        r.build.setTarget(nil)
+        #expect(r.build.target == nil && !r.picker.isSelected("europe/belgium"))
+        // The same target again keeps what was ticked after it.
+        host.showsPicker = false
+        host.openPicker(adding: greece)
+        r.picker.setSelected("europe/belgium", true)
+        r.build.setTarget(greece)
+        #expect(r.picker.isSelected("europe/belgium"))
+        // A run that is going keeps its own target: the host does not change it.
+        r.build.start()
+        host.openPicker(adding: MapBuildModel.Target(folder: r.root.appendingPathComponent("Maps/other"), name: "Other"))
+        #expect(r.build.target == nil && r.build.runTarget == greece)
+        await r.build.waitForRun()
+    }
+
+    @Test("Closing the picker without starting drops the target")
+    func closingThePickerDropsTheTarget() async {
+        let r = await rig(select: [])
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        r.build.setTarget(.init(folder: r.root, name: "Greece"))
+        #expect(r.build.target != nil)
+        r.build.setTarget(nil)
+        #expect(r.build.target == nil)
+    }
+
     @Test("A cancel in the blocks stage stops the run, keeps the files and puts nothing in the library")
     func cancelInBlocks() async {
         let r = await rig(blocks: { _ in try await Task.sleep(for: .seconds(60)) })
