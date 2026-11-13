@@ -268,6 +268,21 @@ final class RegionPickerModel: Identifiable {
         }
     }
 
+    /// Deletes the files of a plan from the source cache (and any part of one), and drops the plan: it no longer matches what is held.
+    /// A neighbour's file goes too; it is fetched again when a map needs it.
+    func removeFiles(of plan: DownloadPlan) throws {
+        guard download != .downloading else { return }
+        for item in plan.items { try cache.remove(regionID: item.region.id) }
+        self.plan = .none
+        progress = [:]
+    }
+
+    /// The total size of the files of a plan, for the question before they are deleted: `nil` when no size is known.
+    static func totalSize(of plan: DownloadPlan) -> Int64? {
+        let sizes = plan.items.compactMap(\.size)
+        return sizes.isEmpty ? nil : sizes.reduce(0, +)
+    }
+
     private func record(_ id: String, _ received: Int64, _ size: Int64?) {
         guard download == .downloading else { return }
         progress[id] = (max(received, progress[id]?.received ?? 0), size)

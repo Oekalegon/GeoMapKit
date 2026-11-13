@@ -14,6 +14,7 @@ struct RegionPickerScreen: View {
     /// Called when a run is started, so that the screen behind (the library) can close too and leave the map free.
     var onStarted: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
+    @State private var askingDownloadAgain = false
 
     private var model: RegionPickerModel { build.picker }
 
@@ -31,6 +32,11 @@ struct RegionPickerScreen: View {
         .task { await model.load() }
         // A run goes on in the background when this screen closes (the status bar shows it); sizes that are still being asked are not wanted.
         .onDisappear { if !build.isRunning { model.cancelPlan() } }
+        .confirmationDialog(downloadAgainTitle, isPresented: $askingDownloadAgain, titleVisibility: .visible) {
+            Button("Delete the files and download again", role: .destructive) { startRun(.downloadAgain) }
+        } message: {
+            Text("The files of these regions and their neighbours are deleted first, then downloaded again and every block is built again. If the download fails, you press Continue to fetch them.")
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -75,17 +81,36 @@ struct RegionPickerScreen: View {
         }
     }
 
+    private var downloadAgainTitle: String {
+        guard case .ready(let plan) = model.plan, let size = RegionPickerModel.totalSize(of: plan) else { return "Download the files again?" }
+        return "Download \(RegionPickerModel.size(size)) again?"
+    }
+
+    private func startRun(_ mode: MapBuildModel.Mode = .normal) {
+        build.start(mode)
+        dismiss()
+        onStarted()
+    }
+
     /// The buttons for the step the flow is in. Start closes the screen: the run goes on in the background.
     @ViewBuilder private var actions: some View {
         switch model.step {
         case .downloading:
             EmptyView()
         case .confirm(let plan):
-            Button("Start: download \(RegionPickerModel.size(plan.bytesToDownload)) and build the map") { build.start(); dismiss(); onStarted() }
+            Button("Start: download \(RegionPickerModel.size(plan.bytesToDownload)) and build the map") { startRun() }
                 .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+            // Only when some file is held: with none, Start downloads everything already.
+            if plan.items.contains(where: { $0.action != .download }) {
+                Button("Download everything again…") { askingDownloadAgain = true }
+            }
             Button("Cancel") { model.cancelPlan() }
         case .allHeld:
-            Button("Build the map") { build.start(); dismiss(); onStarted() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+            Button("Build the map") { startRun() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+            Button("Build again") { startRun(.buildAgain) }
+                .help("Builds every block again from the files that are held, also those that are up to date. Use it after the builder was improved.")
+            Button("Download again…") { askingDownloadAgain = true }
+                .help("Deletes the files that are held, downloads them again and builds the map again. Use it when a file is damaged.")
             Button("Back") { model.cancelPlan() }
         case .chooseRegions, .askSizes, .planning:
             Button("Get maps") { Task { await model.askSizes() } }

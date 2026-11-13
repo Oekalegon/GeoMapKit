@@ -14,6 +14,9 @@ struct MapBuildModelTests {
     actor Calls {
         private(set) var list: [String] = []
         func add(_ call: String) { list.append(call) }
+        /// The `rebuild` flag of each request, as "blocks true" or "levels false".
+        private(set) var rebuilds: [String] = []
+        func noteRebuild(_ stage: String, _ flag: Bool) { rebuilds.append("\(stage) \(flag)") }
     }
 
     /// What was put in the library.
@@ -39,6 +42,7 @@ struct MapBuildModelTests {
         MapBuildTools(
             buildBlocks: { request, _, progress in
                 await calls.add("blocks \(request.output.lastPathComponent) jobs \(request.jobs)")
+                await calls.noteRebuild("blocks", request.rebuild)
                 progress(BlockProgress(total: 4, finished: 2, running: 1, built: 2, elapsed: .seconds(10), remaining: .seconds(10)))
                 try await blocks(request)
                 return BlockRunReport(
@@ -47,6 +51,7 @@ struct MapBuildModelTests {
             },
             buildLevels: { request, progress in
                 await calls.add("levels \(request.directory.lastPathComponent)")
+                await calls.noteRebuild("levels", request.rebuild)
                 progress(LevelOutcome(topZoom: 9, x: 1, y: 2, status: .upToDate))
                 try await levels()
                 return LevelRunReport(
@@ -115,6 +120,81 @@ struct MapBuildModelTests {
         #expect(!r.build.downloadedFiles, "the file is held")
         #expect(await r.calls.list == ["blocks europe-belgium jobs 2", "levels europe-belgium", "blocks europe-belgium jobs 2", "levels europe-belgium"])
         #expect(Set(r.registered.entries.map(\.folder)).count == 1)
+    }
+
+    @Test("Build again builds every block and level again from the files that are held, and downloads nothing")
+    func buildAgain() async {
+        let counter = DownloadCounter()
+        let r = await rig(network: FakeNetwork(counter: counter))
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        r.build.start()
+        await r.build.waitForRun()
+        r.build.dismissResult()
+        r.picker.setSelected("europe/belgium", true)
+        r.build.start(.buildAgain)
+        await r.build.waitForRun()
+        #expect(r.build.stage == .done(mapID: "map-2", name: "België"))
+        #expect(await r.calls.rebuilds == ["blocks false", "levels false", "blocks true", "levels true"])
+        #expect(!r.build.downloadedFiles)
+        #expect(await counter.count == 1, "the file was downloaded once, by the first run")
+    }
+
+    @Test("Download again deletes the files that are held, downloads them again and builds everything again")
+    func downloadAgain() async {
+        let counter = DownloadCounter()
+        let r = await rig(network: FakeNetwork(counter: counter))
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        r.build.start()
+        await r.build.waitForRun()
+        r.build.dismissResult()
+        r.picker.setSelected("europe/belgium", true)
+        r.build.start(.downloadAgain)
+        await r.build.waitForRun()
+        #expect(r.build.stage == .done(mapID: "map-2", name: "België"))
+        #expect(await counter.count == 2)
+        #expect(r.build.downloadedFiles)
+        #expect(await r.calls.rebuilds == ["blocks false", "levels false", "blocks true", "levels true"])
+        #expect(Set(r.registered.entries.map(\.folder)).count == 1, "the same map is updated")
+    }
+
+    @Test("A failed download after the files were deleted ends the run, and Continue fetches them")
+    func downloadAgainFails() async {
+        let r = await rig()
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        r.build.start()
+        await r.build.waitForRun()
+        r.build.dismissResult()
+        r.picker.setSelected("europe/belgium", true)
+        // The server is gone: the same cache with a network that fails.
+        let cache = SourceCache(directory: r.root.appendingPathComponent("Sources"), availableCapacity: { _ in 100_000_000_000 })
+        #expect(cache.status(ofRegionID: "europe/belgium").status != .missing)
+        let failing = RegionPickerModel(catalog: FakeCatalog(), downloader: FakeNetwork(failsDownload: true), cache: cache)
+        await failing.load()
+        failing.setSelected("europe/belgium", true)
+        let build = MapBuildModel(
+            picker: failing, catalog: FakeCatalog(), mapsRoot: r.root.appendingPathComponent("Maps"), tools: tools(r.calls), jobs: 2
+        ) { _, _ in "map" }
+        build.start(.downloadAgain)
+        await build.waitForRun()
+        guard case .failed = build.stage else { Issue.record("not failed: \(build.stage)"); return }
+        #expect(cache.status(ofRegionID: "europe/belgium").status == .missing, "the file was deleted before the download")
+        #expect(await r.calls.rebuilds.count == 2, "no build after the failed download")
+    }
+
+    @Test("A rebuild that is stopped is remembered as unfinished through Continue, until a full rebuild is done")
+    func rebuildPending() async {
+        let r = await rig(blocks: { request in if request.rebuild { try await Task.sleep(for: .seconds(60)) } })
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        r.build.start()
+        await r.build.waitForRun()
+        #expect(!r.build.rebuildPending)
+        r.build.dismissResult()
+        r.picker.setSelected("europe/belgium", true)
+        r.build.start(.buildAgain)
+        await waitUntil { r.build.stage == .buildingBlocks }
+        r.build.cancel()
+        await r.build.waitForRun()
+        #expect(r.build.stage == .cancelled && r.build.rebuildPending)
     }
 
     @Test("A cancel in the blocks stage stops the run, keeps the files and puts nothing in the library")
