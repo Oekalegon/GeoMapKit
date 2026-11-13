@@ -4,9 +4,9 @@ import SwiftUI
 
 /// Where regions are chosen and their source files downloaded (question 63, step 2; the Mac only).
 ///
-/// The list is the Geofabrik tree. Choosing a region chooses the whole region. "Check size" asks the server what the files would
-/// cost and shows the free space; nothing is downloaded until "Download" is pressed, and the download can be cancelled and goes on
-/// later. Nothing here limits the size.
+/// The list is the Geofabrik tree. Choosing a region chooses the whole region. "Get maps" asks the server what the files would cost
+/// and shows the plan with the free space; nothing is downloaded until "Start" is pressed, and the download can be cancelled and
+/// goes on later. Nothing here limits the size.
 struct RegionPickerScreen: View {
     @Bindable var model: RegionPickerModel
     @Environment(\.dismiss) private var dismiss
@@ -21,6 +21,8 @@ struct RegionPickerScreen: View {
             footer.padding(12)
         }
         .frame(minWidth: 520, minHeight: 600)
+        // Esc and a click outside do not close the screen while a download runs.
+        .interactiveDismissDisabled(model.download == .downloading)
         .task { await model.load() }
         // A download belongs to this screen: when it goes away the download stops (what arrived is kept).
         .onDisappear { model.cancelDownload() }
@@ -52,19 +54,35 @@ struct RegionPickerScreen: View {
                 Text("\(model.coveredSelections.map(\.name).joined(separator: ", ")) is part of a larger region that is selected, and is not downloaded on its own.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
+            if model.plan == .none, model.download == .idle {
+                Text("Tick the regions you want, then press Get maps. You see the download size first; nothing is downloaded until you press Start.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             planView
             downloadView
             HStack {
-                Button("Check size") { Task { await model.makePlan() } }
-                    .disabled(model.effectiveRegions.isEmpty || model.download == .downloading || model.plan == .planning)
-                if case .ready(let plan) = model.plan, plan.needsDownload {
-                    Button("Download \(RegionPickerModel.size(plan.bytesToDownload))") { model.startDownload() }
-                        .disabled(model.download == .downloading)
-                }
-                if model.download == .downloading { Button("Cancel") { model.cancelDownload() } }
+                actions
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction).disabled(model.download == .downloading)
+                Button("Done") { dismiss() }.disabled(model.download == .downloading)
             }
+        }
+    }
+
+    /// The buttons for the step the flow is in: Get maps (ask the sizes), then Start or Back, and Cancel while downloading.
+    @ViewBuilder private var actions: some View {
+        switch model.step {
+        case .downloading:
+            Button("Cancel download") { model.cancelDownload() }
+        case .confirm(let plan):
+            Button("Start: download \(RegionPickerModel.size(plan.bytesToDownload))") { model.startDownload() }
+                .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+            Button("Cancel") { model.cancelPlan() }
+        case .allHeld:
+            Button("Back") { model.cancelPlan() }
+        case .chooseRegions, .askSizes, .planning:
+            Button("Get maps") { Task { await model.askSizes() } }
+                .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                .disabled(model.step != .askSizes)
         }
     }
 

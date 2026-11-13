@@ -277,4 +277,58 @@ struct RegionPickerModelTests {
             items: [PlanItem(region: Self.region("x", "X", parent: nil), action: .useCached, size: 1_000_000_000)], coveredShare: 1)
         #expect(model.spaceNote(for: done)?.contains("roughly") == true, "files that are held still need room for the maps")
     }
+
+    @Test("The plan can be dropped, and then there is nothing to start")
+    func planDropped() async {
+        let (model, _, folder) = make()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await model.load()
+        model.setSelected("europe/belgium", true)
+        await model.makePlan()
+        model.cancelPlan()
+        #expect(model.plan == .none && model.download == .idle)
+        model.startDownload()
+        #expect(model.download == .idle, "without a plan nothing starts")
+        #expect(model.isSelected("europe/belgium"), "the selection stays")
+    }
+
+    @Test("The step follows the flow: choose, ask, confirm, download, held")
+    func steps() async {
+        let (model, _, folder) = make()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await model.load()
+        #expect(model.step == .chooseRegions)
+        model.setSelected("europe/belgium", true)
+        #expect(model.step == .askSizes)
+        await model.askSizes()
+        guard case .confirm(let plan) = model.step else { Issue.record("not confirm: \(model.step)"); return }
+        #expect(plan.bytesToDownload == 3_000)
+        model.cancelPlan()
+        #expect(model.step == .askSizes)
+        await model.askSizes()
+        model.startDownload()
+        #expect(model.step == .downloading)
+        await model.waitForDownload()
+        #expect(model.download == .done && model.step == .askSizes)
+        // Asking again forgets how the download ended and finds every file held.
+        await model.askSizes()
+        #expect(model.download == .idle && model.step == .allHeld)
+        model.cancelPlan()
+        model.setSelected("europe/belgium", false)
+        #expect(model.step == .chooseRegions)
+    }
+
+    @Test("After a failed download, asking again clears the error")
+    func askingClearsTheError() async {
+        let (model, _, folder) = make(network: Network(failsDownload: true))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await model.load()
+        model.setSelected("europe/belgium", true)
+        await model.askSizes()
+        model.startDownload()
+        await model.waitForDownload()
+        guard case .failed = model.download else { Issue.record("it did not fail"); return }
+        await model.askSizes()
+        #expect(model.download == .idle)
+    }
 }

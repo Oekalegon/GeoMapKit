@@ -160,6 +160,47 @@ final class RegionPickerModel: Identifiable {
         return nil
     }
 
+    /// Where the flow is, which decides the buttons the screen shows.
+    enum Step: Equatable {
+        /// Nothing is selected.
+        case chooseRegions
+        /// Regions are selected and the sizes have not been asked (or could not be): Get maps.
+        case askSizes
+        /// The server is being asked for the sizes.
+        case planning
+        /// The plan is shown and something has to be downloaded: Start or Cancel.
+        case confirm(DownloadPlan)
+        /// The plan is shown and every file is held already: Back.
+        case allHeld
+        /// A download runs: Cancel download.
+        case downloading
+    }
+
+    /// The step the flow is in.
+    var step: Step {
+        if download == .downloading { return .downloading }
+        switch plan {
+        case .planning: return .planning
+        case .ready(let plan): return plan.needsDownload ? .confirm(plan) : .allHeld
+        case .none, .failed: return effectiveRegions.isEmpty ? .chooseRegions : .askSizes
+        }
+    }
+
+    /// The user pressed Get maps: forgets how an earlier download ended and asks the sizes.
+    func askSizes() async {
+        guard download != .downloading else { return }
+        download = .idle
+        await makePlan()
+    }
+
+    /// Drops the plan: the user looked at the sizes and does not go on.
+    func cancelPlan() {
+        guard download != .downloading else { return }
+        planTask?.cancel()
+        plan = .none
+        download = .idle
+    }
+
     // MARK: Download
 
     /// Downloads the files of the plan that is ready, with progress; a download that was cancelled or stopped goes on after the
