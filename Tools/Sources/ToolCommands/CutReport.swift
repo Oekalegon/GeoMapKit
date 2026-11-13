@@ -1,3 +1,4 @@
+import MapBuilder
 import GeoCore
 
 /// The result of cutting an area out of a file.

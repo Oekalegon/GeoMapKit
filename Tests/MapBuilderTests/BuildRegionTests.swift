@@ -4,8 +4,8 @@ import Foundation
 import GeoCore
 import Regions
 import Testing
-import ToolSupport
-@testable import ToolCommands
+
+@testable import MapBuilder
 
 /// `build-region`: blocks and a manifest from source files in the cache.
 @Suite("build-region")
@@ -60,28 +60,12 @@ struct BuildRegionTests {
         report.outcomes.filter { if case .built = $0.status { return true } else { return false } }
     }
 
-    @Test("render draws a map from the manifest of a set of blocks")
-    func rendersAManifest() async throws {
-        let s = try setup()
-        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
-        let manifest = s.output.appendingPathComponent("manifest.json")
-        let set = try StoreSet(manifestURL: manifest)
-        let box = try #require(set.boundingBox)
-        let png = s.output.deletingLastPathComponent().appendingPathComponent("m.png")
-        let centre = Coordinate(latitude: (box.south + box.north) / 2, longitude: (box.west + box.east) / 2)
-        let report = try ToolRunner.render(
-            store: manifest, request: RenderRequest(center: centre, zoom: 9, width: 200, height: 150, scale: 1, style: .standard, output: png.path))
-        #expect(Array(try Data(contentsOf: png).prefix(4)) == [0x89, 0x50, 0x4E, 0x47])
-        #expect(report.pixelWidth == 200 && report.cellCount > 0)
-    }
-
     @Test("The blocks of an area are built, listed in a manifest, and can be read as one map")
     func firstRun() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
         var seen: [BlockOutcome] = []
-        let report = try await ToolRunner.buildRegion(request(s), catalog: s.catalog) { seen.append($0) }
+        let report = try await MapBuilder.buildRegion(request(s), catalog: s.catalog) { seen.append($0) }
         #expect(report.outcomes.count >= 1 && seen.count == report.outcomes.count)
         #expect(!built(report).isEmpty)
         #expect(built(report).allSatisfy { $0.regions == ["tiny"] })
@@ -108,15 +92,15 @@ struct BuildRegionTests {
     func resume() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        let first = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let first = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         let manifest = try Data(contentsOf: first.manifestURL)
-        let second = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let second = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         #expect(built(second).isEmpty)
         #expect(second.outcomes.filter { $0.status == .upToDate }.count == built(first).count)
         #expect(try Data(contentsOf: second.manifestURL) == manifest, "nothing was written again")
 
         try put(s.cacheStore, etag: "\"e2\"")   // the source file was replaced
-        let third = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let third = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         #expect(built(third).count == built(first).count && !built(third).isEmpty)
         #expect(try StoreSet(manifestURL: third.manifestURL).manifest.blocks[0].sources[0].etag == "\"e2\"")
     }
@@ -125,27 +109,27 @@ struct BuildRegionTests {
     func tilesArea() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        let first = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let first = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         let one = try #require(built(first).first)
         let tile = try #require(TileID(zoom: 8, x: one.x, y: one.y))
         var again = request(s, area: .tiles([tile]))
         again.rebuild = true
-        let second = try await ToolRunner.buildRegion(again, catalog: s.catalog)
+        let second = try await MapBuilder.buildRegion(again, catalog: s.catalog)
         #expect(second.outcomes.count == 1 && built(second).count == 1 && built(second).first?.x == one.x && built(second).first?.y == one.y)
 
         let wrongZoom = try #require(TileID(zoom: 9, x: 1, y: 1))
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildRegion(request(s, area: .tiles([wrongZoom])), catalog: s.catalog) }
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildRegion(request(s, area: .tiles([])), catalog: s.catalog) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildRegion(request(s, area: .tiles([wrongZoom])), catalog: s.catalog) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildRegion(request(s, area: .tiles([])), catalog: s.catalog) }
     }
 
     @Test("With rebuild, blocks that are built from the same files are built again")
     func rebuildFlag() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        let first = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let first = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         var again = request(s)
         again.rebuild = true
-        let second = try await ToolRunner.buildRegion(again, catalog: s.catalog)
+        let second = try await MapBuilder.buildRegion(again, catalog: s.catalog)
         #expect(built(second).count == built(first).count && !built(second).isEmpty)
         #expect(!second.outcomes.contains { $0.status == .upToDate })
     }
@@ -154,7 +138,7 @@ struct BuildRegionTests {
     func rebuildingABlockRemovesTheLevels() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        _ = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         // A level made from the block (its content does not matter here: the file is a copy of the block).
         var manifest = try StoreManifest(json: Data(contentsOf: s.output.appendingPathComponent("manifest.json")))
         let block = try #require(manifest.blocks.first)
@@ -172,11 +156,11 @@ struct BuildRegionTests {
         #expect(FileManager.default.fileExists(atPath: levelsFolder.path))
 
         // A run that leaves everything as it is keeps the levels.
-        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        _ = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         #expect(FileManager.default.fileExists(atPath: levelsFolder.path))
 
         try put(s.cacheStore, etag: "\"e2\"")   // the source file was replaced: the blocks are built again
-        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        _ = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         #expect(!FileManager.default.fileExists(atPath: levelsFolder.path))
         let after = try StoreManifest(json: Data(contentsOf: s.output.appendingPathComponent("manifest.json")))
         #expect(after.levels.isEmpty && after.version == 1 && after.staleLevelBlocks().isEmpty)
@@ -186,10 +170,10 @@ struct BuildRegionTests {
     func damagedBlock() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        let first = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let first = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         let manifest = try StoreManifest(json: Data(contentsOf: first.manifestURL))
         try Data("short".utf8).write(to: s.output.appendingPathComponent(manifest.blocks[0].file))
-        let again = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let again = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         #expect(built(again).count == 1)
         _ = try StoreSet(manifestURL: again.manifestURL).file(containing: TileID.containing(Coordinate(latitude: 47.5, longitude: 9.5), zoom: 13)!)
     }
@@ -199,9 +183,9 @@ struct BuildRegionTests {
         let s = try setup(install: false)
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
         do {
-            _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+            _ = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
             Issue.record("it did not refuse")
-        } catch let error as ToolError {
+        } catch let error as MapBuilderError {
             #expect("\(error)".contains("Tiny (tiny)") && "\(error)".contains("geomapkit fetch"))
         }
         #expect(!FileManager.default.fileExists(atPath: s.output.appendingPathComponent("manifest.json").path))
@@ -211,7 +195,7 @@ struct BuildRegionTests {
     func becomesEmpty() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        let first = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let first = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         let before = try StoreManifest(json: Data(contentsOf: first.manifestURL))
         let files = before.blocks.map { s.output.appendingPathComponent($0.file) }
         #expect(!before.blocks.isEmpty && files.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
@@ -221,7 +205,7 @@ struct BuildRegionTests {
         let part = try s.cacheStore.preparePart(regionID: "tiny", etag: "\"e9\"", keepBytes: false)
         try data.write(to: part)
         try s.cacheStore.install(regionID: "tiny", from: tinyURL, info: RemoteFileInfo(size: Int64(data.count), etag: "\"e9\"", lastModified: "Tue"))
-        let again = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let again = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         #expect(built(again).isEmpty && again.outcomes.allSatisfy { $0.status == .empty })
         let after = try StoreManifest(json: Data(contentsOf: again.manifestURL))
         #expect(after.blocks.isEmpty, "the manifest no longer lists a block that has no file")
@@ -232,13 +216,13 @@ struct BuildRegionTests {
     func tooManyBlocks() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        await #expect(throws: ToolError.self) {
-            try await ToolRunner.buildRegion(request(s, area: .box(BoundingBox(south: -60, west: -170, north: 70, east: 170))), catalog: s.catalog)
+        await #expect(throws: MapBuilderError.self) {
+            try await MapBuilder.buildRegion(request(s, area: .box(BoundingBox(south: -60, west: -170, north: 70, east: 170))), catalog: s.catalog)
         }
         // The same area is fine at a low zoom, up to the limit of blocks.
         var coarse = request(s, area: .box(BoundingBox(south: 46, west: 8, north: 49, east: 10.5)))
         coarse.blockZoom = 6
-        let report = try await ToolRunner.buildRegion(coarse, catalog: s.catalog)
+        let report = try await MapBuilder.buildRegion(coarse, catalog: s.catalog)
         #expect(!report.outcomes.isEmpty)
     }
 
@@ -246,15 +230,15 @@ struct BuildRegionTests {
     func otherProfile() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        _ = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         let manifestURL = s.output.appendingPathComponent("manifest.json")
         #expect(FileManager.default.fileExists(atPath: manifestURL.path))
         // The Watch copy of this tiny map has nothing to store (its way is not among the Watch classes): the full manifest must not
         // be left in place as if it were the result.
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildRegion(request(s, profile: .watch), catalog: s.catalog) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildRegion(request(s, profile: .watch), catalog: s.catalog) }
         #expect(!FileManager.default.fileExists(atPath: manifestURL.path), "the manifest of the other build is gone")
         // And a full run again starts from scratch.
-        let again = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let again = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         #expect(!built(again).isEmpty && again.outcomes.allSatisfy { $0.status != .upToDate })
     }
 
@@ -263,8 +247,8 @@ struct BuildRegionTests {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
         let other = s.output.deletingLastPathComponent().appendingPathComponent("out2")
-        let one = try await ToolRunner.buildRegion(request(s, jobs: 1), catalog: s.catalog)
-        let three = try await ToolRunner.buildRegion(request(s, jobs: 3, output: other), catalog: s.catalog)
+        let one = try await MapBuilder.buildRegion(request(s, jobs: 1), catalog: s.catalog)
+        let three = try await MapBuilder.buildRegion(request(s, jobs: 3, output: other), catalog: s.catalog)
         let a = try StoreManifest(json: Data(contentsOf: one.manifestURL)), b = try StoreManifest(json: Data(contentsOf: three.manifestURL))
         #expect(a.blocks.map { [$0.x, $0.y] } == b.blocks.map { [$0.x, $0.y] })
         for (x, y) in zip(a.blocks, b.blocks) {
@@ -276,14 +260,14 @@ struct BuildRegionTests {
     func byRegion() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        let report = try await ToolRunner.buildRegion(request(s, area: .regions(["tiny"])), catalog: s.catalog)
+        let report = try await MapBuilder.buildRegion(request(s, area: .regions(["tiny"])), catalog: s.catalog)
         #expect(report.outcomes.count > 4)
         #expect(report.outcomes.allSatisfy { outcome in
             let tile = TileID(zoom: 8, x: outcome.x, y: outcome.y)!
             return tile.southEast.longitude > 8 && tile.northWest.longitude < 10.5 && tile.northWest.latitude > 46 && tile.southEast.latitude < 49
         })
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildRegion(request(s, area: .regions(["narnia"])), catalog: s.catalog) }
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildRegion(request(s, area: .regions([])), catalog: s.catalog) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildRegion(request(s, area: .regions(["narnia"])), catalog: s.catalog) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildRegion(request(s, area: .regions([])), catalog: s.catalog) }
     }
 
     @Test("Bad requests are refused")
@@ -292,13 +276,13 @@ struct BuildRegionTests {
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
         var bad = request(s)
         bad.blockZoom = 14
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildRegion(bad, catalog: s.catalog) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildRegion(bad, catalog: s.catalog) }
         bad = request(s)
         bad.margin = -1
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildRegion(bad, catalog: s.catalog) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildRegion(bad, catalog: s.catalog) }
         // An area that no region covers.
-        await #expect(throws: ToolError.self) {
-            try await ToolRunner.buildRegion(request(s, area: .box(BoundingBox(south: -10, west: 100, north: -9, east: 101))), catalog: s.catalog)
+        await #expect(throws: MapBuilderError.self) {
+            try await MapBuilder.buildRegion(request(s, area: .box(BoundingBox(south: -10, west: 100, north: -9, east: 101))), catalog: s.catalog)
         }
     }
 
@@ -306,29 +290,13 @@ struct BuildRegionTests {
     func openSeaPass() async throws {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
-        let with = try await ToolRunner.buildRegion(request(s), catalog: s.catalog)
+        let with = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
         let sea = try #require(with.openSea)
         #expect(!sea.changed)
         let other = s.output.deletingLastPathComponent().appendingPathComponent("out2")
         var off = request(s, output: other)
         off.fillsOpenSea = false
-        #expect(try await ToolRunner.buildRegion(off, catalog: s.catalog).openSea == nil)
-    }
-
-    @Test("The progress lines and the summary read as text")
-    func text() {
-        let built = BlockOutcome(x: 134, y: 74, status: .built(bytes: 110_000_000, cells: 1_332, seconds: 84.2), regions: ["sweden", "ostlandet"])
-        #expect(ReportFormatter.line(for: built, blockZoom: 8) == "block 8/134/74: built, 110.0 MB, 1,332 cells, 84.2 s (sweden, ostlandet)")
-        #expect(ReportFormatter.line(for: BlockOutcome(x: 1, y: 2, status: .upToDate, regions: []), blockZoom: 8) == "block 8/1/2: up to date, left as it is")
-        #expect(ReportFormatter.line(for: BlockOutcome(x: 1, y: 2, status: .empty, regions: ["x"]), blockZoom: 8).contains("nothing to store"))
-        let report = BlockRunReport(
-            outcomes: [built, BlockOutcome(x: 1, y: 2, status: .empty, regions: [])], manifestURL: URL(fileURLWithPath: "/out/manifest.json"),
-            totalTime: .seconds(90), peakFootprint: 800_000_000, warnings: ["Sweden is old."],
-            openSea: OpenSea.Report(created: [.init(x: 1, y: 2)], extended: [.init(x: 3, y: 4), .init(x: 5, y: 6)], conflicting: [.init(x: 7, y: 8)]))
-        let text = ReportFormatter.text(for: report, blockZoom: 8)
-        #expect(text.contains("Open sea: 1 blocks added, 2 completed with sea, 1 left because their neighbours disagree"))
-        #expect(text.contains("2 in the area, 1 built (110.0 MB), 0 up to date, 1 with nothing to store"))
-        #expect(text.contains("/out/manifest.json") && text.contains("warning: Sweden is old."))
+        #expect(try await MapBuilder.buildRegion(off, catalog: s.catalog).openSea == nil)
     }
 
     @Test("The progress of the run counts the blocks, ends complete and never shows more running than jobs")
@@ -336,14 +304,14 @@ struct BuildRegionTests {
         let s = try setup()
         defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
         var states: [BlockProgress] = []
-        let report = try await ToolRunner.buildRegion(request(s, jobs: 2), catalog: s.catalog, onProgress: { states.append($0) })
+        let report = try await MapBuilder.buildRegion(request(s, jobs: 2), catalog: s.catalog, onProgress: { states.append($0) })
         let last = try #require(states.last)
         #expect(last.total >= built(report).count && last.built == built(report).count && last.finished == last.total && last.running == 0 && last.fraction == 1)
         #expect(states.allSatisfy { $0.running <= 2 && $0.finished <= $0.total })
         #expect(states.map(\.finished) == states.map(\.finished).sorted())
         // A second run leaves the built blocks as they are: they count as finished at once (a block with nothing to store is cut again).
         var again: [BlockProgress] = []
-        _ = try await ToolRunner.buildRegion(request(s), catalog: s.catalog, onProgress: { again.append($0) })
+        _ = try await MapBuilder.buildRegion(request(s), catalog: s.catalog, onProgress: { again.append($0) })
         let cutAgain = last.total - built(report).count
         #expect(again.first?.finished == built(report).count && again.last?.finished == again.last?.total)
         #expect(again.map(\.running).max() == (cutAgain > 0 ? 1 : 0))

@@ -3,9 +3,9 @@ import Foundation
 import GeoCore
 import MapStyle
 import Testing
-import ToolSupport
 
-@testable import ToolCommands
+
+@testable import MapBuilder
 
 /// `build-levels`: coarse levels added to a set of blocks.
 @Suite("build-levels")
@@ -80,7 +80,7 @@ struct BuildLevelsTests {
         let folder = try blocks()
         defer { try? FileManager.default.removeItem(at: folder) }
         var seen: [LevelOutcome] = []
-        let report = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]), progress: { seen.append($0) })
+        let report = try await MapBuilder.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]), progress: { seen.append($0) })
         #expect(report.outcomes.count == 2 && built(report) == 2 && seen.count == 2)
         #expect(report.openAreaChains == 0 && report.areaEndsJoined == 0 && report.outcomes.allSatisfy { $0.openAreaChains == 0 })
         let manifest = try read(folder)
@@ -104,11 +104,11 @@ struct BuildLevelsTests {
     func resumesAndRebuilds() async throws {
         let folder = try blocks()
         defer { try? FileManager.default.removeItem(at: folder) }
-        _ = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]))
-        let again = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]))
+        _ = try await MapBuilder.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]))
+        let again = try await MapBuilder.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]))
         #expect(built(again) == 0 && again.outcomes.allSatisfy { $0.status == .upToDate })
         // --rebuild builds every level block again, also where nothing changed.
-        let forced = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6], rebuild: true))
+        let forced = try await MapBuilder.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6], rebuild: true))
         #expect(built(forced) == again.outcomes.count && !forced.outcomes.contains { $0.status == .upToDate })
 
         // The base block is another build (another size, another content): its levels are out of date.
@@ -119,12 +119,12 @@ struct BuildLevelsTests {
         var manifest = try read(folder)
         manifest.blocks[0].bytes = Int64(newFile.count)
         try manifest.jsonData().write(to: folder.appendingPathComponent("manifest.json"))
-        let rebuilt = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]))
+        let rebuilt = try await MapBuilder.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]))
         #expect(built(rebuilt) == 2)
 
         // The Watch style shows no road at zoom 8: the class set of the level changes, the level has nothing, and its file goes.
         let oldFile = try #require(try read(folder).levels.first { $0.topZoom == 8 }?.blocks.first?.file)
-        let watch = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8], style: .watch))
+        let watch = try await MapBuilder.buildLevels(LevelRequest(directory: folder, topZooms: [8], style: .watch))
         #expect(watch.outcomes.map(\.status) == [.empty])
         #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent(oldFile).path))
         #expect(try read(folder).levels.map(\.topZoom) == [6], "the level that was not asked for stays")
@@ -135,7 +135,7 @@ struct BuildLevelsTests {
         let folder = try blocks()
         defer { try? FileManager.default.removeItem(at: folder) }
         #expect(LevelRequest(directory: folder).topZooms == [9, 8, 7, 6, 5, 4, 3])
-        _ = try await ToolRunner.buildLevels(LevelRequest(directory: folder))
+        _ = try await MapBuilder.buildLevels(LevelRequest(directory: folder))
         let levels = try read(folder).levels
         // The road of the test set is 0.13 degree long: three pixels at the top zoom 5 are 0.1318 degree, so the levels 5 to 3 hold nothing.
         #expect(levels.map(\.topZoom) == [9, 8, 7, 6] && levels.map(\.storageZoom) == [11, 10, 9, 8] && levels.map(\.blockZoom) == [8, 8, 8, 8])
@@ -146,26 +146,15 @@ struct BuildLevelsTests {
         let folder = try blocks()
         defer { try? FileManager.default.removeItem(at: folder) }
         let empty = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-none-\(UUID().uuidString)")
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildLevels(LevelRequest(directory: empty)) }
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [])) }
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8, 8])) }
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [11])) }
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildLevels(LevelRequest(directory: folder, margin: -1)) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildLevels(LevelRequest(directory: empty)) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildLevels(LevelRequest(directory: folder, topZooms: [])) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildLevels(LevelRequest(directory: folder, topZooms: [8, 8])) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildLevels(LevelRequest(directory: folder, topZooms: [11])) }
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildLevels(LevelRequest(directory: folder, margin: -1)) }
         // A Watch copy has no overview band to make levels from.
         let watch = try blocks(profileBands: [.mid, .detail])
         defer { try? FileManager.default.removeItem(at: watch) }
-        await #expect(throws: ToolError.self) { try await ToolRunner.buildLevels(LevelRequest(directory: watch)) }
-    }
-
-    @Test("The report and the lines are readable")
-    func formats() async throws {
-        let folder = try blocks()
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let report = try await ToolRunner.buildLevels(LevelRequest(directory: folder, topZooms: [8]))
-        let text = ReportFormatter.text(for: report)
-        #expect(text.contains("Level blocks: 1, 1 built") && text.contains("level 8 (cells of zoom 10): 1 block,"))
-        #expect(text.contains("Area chains that did not close (drawn as outlines): 0"))
-        #expect(ReportFormatter.line(for: report.outcomes[0]).hasPrefix("level 8 block 140/75: built"))
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildLevels(LevelRequest(directory: watch)) }
     }
 
     @Test("Only the level blocks that read a changed base block are built again, and a base block that is gone takes its level blocks")
@@ -174,7 +163,7 @@ struct BuildLevelsTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         // With no margin every level block reads its own base block only.
         let request = LevelRequest(directory: folder, topZooms: [8, 6], margin: 0)
-        let first = try await ToolRunner.buildLevels(request)
+        let first = try await MapBuilder.buildLevels(request)
         #expect(built(first) == 4)
 
         // Another build of block 141 only.
@@ -187,7 +176,7 @@ struct BuildLevelsTests {
         manifest.blocks[manifest.blocks.firstIndex { $0.x == 141 }!].bytes = Int64(changed.count)
         #expect(Set(manifest.staleLevelBlocks().map(\.x)) == [141], "the levels made from block 141 are stale, the others are not")
         try manifest.jsonData().write(to: folder.appendingPathComponent("manifest.json"))
-        let second = try await ToolRunner.buildLevels(request)
+        let second = try await MapBuilder.buildLevels(request)
         #expect(built(second) == 2 && second.outcomes.filter { $0.x == 140 }.allSatisfy { $0.status == .upToDate })
 
         // Block 141 is gone: its level blocks and files go.
@@ -196,7 +185,7 @@ struct BuildLevelsTests {
         manifest = try read(folder)
         manifest.blocks.removeAll { $0.x == 141 }
         try manifest.jsonData().write(to: folder.appendingPathComponent("manifest.json"))
-        let third = try await ToolRunner.buildLevels(request)
+        let third = try await MapBuilder.buildLevels(request)
         #expect(built(third) == 0 && third.outcomes.count == 2)
         #expect(try read(folder).levels.allSatisfy { $0.blocks.map(\.x) == [140] })
         for file in files { #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent(file).path)) }
@@ -206,8 +195,8 @@ struct BuildLevelsTests {
     func jobsGiveTheSameFiles() async throws {
         let one = try blocks(secondBlock: true), two = try blocks(secondBlock: true)
         defer { for folder in [one, two] { try? FileManager.default.removeItem(at: folder) } }
-        _ = try await ToolRunner.buildLevels(LevelRequest(directory: one, topZooms: [8, 7, 6], jobs: 1))
-        _ = try await ToolRunner.buildLevels(LevelRequest(directory: two, topZooms: [8, 7, 6], jobs: 2))
+        _ = try await MapBuilder.buildLevels(LevelRequest(directory: one, topZooms: [8, 7, 6], jobs: 1))
+        _ = try await MapBuilder.buildLevels(LevelRequest(directory: two, topZooms: [8, 7, 6], jobs: 2))
         let a = try read(one).levels, b = try read(two).levels
         #expect(a.map(\.topZoom) == b.map(\.topZoom) && a.count == 3)
         for (levelA, levelB) in zip(a, b) {

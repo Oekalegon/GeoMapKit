@@ -1,3 +1,4 @@
+import MapBuilder
 import FeatureStore
 import GeoCore
 import FeatureStoreBuilder

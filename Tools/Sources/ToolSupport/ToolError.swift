@@ -1,8 +1,4 @@
-/// An error shown to the user of a command-line tool.
-public struct ToolError: Error, CustomStringConvertible, Equatable {
-    public let description: String
+import MapBuilder
 
-    public init(_ description: String) {
-        self.description = description
-    }
-}
+/// An error shown to the user of a command-line tool. It is the error of the build pipeline, so the tool prints both the same way.
+public typealias ToolError = MapBuilderError

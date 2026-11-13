@@ -1,3 +1,4 @@
+import MapBuilder
 import Foundation
 import FeatureStore
 import FeatureStoreBuilder

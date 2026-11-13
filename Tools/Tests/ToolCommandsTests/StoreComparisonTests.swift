@@ -1,3 +1,4 @@
+import MapBuilder
 import FeatureStore
 import FeatureStoreBuilder
 import Foundation
@@ -71,7 +72,7 @@ struct StoreComparisonTests {
                     outline: [RegionPolygon(outer: ring)])])
             }
         }
-        let report = try await ToolRunner.buildRegion(
+        let report = try await MapBuilder.buildRegion(
             BlockRequest(area: .box(area), output: root.appendingPathComponent("blocks"), cacheDirectory: root.appendingPathComponent("cache")),
             catalog: Catalog())
         let result = try ToolRunner.compareStores(file, report.manifestURL)

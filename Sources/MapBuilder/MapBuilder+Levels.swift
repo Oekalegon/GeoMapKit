@@ -3,9 +3,9 @@ import FeatureStoreBuilder
 import Foundation
 import GeoCore
 import MapStyle
-import ToolSupport
 
-extension ToolRunner {
+
+extension MapBuilder {
     /// Builds the coarse levels of a set of blocks (question 50).
     ///
     /// Reads `manifest.json` in the folder, derives the files of each level with ``LevelBuilder`` and writes them to `levels/<top
@@ -17,13 +17,13 @@ extension ToolRunner {
     ///   - request: The folder, the levels, the number of jobs and the margin.
     ///   - progress: Called with each level block when it is done.
     /// - Returns: What was built, the size of each level and the time.
-    /// - Throws: ``ToolError`` for a folder without a manifest, blocks without an overview band and bad arguments, and the errors of
+    /// - Throws: ``MapBuilderError`` for a folder without a manifest, blocks without an overview band and bad arguments, and the errors of
     ///   building and writing.
     public static func buildLevels(_ request: LevelRequest, progress: (LevelOutcome) -> Void = { _ in }) async throws -> LevelRunReport {
         guard !request.topZooms.isEmpty, Set(request.topZooms).count == request.topZooms.count,
             request.topZooms.allSatisfy({ StoreManifest.Level.topZooms.contains($0) })
-        else { throw ToolError("--levels expects different top zooms from \(StoreManifest.Level.topZooms.lowerBound) to \(StoreManifest.Level.topZooms.upperBound)") }
-        guard request.margin >= 0 else { throw ToolError("--margin expects 0 or more cells") }
+        else { throw MapBuilderError("--levels expects different top zooms from \(StoreManifest.Level.topZooms.lowerBound) to \(StoreManifest.Level.topZooms.upperBound)") }
+        guard request.margin >= 0 else { throw MapBuilderError("--margin expects 0 or more cells") }
         let clock = ContinuousClock()
         let started = clock.now
         let directory = request.directory
@@ -32,10 +32,10 @@ extension ToolRunner {
         do {
             manifest = try StoreManifest(json: try Data(contentsOf: manifestURL))
         } catch {
-            throw ToolError("Cannot read \(manifestURL.path): \(error). Run 'geomapkit build-region' first.")
+            throw MapBuilderError("Cannot read \(manifestURL.path): \(error). Run 'geomapkit build-region' first.")
         }
         guard manifest.bands.contains(Int(ZoomBand.overview.rawValue)) else {
-            throw ToolError("The blocks hold no overview band (profile \(manifest.profile)); the levels are made from it.")
+            throw MapBuilderError("The blocks hold no overview band (profile \(manifest.profile)); the levels are made from it.")
         }
         var base = manifest
         base.levels = []
@@ -53,7 +53,7 @@ extension ToolRunner {
             let blockZoom = min(topZoom + 2, manifest.blockZoom)
             let classes = request.style.visibleClassIDs(atZoom: Double(topZoom)).map(Int.init).sorted()
             guard let spec = try? LevelSpec(topZoom: topZoom, classes: Set(classes.map(UInt8.init))) else {
-                throw ToolError("The top zoom \(topZoom) is not valid")
+                throw MapBuilderError("The top zoom \(topZoom) is not valid")
             }
             var level = states[topZoom]
             if let old = level, old.classes != classes || old.blockZoom != blockZoom {
@@ -113,10 +113,10 @@ extension ToolRunner {
                     try Task.checkCancellation()
                     do {
                         return try Self.buildLevelBlock(task, base: baseManifest, directory: directory, margin: margin)
-                    } catch let error as ToolError {
+                    } catch let error as MapBuilderError {
                         throw error
                     } catch {
-                        throw ToolError("Level \(task.spec.topZoom) block \(task.tile.x)/\(task.tile.y) failed: \(error)")
+                        throw MapBuilderError("Level \(task.spec.topZoom) block \(task.tile.x)/\(task.tile.y) failed: \(error)")
                     }
                 }
             }
@@ -199,7 +199,7 @@ extension ToolRunner {
             try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             try result.data.write(to: target, options: .atomic)
         } catch {
-            throw ToolError("Cannot write \(target.path): \(error.localizedDescription)")
+            throw MapBuilderError("Cannot write \(target.path): \(error.localizedDescription)")
         }
         let elapsed = clock.now - started
         let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
@@ -219,7 +219,7 @@ extension ToolRunner {
         do {
             try manifest.jsonData().write(to: url, options: .atomic)
         } catch {
-            throw ToolError("Cannot write \(url.path): \(error.localizedDescription)")
+            throw MapBuilderError("Cannot write \(url.path): \(error.localizedDescription)")
         }
     }
 }
