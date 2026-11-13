@@ -36,6 +36,12 @@ final class MapBuildModel: Identifiable {
         case downloadAgain
     }
 
+    /// A map that regions are added to: the run builds into its folder and keeps its name, instead of making a map of its own.
+    struct Target: Equatable {
+        let folder: URL
+        let name: String
+    }
+
     /// The picker: the list, the selection, the plan and the download.
     let picker: RegionPickerModel
     private(set) var stage: Stage = .idle
@@ -52,6 +58,11 @@ final class MapBuildModel: Identifiable {
     private(set) var rebuildPending = false
     /// The folder the run in progress builds into, or `nil` when none runs: the library does not delete a map while it is written.
     private(set) var workingFolder: URL?
+    /// The map the next run adds its regions to, chosen before the picker opens (see ``setTarget(_:)``).
+    private(set) var target: Target?
+    /// The map the run in progress, or the stopped one, adds its regions to: kept through Cancel and Continue, and dropped when the end of
+    /// the run is dismissed.
+    private(set) var runTarget: Target?
 
     private let catalog: any RegionCatalog
     private let mapsRoot: URL
@@ -103,6 +114,12 @@ final class MapBuildModel: Identifiable {
         .make(stage: stage, downloadFraction: downloadFraction, blocks: blocks, levelBlocksDone: levelBlocksDone)
     }
 
+    /// Sets the map the next run adds to, or `nil` for a map of its own. Does nothing while a run is going or its end is shown.
+    func setTarget(_ target: Target?) {
+        guard stage == .idle else { return }
+        self.target = target
+    }
+
     // MARK: Run
 
     /// Starts the run for the regions that are selected, or goes on with one that was stopped.
@@ -114,9 +131,11 @@ final class MapBuildModel: Identifiable {
         let regions = picker.effectiveRegions
         guard !regions.isEmpty else { return }
         self.mode = mode
+        // The map to add to is taken once; Continue after a cancel keeps it.
+        if let target { runTarget = target; self.target = nil }
         if mode != .normal { rebuildPending = true }
         picker.selectionLocked = true
-        workingFolder = Self.folder(for: regions.map(\.id), in: mapsRoot)
+        workingFolder = runTarget?.folder ?? Self.folder(for: regions.map(\.id), in: mapsRoot)
         blocks = nil
         levelBlocksDone = 0
         downloadedFiles = false
@@ -139,6 +158,7 @@ final class MapBuildModel: Identifiable {
         // A finished map starts the next choice from nothing; after a cancel or an error the selection stays for Continue.
         if case .done = stage { picker.clearSelection() }
         rebuildPending = false
+        runTarget = nil
         stage = .idle
     }
 
@@ -188,7 +208,7 @@ final class MapBuildModel: Identifiable {
             }
             try Task.checkCancellation()
 
-            let folder = Self.folder(for: regions.map(\.id), in: mapsRoot)
+            let folder = runTarget?.folder ?? Self.folder(for: regions.map(\.id), in: mapsRoot)
             try FileManager.default.createDirectory(at: mapsRoot, withIntermediateDirectories: true)
             stage = .buildingBlocks
             let request = BlockRequest(
@@ -207,7 +227,7 @@ final class MapBuildModel: Identifiable {
             try Task.checkCancellation()
 
             stage = .registering
-            let name = Self.mapName(for: regions)
+            let name = runTarget?.name ?? Self.mapName(for: regions)
             stage = .done(mapID: try register(folder, name), name: name)
             // Only a run that built everything again has finished the rebuild; Continue did not.
             if mode != .normal { rebuildPending = false }

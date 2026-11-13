@@ -21,6 +21,9 @@ struct RegionPickerScreen: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
+            if let target = build.target {
+                Text("Add regions to \u{201C}\(target.name)\u{201D}").font(.headline).padding([.horizontal, .top], 12)
+            }
             TextField("Search regions", text: $model.search)
                 .textFieldStyle(.roundedBorder)
                 .padding([.horizontal, .top], 12)
@@ -31,7 +34,7 @@ struct RegionPickerScreen: View {
         .frame(minWidth: 520, minHeight: 600)
         .task { await model.load() }
         // A run goes on in the background when this screen closes (the status bar shows it); sizes that are still being asked are not wanted.
-        .onDisappear { if !build.isRunning { model.cancelPlan() } }
+        .onDisappear { if !build.isRunning { model.cancelPlan(); build.setTarget(nil) } }
         .confirmationDialog(downloadAgainTitle, isPresented: $askingDownloadAgain, titleVisibility: .visible) {
             Button("Delete the files and download again", role: .destructive) { startRun(.downloadAgain) }
         } message: {

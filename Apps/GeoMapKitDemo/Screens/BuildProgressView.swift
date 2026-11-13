@@ -55,7 +55,8 @@ struct BuildProgressView: View {
         let names: [String]
         if case .ready(let plan) = model.plan { names = plan.items.map { model.displayName(of: $0.region) } }
         else { names = model.effectiveRegions.map(\.name) }
-        return names.isEmpty ? "" : "Regions: " + names.joined(separator: ", ")
+        let adding = build.runTarget.map { "Adding to \u{201C}\($0.name)\u{201D}. " } ?? ""
+        return names.isEmpty ? adding : adding + "Regions: " + names.joined(separator: ", ")
     }
 
     @ViewBuilder private var buttons: some View {
