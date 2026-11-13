@@ -22,6 +22,8 @@ struct RegionPickerScreen: View {
         }
         .frame(minWidth: 520, minHeight: 600)
         .task { await model.load() }
+        // A download belongs to this screen: when it goes away the download stops (what arrived is kept).
+        .onDisappear { model.cancelDownload() }
     }
 
     @ViewBuilder private var content: some View {
@@ -40,6 +42,7 @@ struct RegionPickerScreen: View {
                     Text(node.region.name)
                 }
             }
+            .disabled(model.download == .downloading)
         }
     }
 
@@ -60,7 +63,7 @@ struct RegionPickerScreen: View {
                 }
                 if model.download == .downloading { Button("Cancel") { model.cancelDownload() } }
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction).disabled(model.download == .downloading)
             }
         }
     }

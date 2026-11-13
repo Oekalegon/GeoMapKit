@@ -33,7 +33,7 @@ final class RegionPickerModel: Identifiable {
     }
 
     /// The free space wanted for each byte of source files, because the blocks and the levels are written next to them. A first
-    /// estimate, to be replaced by a measured ratio.
+    /// estimate, not measured per source size (Østlandet and Sweden gave 3.9 GB of blocks), to be replaced by a measured ratio.
     static let spaceFactor = 2.5
 
     private(set) var list: ListState = .idle
@@ -93,12 +93,14 @@ final class RegionPickerModel: Identifiable {
 
     func isSelected(_ id: String) -> Bool { selection.contains(id) }
 
-    /// Selects or deselects a region. Any plan made before is dropped, because it no longer matches.
+    /// Selects or deselects a region. Any plan made before is dropped, because it no longer matches. While a download runs the
+    /// selection is left as it is, because the screen would no longer show what is being downloaded.
     func setSelected(_ id: String, _ on: Bool) {
+        guard download != .downloading else { return }
         if on { selection.insert(id) } else { selection.remove(id) }
         planTask?.cancel()
         plan = .none
-        if download != .downloading { download = .idle }
+        download = .idle
     }
 
     /// The selected regions that are to be downloaded: a region below a selected one is part of that one's file and is left out.
@@ -153,7 +155,7 @@ final class RegionPickerModel: Identifiable {
         let total = plan.items.reduce(Int64(0)) { $0 + ($1.size ?? 0) }
         let wanted = Int64(Double(total) * Self.spaceFactor)
         if total > 0, available < wanted {
-            return "The maps made from these files need about \(Self.size(wanted)) in all; \(Self.size(available)) is free."
+            return "The maps made from these files need roughly \(Self.size(wanted)) in all; \(Self.size(available)) is free."
         }
         return nil
     }
@@ -171,13 +173,18 @@ final class RegionPickerModel: Identifiable {
                 _ = try await manager.fetch(plan) { id, received, size in
                     Task { @MainActor in self.record(id, received, size) }
                 }
+                // The last updates may still be on their way: every file is complete now.
+                for item in plan.items { self.progress[item.region.id] = (item.size ?? self.progress[item.region.id]?.received ?? 0, item.size) }
                 self.download = .done
                 // The files are held now: the plan is made again, so that it shows them as held.
                 self.plan = .none
             } catch is CancellationError {
                 self.download = .cancelled
+                // The plan is made again so that it knows the bytes that arrived: only then does a new start continue after them.
+                await self.makePlan()
             } catch {
                 self.download = .failed("\(error)")
+                await self.makePlan()
             }
         }
     }
@@ -187,7 +194,7 @@ final class RegionPickerModel: Identifiable {
         progress[id] = (max(received, progress[id]?.received ?? 0), size)
     }
 
-    /// Stops the download. The part of the file that arrived is kept for the next start.
+    /// Stops the download. The part of the file that arrived is kept, and the plan is made again so that the next start continues after it.
     func cancelDownload() { downloadTask?.cancel() }
 
     /// Waits until the download has ended (for tests).

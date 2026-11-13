@@ -37,19 +37,29 @@ struct RegionPickerModelTests {
     /// A network that serves files of a fixed size, or waits until the download is cancelled.
     private struct Network: Downloader {
         var size: Int64 = 3_000
+        /// Waits for a cancel: after one chunk of a new file (a resumed file is completed).
         var waits = false
+        var failsDownload = false
+        var failsMetadata = false
         func metadata(of url: URL, ifNoneMatch etag: String?) async throws -> RemoteMetadata {
-            .info(RemoteFileInfo(size: size, etag: "\"e\""))
+            if failsMetadata { throw URLError(.notConnectedToInternet) }
+            return .info(RemoteFileInfo(size: size, etag: "\"e\""))
         }
         func download(
             from url: URL, to file: URL, resumeFrom offset: Int64, ifRange etag: String?, progress: @Sendable (Int64) -> Void
         ) async throws -> RemoteFileInfo {
-            if waits { try await Task.sleep(for: .seconds(60)) }
+            if failsDownload { throw URLError(.networkConnectionLost) }
             let handle = try FileHandle(forWritingTo: file)
             defer { try? handle.close() }
             try handle.seekToEnd()
-            for _ in 0..<3 {
-                try handle.write(contentsOf: Data(count: Int(size) / 3))
+            let chunk = Int(size) / 3
+            if waits && offset == 0 {
+                try handle.write(contentsOf: Data(count: chunk))
+                progress(Int64(chunk))
+                try await Task.sleep(for: .seconds(60))
+            }
+            while try Int64(handle.offset()) < size {
+                try handle.write(contentsOf: Data(count: chunk))
                 progress(try Int64(handle.offset()))
             }
             return RemoteFileInfo(size: size, etag: "\"e\"")
@@ -140,7 +150,7 @@ struct RegionPickerModelTests {
         #expect(plenty.model.spaceNote(for: wide) == nil)
         let tight = make(free: 2_000_000_000)
         defer { try? FileManager.default.removeItem(at: tight.folder) }
-        #expect(tight.model.spaceNote(for: wide)?.contains("need about 2.5 GB") == true)
+        #expect(tight.model.spaceNote(for: wide)?.contains("need roughly 2.5 GB") == true)
         let none = make(free: 500_000_000)
         defer { try? FileManager.default.removeItem(at: none.folder) }
         #expect(none.model.spaceNote(for: wide)?.contains("will be refused") == true)
@@ -185,5 +195,86 @@ struct RegionPickerModelTests {
         await model.load()
         guard case .failed = model.list else { Issue.record("it did not fail"); return }
         #expect(model.roots.isEmpty)
+    }
+
+    /// Waits until the download has reported some bytes, so that a cancel comes after them.
+    private func waitForBytes(_ model: RegionPickerModel) async {
+        for _ in 0..<500 where model.progress.isEmpty { try? await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    @Test("A cancelled download is planned again, and the next start continues after the bytes that arrived")
+    func resumes() async throws {
+        let (model, cache, folder) = make(network: Network(waits: true))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await model.load()
+        model.setSelected("europe/belgium", true)
+        await model.makePlan()
+        model.startDownload()
+        await waitForBytes(model)
+        model.cancelDownload()
+        await model.waitForDownload()
+        #expect(model.download == .cancelled)
+        guard case .ready(let plan) = model.plan else { Issue.record("no plan after the cancel: \(model.plan)"); return }
+        #expect(plan.items.first?.alreadyDownloaded == 1_000, "the plan knows the bytes that arrived")
+        #expect(plan.bytesToDownload == 2_000)
+        model.startDownload()
+        await model.waitForDownload()
+        #expect(model.download == .done)
+        #expect(cache.status(ofRegionID: "europe/belgium").status != .missing)
+        let size = cache.partialDownload(regionID: "europe/belgium")?.bytes ?? 0
+        #expect(size == 0, "the part file became the file")
+        #expect(model.progress["europe/belgium"]?.received == 3_000)
+    }
+
+    @Test("A failed download says so, and is planned again")
+    func downloadFails() async {
+        let (model, _, folder) = make(network: Network(failsDownload: true))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await model.load()
+        model.setSelected("europe/belgium", true)
+        await model.makePlan()
+        model.startDownload()
+        await model.waitForDownload()
+        guard case .failed = model.download else { Issue.record("it did not fail: \(model.download)"); return }
+        guard case .ready = model.plan else { Issue.record("no plan after the failure: \(model.plan)"); return }
+    }
+
+    @Test("Sizes that cannot be asked are reported, not a plan")
+    func planFails() async {
+        let (model, _, folder) = make(network: Network(failsMetadata: true))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await model.load()
+        model.setSelected("europe/belgium", true)
+        await model.makePlan()
+        guard case .failed = model.plan else { Issue.record("it did not fail: \(model.plan)"); return }
+    }
+
+    @Test("The selection stays as it is while a download runs")
+    func selectionLocked() async {
+        let (model, _, folder) = make(network: Network(waits: true))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await model.load()
+        model.setSelected("europe/belgium", true)
+        await model.makePlan()
+        model.startDownload()
+        model.setSelected("africa", true)
+        #expect(!model.isSelected("africa"))
+        guard case .ready = model.plan else { Issue.record("the plan went away"); return }
+        model.cancelDownload()
+        await model.waitForDownload()
+        model.setSelected("africa", true)
+        #expect(model.isSelected("africa"))
+    }
+
+    @Test("The note says when the maps made from the files would not fit, though the download does")
+    func spaceNoteMapsDoNotFit() {
+        let plan = DownloadPlan(
+            items: [PlanItem(region: Self.region("x", "X", parent: nil), action: .download, size: 1_000_000_000)], coveredShare: 1)
+        let (model, _, folder) = make(free: 2_000_000_000)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        #expect(model.spaceNote(for: plan)?.contains("roughly 2.5 GB") == true)
+        let done = DownloadPlan(
+            items: [PlanItem(region: Self.region("x", "X", parent: nil), action: .useCached, size: 1_000_000_000)], coveredShare: 1)
+        #expect(model.spaceNote(for: done)?.contains("roughly") == true, "files that are held still need room for the maps")
     }
 }

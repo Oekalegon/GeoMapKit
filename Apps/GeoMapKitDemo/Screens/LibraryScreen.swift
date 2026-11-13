@@ -41,6 +41,7 @@ struct LibraryScreen: View {
     @State private var newName = ""
     #if os(macOS)
     @State private var picker: RegionPickerModel?
+    @State private var pickerProblem: String?
     #endif
 
     /// The type of a `.gmk` file, declared by the app (see the project's `Info.plist`).
@@ -128,7 +129,7 @@ struct LibraryScreen: View {
             HStack {
                 Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
                 Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
-                Button { picker = Self.makePicker() } label: { Label("Get maps…", systemImage: "arrow.down.circle") }
+                Button { openPicker() } label: { Label("Get maps…", systemImage: "arrow.down.circle") }
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
@@ -136,13 +137,24 @@ struct LibraryScreen: View {
             .background(.bar)
         }
         .sheet(item: $picker) { RegionPickerScreen(model: $0) }
+        .alert("Get maps", isPresented: Binding(get: { pickerProblem != nil }, set: { if !$0 { pickerProblem = nil } })) {
+            Button("OK") { pickerProblem = nil }
+        } message: { Text(pickerProblem ?? "") }
         #endif
     }
 
     #if os(macOS)
     /// The picker for regions: the Geofabrik list and the source files go to the cache folder of the app.
-    private static func makePicker() -> RegionPickerModel? {
-        guard let directory = try? SourceCache.defaultDirectory() else { return nil }
+    private func openPicker() {
+        do {
+            picker = try Self.makePicker()
+        } catch {
+            pickerProblem = "The folder for the source files cannot be used: \(error)"
+        }
+    }
+
+    private static func makePicker() throws -> RegionPickerModel {
+        let directory = try SourceCache.defaultDirectory()
         let downloader = URLSessionDownloader(userAgent: "GeoMapKitDemo")
         return RegionPickerModel(
             catalog: GeofabrikCatalog(directory: directory, downloader: downloader), downloader: downloader,
