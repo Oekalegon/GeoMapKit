@@ -268,12 +268,13 @@ extension MapBuilder {
     ///
     /// - Parameters:
     ///   - area: The area.
-    ///   - blockZoom: The zoom of the block grid.
-    ///   - margin: The margin of the cut, in degrees.
+    ///   - blockZoom: The zoom of the block grid; the default is the one of ``BlockRequest``, so a request that does not say gets the same files.
+    ///   - margin: The margin of the cut, in degrees; the default is the one of ``BlockRequest``.
     ///   - index: The region index.
     /// - Returns: The regions, sorted by id; empty when no region covers the area.
     /// - Throws: ``MapBuilderError`` for an area that is invalid, too large or names an unknown region.
-    public static func requiredRegions(area: BlockRequest.Area, blockZoom: Int = 8, margin: Double = 0.1, in index: RegionIndex) throws -> [SourceRegion] {
+    public static func requiredRegions(area: BlockRequest.Area, blockZoom: Int = BlockRequest.defaultBlockZoom, margin: Double = BlockRequest.defaultMargin, in index: RegionIndex
+    ) throws -> [SourceRegion] {
         var found: [String: SourceRegion] = [:]
         for task in try plannedBlocks(area: area, blockZoom: blockZoom, margin: margin, in: index) {
             for region in task.regions { found[region.id] = region }

@@ -140,8 +140,14 @@ final class RegionPickerModel: Identifiable {
             do {
                 // Looking up the blocks of a large region takes a while, so it is not done on the main actor.
                 let ids = regions.map(\.id)
-                let needed = try await Task.detached { try MapBuilder.requiredRegions(area: .regions(ids), in: index) }.value
+                // (The lookup itself is not cancellable: a cancel is seen when it is done.) The selected regions come first, the
+                // neighbours after them, each by name. If no region covers anything the selection is planned as it is, and the build
+                // says that nothing covers the area.
+                let found = try await Task.detached { try MapBuilder.requiredRegions(area: .regions(ids), in: index) }.value
                 try Task.checkCancellation()
+                let chosen = Set(ids)
+                let byName: (SourceRegion, SourceRegion) -> Bool = { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                let needed = found.filter { chosen.contains($0.id) }.sorted(by: byName) + found.filter { !chosen.contains($0.id) }.sorted(by: byName)
                 let made = try await manager.plan(for: RegionSelection(regions: needed.isEmpty ? regions : needed, coveredShare: 1))
                 guard !Task.isCancelled else { return }
                 self.plan = .ready(made)
