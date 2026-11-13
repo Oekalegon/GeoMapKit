@@ -58,17 +58,24 @@ public enum OpenSea {
         /// The part of those that touch sea but whose neighbours also showed land or a mixed border (a coastline that was not joined,
         /// or one with no node in the cut). Groups that only touch land, or borders with no evidence, are in `left` only.
         public var conflicting: [Position] = []
+        /// Blocks that have a coast and were given the sea of their empty cells (see ``OpenSea/fillEmptyCells(manifest:folder:now:persist:)``),
+        /// with the number of cells each.
+        public var cellsFilled: [Position: Int] = [:]
 
         /// Creates a report.
-        public init(created: [Position] = [], extended: [Position] = [], left: [Position] = [], conflicting: [Position] = []) {
+        public init(
+            created: [Position] = [], extended: [Position] = [], left: [Position] = [], conflicting: [Position] = [],
+            cellsFilled: [Position: Int] = [:]
+        ) {
             self.created = created
             self.extended = extended
             self.left = left
             self.conflicting = conflicting
+            self.cellsFilled = cellsFilled
         }
 
         /// Whether any block was changed.
-        public var changed: Bool { !created.isEmpty || !extended.isEmpty }
+        public var changed: Bool { !created.isEmpty || !extended.isEmpty || !cellsFilled.isEmpty }
     }
 
     /// Fills the open sea of a block set.
@@ -198,19 +205,20 @@ public enum OpenSea {
 
     // MARK: Looking at blocks
 
-    private enum Side { case west, east, north, south }
-    /// What the cells along a border say about the group: `sea` (a sea square, and no cell without sea), `land` (a cell without sea, and
-    /// no sea square), `conflict` (both), or `noEvidence` (only cells that are partly sea).
+    enum Side { case west, east, north, south }
+    /// What the cells along a border say about the group: `sea` (a sea square, and no cell of land), `land` (a cell of land, that is a cell
+    /// with no sea and a feature that lies only on land, and no sea square), `conflict` (both), or `noEvidence` (only cells that are partly
+    /// sea, or empty).
     private enum Border { case sea, land, conflict, noEvidence }
 
     /// The cells of a block at the storage zoom.
-    private static func cellRange(of position: Position, manifest zoom: (block: Int, storage: Int)) -> (columns: Range<Int>, rows: Range<Int>) {
+    static func cellRange(of position: Position, manifest zoom: (block: Int, storage: Int)) -> (columns: Range<Int>, rows: Range<Int>) {
         let shift = zoom.storage - zoom.block
         return ((position.x << shift)..<((position.x + 1) << shift), (position.y << shift)..<((position.y + 1) << shift))
     }
 
     /// The band to look at in a file: the overview band, or the lowest one it has.
-    private static func lookBand(of file: FeatureStoreFile) -> ZoomBand {
+    static func lookBand(of file: FeatureStoreFile) -> ZoomBand {
         file.bands.contains(.overview) ? .overview : (file.bands.first ?? .overview)
     }
 
@@ -237,7 +245,9 @@ public enum OpenSea {
         for (x, y) in cells {
             guard let cell = TileID(zoom: file.storageZoom, x: x, y: y) else { return .conflict }
             let found = try file.features(in: cell, band: band, classes: [FeatureClass.sea.rawValue])
-            if found.isEmpty { empty += 1 } else if isSquare(found, of: cell) { squares += 1 }
+            // A cell with no sea is land only when something in it lies on land: open sea between islands has no sea square either
+            // (question 62), and says nothing.
+            if found.isEmpty { if try hasLandFeatures(file, cell: cell) { empty += 1 } } else if isSquare(found, of: cell) { squares += 1 }
         }
         switch (squares > 0, empty > 0) {
         case (true, false): return .sea
@@ -248,7 +258,7 @@ public enum OpenSea {
     }
 
     /// Whether the sea of a cell is the cell square and nothing else.
-    private static func isSquare(_ features: [StoredFeature], of cell: TileID) -> Bool {
+    static func isSquare(_ features: [StoredFeature], of cell: TileID) -> Bool {
         guard features.count == 1, features[0].parts.count == 1 else { return false }
         let rect = CellRect(tile: cell)
         var corners = Set<[Int32]>()
@@ -262,19 +272,21 @@ public enum OpenSea {
 
     // MARK: Writing
 
-    private static func seaFeature(for cell: TileID) -> StoredFeature {
+    static func seaFeature(for cell: TileID) -> StoredFeature {
         StoredFeature(
             classID: FeatureClass.sea.rawValue, subclass: 0, kind: .area, objectType: .way, objectID: 0, flags: [], offsetAlongLine: 0,
             nameID: nil, tags: [], parts: [SeaBuilder.wholeCell(CellRect(tile: cell))])
     }
 
-    private static func addSea(
-        to writer: inout FeatureStoreWriter, position: Position, manifest: StoreManifest, bands: [ZoomBand]
+    /// Adds the cell square of sea to every cell of the block, or only to the cells `cells` says yes to.
+    static func addSea(
+        to writer: inout FeatureStoreWriter, position: Position, manifest: StoreManifest, bands: [ZoomBand],
+        cells wanted: ((TileID) -> Bool)? = nil
     ) throws {
         let range = cellRange(of: position, manifest: (manifest.blockZoom, manifest.storageZoom))
         for row in range.rows {
             for column in range.columns {
-                guard let cell = TileID(zoom: manifest.storageZoom, x: column, y: row) else { continue }
+                guard let cell = TileID(zoom: manifest.storageZoom, x: column, y: row), wanted?(cell) ?? true else { continue }
                 let feature = seaFeature(for: cell)
                 for band in bands { try writer.add(feature, band: band, cell: cell) }
             }
@@ -297,7 +309,9 @@ public enum OpenSea {
     }
 
     /// The file written again with the sea of every cell added: features, names and relations are copied over to a new string table.
-    private static func rewrite(_ file: FeatureStoreFile, adding position: Position, manifest: StoreManifest, bands: [ZoomBand]) throws -> Data {
+    static func rewrite(
+        _ file: FeatureStoreFile, adding position: Position, manifest: StoreManifest, bands: [ZoomBand], cells wanted: ((TileID) -> Bool)? = nil
+    ) throws -> Data {
         var writer = FeatureStoreWriter(
             storageZoom: file.storageZoom, boundingBox: file.boundingBox, attribution: file.attribution, sourceDate: file.sourceDate,
             classifierVersion: UInt16(file.classifierVersion))
@@ -319,11 +333,11 @@ public enum OpenSea {
             relation.members = try relation.members.map { StoredRelationMember(type: $0.type, id: $0.id, role: try string($0.role)) }
             try writer.add(relation)
         }
-        try addSea(to: &writer, position: position, manifest: manifest, bands: bands)
+        try addSea(to: &writer, position: position, manifest: manifest, bands: bands, cells: wanted)
         return try writer.data()
     }
 
-    private static func write(_ data: Data, to name: String, folder: URL, replacing old: StoreManifest.Block, now: Date) throws -> StoreManifest.Block {
+    static func write(_ data: Data, to name: String, folder: URL, replacing old: StoreManifest.Block, now: Date) throws -> StoreManifest.Block {
         try FeatureStoreFile(data: data).verify()
         let url = folder.appendingPathComponent(name)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

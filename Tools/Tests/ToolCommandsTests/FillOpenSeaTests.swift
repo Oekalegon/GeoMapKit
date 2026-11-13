@@ -52,6 +52,17 @@ struct FillOpenSeaTests {
                     for band in [ZoomBand.overview, .mid, .detail] { try writer.add(square, band: band, cell: cell) }
                 }
             }
+        } else {
+            // Land: a forest in every cell (a cell with no sea counts as land only when something on it lies on land).
+            for dy in 0..<32 {
+                for dx in 0..<32 {
+                    let cell = TileID(zoom: 13, x: x * 32 + dx, y: y * 32 + dy)!
+                    let forest = StoredFeature(
+                        classID: FeatureClass.forest.rawValue, kind: .area, objectType: .way, objectID: 3,
+                        parts: [SeaBuilder.wholeCell(CellRect(tile: cell))])
+                    for band in [ZoomBand.overview, .mid, .detail] { try writer.add(forest, band: band, cell: cell) }
+                }
+            }
         }
         let name = "blocks/8-\(x)-\(y).gmk"
         let data = try writer.data()

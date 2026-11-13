@@ -237,6 +237,9 @@ do {
             folder: URL(fileURLWithPath: parsed.positional[0]), cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) })
         print("Open sea: \(report.created.count) blocks written, \(report.extended.count) blocks extended, \(report.left.count) left as they are (no neighbour shows sea).")
         for position in report.created { print("  sea block \(position.x)/\(position.y)") }
+        if !report.cellsFilled.isEmpty {
+            print("Cells of sea between islands: \(report.cellsFilled.values.reduce(0, +)) cells in \(report.cellsFilled.count) blocks.")
+        }
     case "compare":
         let parsed = try CommandLineArguments(rest, knownOptions: ["limit", "inner"])
         guard parsed.positional.count == 2 else { throw ToolError("compare needs two stores") }

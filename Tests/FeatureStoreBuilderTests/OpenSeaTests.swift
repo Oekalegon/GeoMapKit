@@ -37,10 +37,17 @@ struct OpenSeaTests {
             parts: [GeometryPart(points: [PackedPoint(longitude: rect.west, latitude: lat), PackedPoint(longitude: rect.east, latitude: lat)])])
     }
 
+    /// A forest that fills a cell: a feature that lies only on land.
+    private func forest(_ cell: TileID) -> StoredFeature {
+        StoredFeature(
+            classID: FeatureClass.forest.rawValue, kind: .area, objectType: .way, objectID: 3,
+            parts: [SeaBuilder.wholeCell(CellRect(tile: cell))])
+    }
+
     private enum Content {
         /// Sea squares everywhere and one coastline in the first cell.
         case sea
-        /// A coastline in the first cell and nothing else (land).
+        /// A forest in every cell, and a coastline in the first cell (land).
         case land
         /// Only a country border line and a name, a relation, and no sea or coastline.
         case sparse
@@ -55,6 +62,7 @@ struct OpenSeaTests {
             for cell in all { for band in bands { try writer.add(seaSquare(cell), band: band, cell: cell) } }
             try writer.add(coastline(all[0]), band: .overview, cell: all[0])
         case .land:
+            for cell in all { for band in bands { try writer.add(forest(cell), band: band, cell: cell) } }
             try writer.add(coastline(all[0]), band: .overview, cell: all[0])
         case .sparse:
             let rect = CellRect(tile: all[100])
@@ -91,6 +99,86 @@ struct OpenSeaTests {
 
     private func covered(_ positions: [Position]) -> [Position: [StoreManifest.Source]] {
         Dictionary(uniqueKeysWithValues: positions.map { ($0, source()) })
+    }
+
+    /// A block with a coast, in which most cells hold nothing (islands in open sea): sea squares and forest cells where asked, a coastline
+    /// in the cells of `coast`.
+    private func writeIslandBlock(
+        at block: Position, squares: Set<Int> = [], coast: Set<Int>, forests: Set<Int> = [], in folder: URL
+    ) throws -> StoreManifest.Block {
+        var writer = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: attribution, classifierVersion: 16)
+        let all = cells(of: block)
+        for index in squares { for band in bands { try writer.add(seaSquare(all[index]), band: band, cell: all[index]) } }
+        for index in forests { for band in bands { try writer.add(forest(all[index]), band: band, cell: all[index]) } }
+        for index in coast { try writer.add(coastline(all[index]), band: .overview, cell: all[index]) }
+        let name = "blocks/8-\(block.x)-\(block.y).gmk"
+        let data = try writer.data()
+        try data.write(to: folder.appendingPathComponent(name))
+        return StoreManifest.Block(x: block.x, y: block.y, file: name, bytes: Int64(data.count), builtAt: Date(timeIntervalSince1970: 0))
+    }
+
+    private func seaCells(of block: StoreManifest.Block, in folder: URL) throws -> Set<TileID> {
+        let file = try FeatureStoreFile(contentsOf: folder.appendingPathComponent(block.file))
+        var found = Set<TileID>()
+        for cell in try file.cells() where !(try file.features(in: cell, band: .overview, classes: [FeatureClass.sea.rawValue])).isEmpty { found.insert(cell) }
+        return found
+    }
+
+    @Test func theEmptyCellsOfAnIslandBlockGetSeaFromItsSquares() throws {
+        let folder = try folder()
+        let block = Position(x: 10, y: 10)
+        // A square in the corner, a coast cell and a cell of forest somewhere else: every other cell is empty and reached through empties.
+        let before = try manifest([writeIslandBlock(at: block, squares: [0], coast: [500], forests: [40], in: folder)])
+        let (after, filled) = try OpenSea.fillEmptyCells(manifest: before, folder: folder)
+        #expect(filled == [block: 1024 - 3])
+        try after.validate()
+        let sea = try seaCells(of: try #require(after.blocks.first), in: folder)
+        let all = cells(of: block)
+        #expect(sea.count == 1024 - 2 && !sea.contains(all[500]) && !sea.contains(all[40]) && sea.contains(all[1023]))
+        let (again, second) = try OpenSea.fillEmptyCells(manifest: after, folder: folder)
+        #expect(second.isEmpty && again == after, "nothing left to fill")
+    }
+
+    @Test func cellsOfLandStopTheSpread() throws {
+        let folder = try folder()
+        let block = Position(x: 10, y: 10)
+        // A wall of forest down column 10 splits the block; the only square is in the west part.
+        let wall = Set((0..<32).map { $0 * 32 + 10 })
+        let before = try manifest([writeIslandBlock(at: block, squares: [0], coast: [31], forests: wall, in: folder)])
+        let (after, filled) = try OpenSea.fillEmptyCells(manifest: before, folder: folder)
+        // The west part is 10 columns of 32 rows, minus the square itself.
+        #expect(filled == [block: 10 * 32 - 1])
+        let sea = try seaCells(of: try #require(after.blocks.first), in: folder)
+        let all = cells(of: block)
+        #expect(sea.contains(all[5 * 32 + 3]) && !sea.contains(all[5 * 32 + 20]))
+    }
+
+    @Test func aBlockWithoutACoastIsNotFilledByTheCellRule() throws {
+        let folder = try folder()
+        let before = try manifest([write(.sparse, at: Position(x: 10, y: 10), in: folder)])
+        let (after, filled) = try OpenSea.fillEmptyCells(manifest: before, folder: folder)
+        #expect(filled.isEmpty && after == before)
+    }
+
+    @Test func seaSquaresAcrossTheBorderStartTheSpreadInTheNextBlock() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), island = Position(x: 11, y: 10)
+        let before = try manifest([write(.sea, at: seaBlock, in: folder), writeIslandBlock(at: island, coast: [500], in: folder)])
+        let (after, filled) = try OpenSea.fillEmptyCells(manifest: before, folder: folder)
+        #expect(filled[island] == 1023 && filled[seaBlock] == nil)
+        let sea = try seaCells(of: try #require(after.blocks.first { $0.x == 11 }), in: folder)
+        #expect(sea.count == 1023 && !sea.contains(cells(of: island)[500]))
+    }
+
+    @Test func aBorderOfEmptyCellsSaysNothingAndTheGroupBecomesSea() throws {
+        let folder = try folder()
+        // Sea on the west, a block of islands on the east whose edge cells are empty (no sea, no land): the group between them is sea.
+        let seaBlock = Position(x: 10, y: 10), middle = Position(x: 11, y: 10), island = Position(x: 12, y: 10)
+        let before = try manifest([write(.sea, at: seaBlock, in: folder), writeIslandBlock(at: island, coast: [500], in: folder)])
+        let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, middle, island]))
+        #expect(report.created == [middle] && report.conflicting.isEmpty)
+        try after.validate()
     }
 
     @Test func aBlockWithNoFileNextToSeaBecomesSea() throws {
@@ -258,7 +346,10 @@ struct OpenSeaTests {
         let all = cells(of: block)
         for (index, cell) in all.enumerated() {
             let row = index / 32, onEast = index % 32 == 31
-            if onEast && (landEdgeRows.contains(row)) { continue }
+            if onEast && (landEdgeRows.contains(row)) {
+                for band in bands { try writer.add(forest(cell), band: band, cell: cell) }
+                continue
+            }
             if onEast && (allPartialEdge || partialEdgeRows.contains(row)) {
                 let rect = CellRect(tile: cell)
                 let part = StoredFeature(
