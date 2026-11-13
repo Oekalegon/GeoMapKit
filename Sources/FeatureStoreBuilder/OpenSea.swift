@@ -12,8 +12,8 @@ import GeoCore
 ///
 /// - A group is **sea** if at least one block next to it has a border with a cell that is a sea square (a cell with no coastline in
 ///   it that is wholly sea: the cell across the border can only be sea, since there is no coastline in the group), and no block next
-///   to it has a border that shows land (a cell with no sea at all) or contradicts itself (sea squares and cells with no sea on the
-///   same border). Cells that are only partly sea are neither: a coast near the border is normal, in an archipelago on every border,
+///   to it has a border that shows land (a cell with no sea and a feature that lies only on land, question 62) or contradicts itself
+///   (sea squares and cells of land on the same border). A block that holds a feature of land is never made sea. Cells that are only partly sea are neither: a coast near the border is normal, in an archipelago on every border,
 ///   and says nothing about the group.
 /// - A group that touches only land, only blocks that are not covered by a source file, or nothing, is left as it is: the data
 ///   there is land without a coastline, or unknown, and unknown must stay empty.
@@ -114,7 +114,9 @@ public enum OpenSea {
         var known = Set<Position>()
         for (position, block) in blocks.sorted(by: { $0.key < $1.key }) {
             try Task.checkCancellation()
-            if try hasSeaOrCoastline(try open(block)) { known.insert(position) } else if covered[position] != nil { candidates.insert(position) }
+            let file = try open(block)
+            // A block that holds a feature of land is never sea, whatever its neighbours say: it is known, and its borders are evidence.
+            if try hasSeaOrCoastline(file) || hasLandFeatures(in: file) { known.insert(position) } else if covered[position] != nil { candidates.insert(position) }
         }
         for position in covered.keys where blocks[position] == nil { candidates.insert(position) }
 
@@ -148,7 +150,7 @@ public enum OpenSea {
         // Blocks that no outline touches: sea, where the group touches a block that shows sea.
         var outsideCandidates = Set<Position>()
         for position in outside where !known.contains(position) && !candidates.contains(position) {
-            if let block = blocks[position], try hasSeaOrCoastline(try open(block)) { continue }
+            if let block = blocks[position], case let file = try open(block), try hasSeaOrCoastline(file) || hasLandFeatures(in: file) { continue }
             outsideCandidates.insert(position)
         }
         let firstRule = Set(sea)

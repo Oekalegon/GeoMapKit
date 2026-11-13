@@ -17,6 +17,12 @@ extension OpenSea {
         return false
     }
 
+    /// Whether a block holds a feature of land anywhere; stops at the first.
+    static func hasLandFeatures(in file: FeatureStoreFile) throws -> Bool {
+        for cell in try file.cells() where try hasLandFeatures(file, cell: cell) { return true }
+        return false
+    }
+
     /// What is in a cell, as far as the sea is concerned.
     private enum CellKind { case square, empty, other }
 

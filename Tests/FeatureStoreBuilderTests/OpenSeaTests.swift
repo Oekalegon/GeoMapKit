@@ -181,6 +181,17 @@ struct OpenSeaTests {
         try after.validate()
     }
 
+    @Test func aBlockWithLandFeaturesAndNoCoastIsNeverMadeSea() throws {
+        let folder = try folder()
+        let seaBlock = Position(x: 10, y: 10), inland = Position(x: 11, y: 10), beyond = Position(x: 12, y: 10)
+        let before = try manifest([
+            write(.sea, at: seaBlock, in: folder), writeIslandBlock(at: inland, coast: [], forests: Set(0..<1024), in: folder),
+        ])
+        let (after, report) = try OpenSea.fill(manifest: before, folder: folder, covered: covered([seaBlock, inland, beyond]))
+        // The block of land is known land, not a candidate; the block beyond it sees land at the shared border and is left.
+        #expect(!report.changed && after == before && report.left == [beyond])
+    }
+
     @Test func aBlockWithNoFileNextToSeaBecomesSea() throws {
         let folder = try folder()
         let seaBlock = Position(x: 10, y: 10), open = Position(x: 11, y: 10)

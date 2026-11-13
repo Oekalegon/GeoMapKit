@@ -123,6 +123,33 @@ struct FillOpenSeaTests {
         #expect(!report.changed)
     }
 
+    @Test("A block inside the outline of a big region is sea when the blocks around it show sea (question 62)")
+    func aCoveredBlockBetweenSeaBlocksIsFilled() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("fillsea-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("blocks"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let west = try block(x: 130, y: 80, sea: true, in: folder)
+        let east = try block(x: 132, y: 80, sea: true, in: folder)
+        let format = try FeatureStoreFile(
+            data: FeatureStoreWriter(boundingBox: BoundingBox(south: 0, west: 0, north: 1, east: 1), attribution: "").data()
+        ).formatVersion
+        let manifest = StoreManifest(
+            formatVersion: format, classifierVersion: 16, storageZoom: 13, blockZoom: 8, bands: [.overview, .mid, .detail],
+            profile: "full", attribution: "© OpenStreetMap contributors, ODbL", blocks: [west, east])
+        try manifest.jsonData().write(to: folder.appendingPathComponent("manifest.json"))
+        // A big outline with no regions below it covers the sea between the two blocks: the block in the middle is covered, not outside.
+        let big = SourceRegion(
+            id: "big-state", name: "Big state", parentID: nil, pbfURL: URL(string: "https://download.example.org/b.osm.pbf")!,
+            outline: [RegionPolygon(outer: [
+                Coordinate(latitude: 40, longitude: 0), Coordinate(latitude: 40, longitude: 60), Coordinate(latitude: 75, longitude: 60),
+                Coordinate(latitude: 75, longitude: 0),
+            ])])
+        let report = try await ToolRunner.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: FixedCatalog(regions: [big]))
+        #expect(report.created.map { [$0.x, $0.y] } == [[131, 80]])
+        let again = try await ToolRunner.fillOpenSea(folder: folder, cacheDirectory: folder, catalog: FixedCatalog(regions: [big]))
+        #expect(!again.changed, "a second run changes nothing")
+    }
+
     @Test("A set of the Watch profile is refused")
     func refusesTheWatchProfile() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("fillsea-\(UUID().uuidString)", isDirectory: true)
