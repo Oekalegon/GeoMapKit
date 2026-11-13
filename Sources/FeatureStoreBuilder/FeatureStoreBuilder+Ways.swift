@@ -31,9 +31,12 @@ extension FeatureStoreBuilder {
             // same tag (the Norway to Sweden line in the Iddefjord and the Skagerrak, and the Evros river between Greece and Turkey, which
             // is mapped with `border_type=territorial` and `waterway=river`): it is a member of the relations of both countries, a limit
             // is a member of one. This holds whatever else the way is: the tags without `border_type` then decide, for the class and for
-            // the overlays below.
+            // the overlays below. The feature keeps all its raw tags, `border_type` included: the renderer uses classes only. A coastline
+            // is left out: the shore is no border, whatever the relations say.
             var sharedLine: ClassifierTagArray?
-            if tags.value(forKey: "boundary") == "administrative", tags.value(forKey: "admin_level") == "2", classifier.isSeaLimit(tags) {
+            if tags.value(forKey: "boundary") == "administrative", tags.value(forKey: "admin_level") == "2", classifier.isSeaLimit(tags),
+                classification.featureClass != .coastline
+            {
                 if borders == nil { borders = BorderNames(extract: extract, classifier: classifier) }
                 if (borders?.countryRelationCount(ofWay: id) ?? 0) >= 2 {
                     let plain = ClassifierTagArray(tags.orderedTags.filter { $0.key != "border_type" })

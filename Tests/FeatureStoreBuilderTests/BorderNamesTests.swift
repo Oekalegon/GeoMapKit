@@ -376,6 +376,7 @@ struct BorderNamesTests {
         border(&alone, tags: evros)
         alone.relation(50, [(10, "outer", 1)], borderRelations[0])
         #expect(try count(of: .countryBorder, in: &alone) == 0)
+        #expect(try countInDetail(of: .waterLine, in: &alone) > 0, "the river itself is kept")
         // A river with no border_type in both relations was a border before and is still one.
         var plain = SyntheticWorld()
         border(&plain, tags: evros.filter { $0.0 != "border_type" })
