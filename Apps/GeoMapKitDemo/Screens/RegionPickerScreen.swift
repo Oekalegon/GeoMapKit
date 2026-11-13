@@ -4,9 +4,9 @@ import SwiftUI
 
 /// Where regions are chosen and their source files downloaded (question 63, step 2; the Mac only).
 ///
-/// The list is the Geofabrik tree. Choosing a region chooses the whole region. "Check size" asks the server what the files would
-/// cost and shows the free space; nothing is downloaded until "Download" is pressed, and the download can be cancelled and goes on
-/// later. Nothing here limits the size.
+/// The list is the Geofabrik tree. Choosing a region chooses the whole region. "Get maps" asks the server what the files would cost
+/// and shows the plan with the free space; nothing is downloaded until "Start" is pressed, and the download can be cancelled and
+/// goes on later. Nothing here limits the size.
 struct RegionPickerScreen: View {
     @Bindable var model: RegionPickerModel
     @Environment(\.dismiss) private var dismiss
@@ -70,18 +70,19 @@ struct RegionPickerScreen: View {
 
     /// The buttons for the step the flow is in: Get maps (ask the sizes), then Start or Back, and Cancel while downloading.
     @ViewBuilder private var actions: some View {
-        if model.download == .downloading {
+        switch model.step {
+        case .downloading:
             Button("Cancel download") { model.cancelDownload() }
-        } else if case .ready(let plan) = model.plan {
-            if plan.needsDownload {
-                Button("Start: download \(RegionPickerModel.size(plan.bytesToDownload))") { model.startDownload() }
-                    .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-            }
-            Button(plan.needsDownload ? "Cancel" : "Back") { model.cancelPlan() }
-        } else {
-            Button("Get maps") { Task { await model.makePlan() } }
+        case .confirm(let plan):
+            Button("Start: download \(RegionPickerModel.size(plan.bytesToDownload))") { model.startDownload() }
                 .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-                .disabled(model.effectiveRegions.isEmpty || model.plan == .planning)
+            Button("Cancel") { model.cancelPlan() }
+        case .allHeld:
+            Button("Back") { model.cancelPlan() }
+        case .chooseRegions, .askSizes, .planning:
+            Button("Get maps") { Task { await model.askSizes() } }
+                .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                .disabled(model.step != .askSizes)
         }
     }
 

@@ -222,4 +222,17 @@ struct MapLibraryTests {
         #expect(throws: LibraryError.self) { try library.addBuilt(folder: blocks, name: "  ") }
         #expect(library.maps.isEmpty)
     }
+
+    @Test func aBuiltFolderThatWasRemovedIsNotMistakenForANewOne() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = library(root)
+        let first = try blockSet(named: "built", in: root)
+        try library.addBuilt(folder: first, name: "Liechtenstein")
+        try FileManager.default.removeItem(at: first)
+        // The old link no longer leads anywhere that exists; a new build of another folder is a map of its own.
+        let second = try blockSet(named: "rebuilt", in: root)
+        let id = try library.addBuilt(folder: second, name: "Liechtenstein")
+        #expect(library.maps.count == 2 && library.maps.contains { $0.id == id })
+    }
 }
