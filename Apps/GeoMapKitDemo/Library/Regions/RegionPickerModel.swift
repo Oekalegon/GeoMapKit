@@ -6,8 +6,8 @@ import Regions
 ///
 /// The flow is: the list of regions is loaded; the user selects regions; the plan is made (the sizes and the free space, nothing is
 /// downloaded); the user goes on and the files are downloaded into the source cache, with progress and cancel. Nothing blocks on
-/// size: a region is as big as it is, and the model only reports what it would take. The build of the maps from the files is a later
-/// step. The model knows no platform, so a picker for the phone can use it later.
+/// size: a region is as big as it is, and the model only reports what it would take. ``MapBuildModel`` goes on from the downloaded
+/// files to a map. The model knows no platform, so a picker for the phone can use it later.
 @MainActor
 @Observable
 final class RegionPickerModel: Identifiable {
@@ -48,6 +48,12 @@ final class RegionPickerModel: Identifiable {
 
     /// The ids of the regions the user selected.
     private(set) var selection: Set<String> = []
+
+    /// Set while a build runs: the selection then stays as it is.
+    var selectionLocked = false
+
+    /// The folder of the source cache.
+    var cacheDirectory: URL { cache.directory }
 
     /// The text of the search field.
     var search = ""
@@ -96,7 +102,7 @@ final class RegionPickerModel: Identifiable {
     /// Selects or deselects a region. Any plan made before is dropped, because it no longer matches. While a download runs the
     /// selection is left as it is, because the screen would no longer show what is being downloaded.
     func setSelected(_ id: String, _ on: Bool) {
-        guard download != .downloading else { return }
+        guard download != .downloading, !selectionLocked else { return }
         if on { selection.insert(id) } else { selection.remove(id) }
         planTask?.cancel()
         plan = .none

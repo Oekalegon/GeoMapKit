@@ -4,7 +4,7 @@ An Xcode project with the test apps of GeoMapKit (see question 32 in `docs/desig
 
 | Target | What it is |
 |---|---|
-| `GeoMapKitDemo` | iPhone, iPad and Mac: the map of the stores in the library, the library of maps and styles, the position of the user, a cut of a Watch copy of the open map, on the Mac "Get maps…" (choose Geofabrik regions, see the sizes and the free space, download the source files with a Start step; the build to a map comes next), and a style editor (forms for the classes, a JSON editor, a live map, undo, save). The Mac version is the same SwiftUI code (scroll wheel zoom, toolbar buttons). |
+| `GeoMapKitDemo` | iPhone, iPad and Mac: the map of the stores in the library, the library of maps and styles, the position of the user, a cut of a Watch copy of the open map, on the Mac "Get maps…" (choose Geofabrik regions, see the sizes and the free space, download the source files with a Start step, then build the blocks and the levels and add the map to the library, with progress and cancel), and a style editor (forms for the classes, a JSON editor, a live map, undo, save). The Mac version is the same SwiftUI code (scroll wheel zoom, toolbar buttons). |
 | `GeoMapKitDemoWatch` | The Watch app: the maps the iPhone sent (by WatchConnectivity file transfer) and a map of each in the Watch style. The Watch does not ask for areas yet; the phone pushes. |
 | `GeoMapKitDemoTests` | Tests of the library and of the region picker (iOS Simulator and Mac). |
 

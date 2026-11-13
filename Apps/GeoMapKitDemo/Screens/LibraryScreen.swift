@@ -40,7 +40,7 @@ struct LibraryScreen: View {
     @State private var renaming: Renaming?
     @State private var newName = ""
     #if os(macOS)
-    @State private var picker: RegionPickerModel?
+    @State private var builder: MapBuildModel?
     @State private var pickerProblem: String?
     #endif
 
@@ -136,7 +136,7 @@ struct LibraryScreen: View {
             .padding(12)
             .background(.bar)
         }
-        .sheet(item: $picker) { RegionPickerScreen(model: $0) }
+        .sheet(item: $builder) { RegionPickerScreen(build: $0) }
         .alert("Get maps", isPresented: Binding(get: { pickerProblem != nil }, set: { if !$0 { pickerProblem = nil } })) {
             Button("OK") { pickerProblem = nil }
         } message: { Text(pickerProblem ?? "") }
@@ -147,18 +147,27 @@ struct LibraryScreen: View {
     /// The picker for regions: the Geofabrik list and the source files go to the cache folder of the app.
     private func openPicker() {
         do {
-            picker = try Self.makePicker()
+            builder = try makeBuilder()
         } catch {
             pickerProblem = "The folder for the source files cannot be used: \(error)"
         }
     }
 
-    private static func makePicker() throws -> RegionPickerModel {
+    /// The picker and the build: the Geofabrik list and the source files go to the cache folder of the app, and the maps are built in
+    /// `Maps` next to it and added to this library.
+    private func makeBuilder() throws -> MapBuildModel {
         let directory = try SourceCache.defaultDirectory()
         let downloader = URLSessionDownloader(userAgent: "GeoMapKitDemo")
-        return RegionPickerModel(
-            catalog: GeofabrikCatalog(directory: directory, downloader: downloader), downloader: downloader,
-            cache: SourceCache(directory: directory))
+        let catalog = GeofabrikCatalog(directory: directory, downloader: downloader)
+        let picker = RegionPickerModel(catalog: catalog, downloader: downloader, cache: SourceCache(directory: directory))
+        let library = library
+        return MapBuildModel(
+            picker: picker, catalog: catalog, mapsRoot: directory.deletingLastPathComponent().appendingPathComponent("Maps", isDirectory: true)
+        ) { folder, name in
+            let id = try library.addBuilt(folder: folder, name: name)
+            library.selectedMapID = id
+            return id
+        }
     }
     #endif
 
