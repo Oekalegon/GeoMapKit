@@ -27,16 +27,21 @@ extension FeatureStoreBuilder {
             let isClosed = gaps == 0 && nodeIDs.count >= 4 && nodeIDs.first == nodeIDs.last
             let tags = extract.ways.tags(at: position)
             var classification = classifier.classify(tags, shape: isClosed ? .closedWay : .openWay)
-            // The limit of the territorial waters is no border, but the agreed line between two countries in the sea is one,
-            // although it carries the same tag (the Norway to Sweden line in the Iddefjord and the Skagerrak): it is a member of
-            // the relations of both countries, a limit is a member of one.
-            if classification.featureClass == .other, tags.value(forKey: "boundary") == "administrative",
-                tags.value(forKey: "admin_level") == "2", classifier.isSeaLimit(tags)
+            // The limit of the territorial waters is no border, but the agreed line between two countries is one, although it carries the
+            // same tag (the Norway to Sweden line in the Iddefjord and the Skagerrak, and the Evros river between Greece and Turkey, which
+            // is mapped with `border_type=territorial` and `waterway=river`): it is a member of the relations of both countries, a limit
+            // is a member of one. This holds whatever else the way is: the tags without `border_type` then decide, for the class and for
+            // the overlays below. The feature keeps all its raw tags, `border_type` included: the renderer uses classes only. A coastline
+            // is left out: the shore is no border, whatever the relations say.
+            var sharedLine: ClassifierTagArray?
+            if tags.value(forKey: "boundary") == "administrative", tags.value(forKey: "admin_level") == "2", classifier.isSeaLimit(tags),
+                classification.featureClass != .coastline
             {
                 if borders == nil { borders = BorderNames(extract: extract, classifier: classifier) }
                 if (borders?.countryRelationCount(ofWay: id) ?? 0) >= 2 {
-                    let plain = tags.orderedTags.filter { $0.key != "border_type" }
-                    classification = classifier.classify(ClassifierTagArray(plain), shape: isClosed ? .closedWay : .openWay)
+                    let plain = ClassifierTagArray(tags.orderedTags.filter { $0.key != "border_type" })
+                    sharedLine = plain
+                    classification = classifier.classify(plain, shape: isClosed ? .closedWay : .openWay)
                 }
             }
             // The border of a country is often a relation whose ways carry no border tags of their own (most of the land border of
@@ -60,7 +65,8 @@ extension FeatureStoreBuilder {
             // carry no border tag), unless it is tagged as the limit of an area of sea, or is a coastline: the relations of a country or
             // a region often have the coast as members (1,991 coastline ways in the relations of the Danish file), and the shore is no
             // border.
-            var overlays = classifier.overlays(tags, primary: classification.featureClass)
+            var overlays = sharedLine.map { classifier.overlays($0, primary: classification.featureClass) }
+                ?? classifier.overlays(tags, primary: classification.featureClass)
             if classification.featureClass != .countryBorder, classification.featureClass != .boundary,
                 !overlays.contains(where: { $0.featureClass == .countryBorder || $0.featureClass == .boundary }),
                 !classifier.isSeaLimit(tags)

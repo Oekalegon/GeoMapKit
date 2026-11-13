@@ -358,4 +358,29 @@ struct BorderNamesTests {
         alone.relation(50, [(10, "outer", 1)], level2 + [("name", "Norge")])
         #expect(try names(of: .countryBorder, in: &alone) == [], "the limit of one country's waters is not")
     }
+
+    @Test("A river that is the border of two countries is a border although it is tagged border_type=territorial (the Evros, Greece and Turkey)")
+    func riverBorderTaggedTerritorial() throws {
+        let evros: [(String, String)] = [
+            ("boundary", "administrative"), ("admin_level", "2"), ("border_type", "territorial"), ("waterway", "river"),
+            ("left:country", "Turkey"), ("right:country", "Greece"),
+        ]
+        // In both relations: the river is the line between the countries, and it stays a river.
+        var shared = SyntheticWorld()
+        border(&shared, tags: evros)
+        for (offset, tags) in borderRelations.enumerated() { shared.relation(Int64(50 + offset), [(10, "outer", 1)], tags) }
+        #expect(try count(of: .countryBorder, in: &shared) > 0, "the river between two countries is a border")
+        #expect(try countInDetail(of: .waterLine, in: &shared) > 0, "and it is still a river")
+        // The same river tagged as a limit, in the relation of one country only: the limit of its waters.
+        var alone = SyntheticWorld()
+        border(&alone, tags: evros)
+        alone.relation(50, [(10, "outer", 1)], borderRelations[0])
+        #expect(try count(of: .countryBorder, in: &alone) == 0)
+        #expect(try countInDetail(of: .waterLine, in: &alone) > 0, "the river itself is kept")
+        // A river with no border_type in both relations was a border before and is still one.
+        var plain = SyntheticWorld()
+        border(&plain, tags: evros.filter { $0.0 != "border_type" })
+        for (offset, tags) in borderRelations.enumerated() { plain.relation(Int64(50 + offset), [(10, "outer", 1)], tags) }
+        #expect(try count(of: .countryBorder, in: &plain) > 0)
+    }
 }
