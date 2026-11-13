@@ -141,7 +141,7 @@ struct LibraryScreen: View {
             }
         }
         .sheet(isPresented: Bindable(builds).showsPicker) {
-            if let model = builds.model { RegionPickerScreen(build: model) }
+            if let model = builds.model { RegionPickerScreen(build: model, onStarted: { dismiss() }) }
         }
         .alert("Get maps", isPresented: Binding(get: { builds.problem != nil }, set: { if !$0 { builds.problem = nil } })) {
             Button("OK") { builds.problem = nil }

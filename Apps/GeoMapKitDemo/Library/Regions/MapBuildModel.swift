@@ -111,9 +111,11 @@ final class MapBuildModel: Identifiable {
         task?.cancel()
     }
 
-    /// Clears the end of a run (cancelled, failed or done), back to the picker.
+    /// Clears the end of a run (cancelled, failed or done), back to the picker. After a finished map the selection is cleared too.
     func dismissResult() {
         guard !isRunning else { return }
+        // A finished map starts the next choice from nothing; after a cancel or an error the selection stays for Continue.
+        if case .done = stage { picker.clearSelection() }
         stage = .idle
     }
 

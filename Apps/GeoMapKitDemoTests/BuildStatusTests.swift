@@ -121,4 +121,22 @@ struct BuildStatusTests {
         model.cancel()
         await model.waitForRun()
     }
+
+    @Test("A dismissed finished map clears the selection; a dismissed cancel keeps it")
+    func clearsAfterDone() async throws {
+        let (host, folder) = host()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        host.openPicker()
+        let model = try #require(host.model)
+        await model.picker.load()
+        model.picker.setSelected("europe/netherlands", true)
+        model.start()
+        await waitForDownloading(model)
+        model.cancel()
+        await model.waitForRun()
+        model.dismissResult()
+        #expect(model.picker.isSelected("europe/netherlands"))
+        model.picker.clearSelection()
+        #expect(!model.picker.isSelected("europe/netherlands") && model.picker.plan == .none)
+    }
 }

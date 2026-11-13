@@ -11,6 +11,8 @@ import SwiftUI
 /// progress in the status bar (``BuildStatusBar``). A stopped run continues where it stopped. Nothing here limits the size.
 struct RegionPickerScreen: View {
     let build: MapBuildModel
+    /// Called when a run is started, so that the screen behind (the library) can close too and leave the map free.
+    var onStarted: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
 
     private var model: RegionPickerModel { build.picker }
@@ -79,11 +81,11 @@ struct RegionPickerScreen: View {
         case .downloading:
             EmptyView()
         case .confirm(let plan):
-            Button("Start: download \(RegionPickerModel.size(plan.bytesToDownload)) and build the map") { build.start(); dismiss() }
+            Button("Start: download \(RegionPickerModel.size(plan.bytesToDownload)) and build the map") { build.start(); dismiss(); onStarted() }
                 .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             Button("Cancel") { model.cancelPlan() }
         case .allHeld:
-            Button("Build the map") { build.start(); dismiss() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+            Button("Build the map") { build.start(); dismiss(); onStarted() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             Button("Back") { model.cancelPlan() }
         case .chooseRegions, .askSizes, .planning:
             Button("Get maps") { Task { await model.askSizes() } }
