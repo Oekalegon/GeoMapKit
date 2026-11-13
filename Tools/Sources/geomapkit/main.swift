@@ -1,7 +1,7 @@
 import FeatureStoreBuilder
 import Foundation
-import MapBuilder
 import GeoCore
+import MapBuilder
 import OSMPBF
 import Regions
 import ToolCommands

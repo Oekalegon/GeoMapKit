@@ -8,7 +8,7 @@ import MapStyle
 extension MapBuilder {
     /// Builds the coarse levels of a set of blocks (question 50).
     ///
-    /// Reads `manifest.json` in the folder, derives the files of each level with ``LevelBuilder`` and writes them to `levels/<top
+    /// Reads `manifest.json` in the folder, derives the files of each level with `LevelBuilder` and writes them to `levels/<top
     /// zoom>/`, atomically and checked with `verify()`. The manifest is written again after every block (as version 2, with the
     /// levels so far), so it only lists blocks that are complete, and a run that was stopped can be run again: a level block that
     /// is listed, whose file has the recorded size, and whose base blocks and classes are the same, is left alone.
@@ -22,8 +22,8 @@ extension MapBuilder {
     public static func buildLevels(_ request: LevelRequest, progress: (LevelOutcome) -> Void = { _ in }) async throws -> LevelRunReport {
         guard !request.topZooms.isEmpty, Set(request.topZooms).count == request.topZooms.count,
             request.topZooms.allSatisfy({ StoreManifest.Level.topZooms.contains($0) })
-        else { throw MapBuilderError("--levels expects different top zooms from \(StoreManifest.Level.topZooms.lowerBound) to \(StoreManifest.Level.topZooms.upperBound)") }
-        guard request.margin >= 0 else { throw MapBuilderError("--margin expects 0 or more cells") }
+        else { throw MapBuilderError("The levels must be different top zooms from \(StoreManifest.Level.topZooms.lowerBound) to \(StoreManifest.Level.topZooms.upperBound)") }
+        guard request.margin >= 0 else { throw MapBuilderError("The margin must be 0 or more cells") }
         let clock = ContinuousClock()
         let started = clock.now
         let directory = request.directory
@@ -32,7 +32,7 @@ extension MapBuilder {
         do {
             manifest = try StoreManifest(json: try Data(contentsOf: manifestURL))
         } catch {
-            throw MapBuilderError("Cannot read \(manifestURL.path): \(error). Run 'geomapkit build-region' first.")
+            throw MapBuilderError("Cannot read \(manifestURL.path): \(error). Build the blocks first.")
         }
         guard manifest.bands.contains(Int(ZoomBand.overview.rawValue)) else {
             throw MapBuilderError("The blocks hold no overview band (profile \(manifest.profile)); the levels are made from it.")

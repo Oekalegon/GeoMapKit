@@ -1,7 +1,7 @@
-import MapBuilder
-import Foundation
 import FeatureStoreBuilder
+import Foundation
 import GeoCore
+import MapBuilder
 import Regions
 import ToolSupport
 

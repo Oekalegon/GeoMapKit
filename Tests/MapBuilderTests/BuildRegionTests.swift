@@ -186,7 +186,7 @@ struct BuildRegionTests {
             _ = try await MapBuilder.buildRegion(request(s), catalog: s.catalog)
             Issue.record("it did not refuse")
         } catch let error as MapBuilderError {
-            #expect("\(error)".contains("Tiny (tiny)") && "\(error)".contains("geomapkit fetch"))
+            #expect("\(error)".contains("Tiny (tiny)") && "\(error)".contains("not in the cache"))
         }
         #expect(!FileManager.default.fileExists(atPath: s.output.appendingPathComponent("manifest.json").path))
     }

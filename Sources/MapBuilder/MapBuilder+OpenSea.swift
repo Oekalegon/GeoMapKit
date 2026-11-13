@@ -7,7 +7,7 @@ import Regions
 
 
 extension MapBuilder {
-    /// Fills the open sea of a set (``OpenSea``, questions 61 and 62): the blocks that no source outline touches, the empty or border-only
+    /// Fills the open sea of a set (`OpenSea`, questions 61 and 62): the blocks that no source outline touches, the empty or border-only
     /// blocks inside the outline of a big region, and the empty cells between the islands of a block with a coast.
     ///
     /// The blocks of the grid inside the bounding box of the set whose tile is touched by no region without regions below it in the Geofabrik index (a leaf) hold no land,

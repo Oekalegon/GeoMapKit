@@ -2,8 +2,8 @@ import Foundation
 
 /// A tiny uncompressed PBF file for end-to-end tests of the commands.
 ///
-/// This duplicates a few lines of the encoder in the library's own tests on purpose:
-/// the two packages do not share test code. It writes raw (uncompressed) blobs only.
+/// This is a copy of the one in the tests of the `Tools` package (the two packages do not share test code); it writes raw
+/// (uncompressed) blobs only.
 enum TinyPBF {
     private static func varint(_ value: UInt64) -> [UInt8] {
         var bytes: [UInt8] = []

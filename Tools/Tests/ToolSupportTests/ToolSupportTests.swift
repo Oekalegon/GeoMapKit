@@ -1,5 +1,5 @@
-import Testing
 import GeoCore
+import Testing
 @testable import ToolSupport
 
 @Suite("CommandLineArguments")

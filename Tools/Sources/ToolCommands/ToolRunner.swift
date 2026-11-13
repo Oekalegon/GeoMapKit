@@ -1,8 +1,8 @@
-import MapBuilder
-import Foundation
 import FeatureStore
 import FeatureStoreBuilder
+import Foundation
 import GeoCore
+import MapBuilder
 import MapRender
 import MapStyle
 import OSMPBF

@@ -13,7 +13,7 @@ extension MapBuilder {
     /// the tile are written. Up to `jobs` blocks are built at once. The source files must be in the cache (see `fetch`); nothing
     /// is downloaded. A block that is already in the manifest, built from the same source files, is left as it is, so a run that
     /// was stopped can be run again. The manifest is written after each block, so it lists only blocks that are complete. When the
-    /// blocks are done, the sea of blocks of open sea is added from what their neighbours show (``OpenSea``, question 53) unless
+    /// blocks are done, the sea of blocks of open sea is added from what their neighbours show (`OpenSea`, question 53) unless
     /// ``BlockRequest/fillsOpenSea`` is off.
     ///
     /// - Parameters:
@@ -31,8 +31,8 @@ extension MapBuilder {
         _ request: BlockRequest, catalog: (any RegionCatalog)? = nil, downloader: (any Downloader)? = nil, userAgent: String = MapBuilder.defaultUserAgent,
         progress: (BlockOutcome) -> Void = { _ in }, onProgress: (BlockProgress) -> Void = { _ in }
     ) async throws -> BlockRunReport {
-        guard (0...13).contains(request.blockZoom) else { throw MapBuilderError("--block-zoom must be from 0 to 13") }
-        guard request.margin >= 0, request.margin <= 2, request.margin.isFinite else { throw MapBuilderError("--margin must be from 0 to 2 degrees") }
+        guard (0...13).contains(request.blockZoom) else { throw MapBuilderError("The block zoom must be from 0 to 13") }
+        guard request.margin >= 0, request.margin <= 2, request.margin.isFinite else { throw MapBuilderError("The margin must be from 0 to 2 degrees") }
         let clock = ContinuousClock()
         let started = clock.now
         let cacheDirectory = try request.cacheDirectory ?? SourceCache.defaultDirectory()
@@ -64,13 +64,13 @@ extension MapBuilder {
             case .current: records[region.id] = record
             case .stale:
                 records[region.id] = record
-                warnings.append("\(region.name) was last checked more than 30 days ago; run 'geomapkit sources' to see whether it has changed.")
+                warnings.append("\(region.name) was last checked more than 30 days ago; check whether it has changed.")
             case .missing, .damaged: missing.append("\(region.name) (\(region.id))")
             }
         }
         guard missing.isEmpty else {
             throw MapBuilderError(
-                "These source files are not in the cache: \(missing.joined(separator: ", ")). Run 'geomapkit fetch' with the same --region or area, and --yes, first.")
+                "These source files are not in the cache: \(missing.joined(separator: ", ")). Download them first.")
         }
 
         let blocksFolder = request.output.appendingPathComponent("blocks", isDirectory: true)
@@ -234,13 +234,18 @@ extension MapBuilder {
 
     private struct BlockKey: Hashable { var x: Int; var y: Int }
 
+    /// One block of a plan (``plannedBlocks(area:blockZoom:margin:in:)``): which tile, which box is cut and which regions are needed.
     public struct BlockTask: Sendable {
-        public var position: Int
-        public var tile: TileID
-        public var cutBox: BoundingBox
-        public var regions: [SourceRegion]
+        /// The place of the block in the plan, counted from 0 in the order of the tiles.
+        public let position: Int
+        /// The tile of the block, at the block zoom.
+        public let tile: TileID
+        /// The box that is cut for the block, in degrees: the tile plus the margin.
+        public let cutBox: BoundingBox
+        /// The regions whose source files the cut needs; empty when no region covers the block.
+        public let regions: [SourceRegion]
         /// The share of the tile (not the cut) that the outlines of the regions cover; 0 when no source file has data there.
-        public var coveredShare: Double = 0
+        public internal(set) var coveredShare: Double = 0
     }
 
     /// The blocks of an area with, for each, the box that is cut and the regions whose files it needs (none if no region covers it).
@@ -277,17 +282,17 @@ extension MapBuilder {
         var named: [SourceRegion] = []
         switch area {
         case .tiles(let tiles):
-            guard !tiles.isEmpty else { throw MapBuilderError("--tiles needs at least one tile") }
+            guard !tiles.isEmpty else { throw MapBuilderError("At least one tile is needed") }
             guard let other = tiles.first(where: { $0.zoom != zoom }) else { return tiles }
-            throw MapBuilderError("--tiles takes tiles of the block zoom (\(zoom)); \(other.zoom)/\(other.x)/\(other.y) is not one")
+            throw MapBuilderError("The tiles must be tiles of the block zoom (\(zoom)); \(other.zoom)/\(other.x)/\(other.y) is not one")
         case .box(let area):
             guard area.isValid else { throw MapBuilderError("The area is not valid") }
             box = area
         case .regions(let ids):
-            guard !ids.isEmpty else { throw MapBuilderError("--region needs at least one region id") }
+            guard !ids.isEmpty else { throw MapBuilderError("At least one region id is needed") }
             for id in ids {
                 guard let region = index.region(withID: id) else {
-                    throw MapBuilderError("The region index has no region '\(id)'. Run 'geomapkit sources' with an area to see the ids of the regions.")
+                    throw MapBuilderError("The region index has no region '\(id)'. Look up the ids of the regions in the region index.")
                 }
                 named.append(region)
             }
@@ -298,7 +303,7 @@ extension MapBuilder {
         // A box this large at this zoom would be thousands of blocks; the regions of the whole world are not what this is for.
         let columnsAcross = (box.east - box.west) / 360 * Double(1 << zoom)
         guard columnsAcross < 1_000, (box.north - box.south) / 170 * Double(1 << zoom) < 1_000 else {
-            throw MapBuilderError("This area is too large for blocks of zoom \(zoom): use a smaller area or a lower --block-zoom.")
+            throw MapBuilderError("This area is too large for blocks of zoom \(zoom): use a smaller area or a lower block zoom.")
         }
         guard let northWest = TileID.containing(Coordinate(latitude: min(box.north, TileID.maximumLatitude), longitude: box.west), zoom: zoom),
             let southEast = TileID.containing(Coordinate(latitude: max(box.south, -TileID.maximumLatitude), longitude: min(box.east, 179.999999)), zoom: zoom)
@@ -327,7 +332,7 @@ extension MapBuilder {
         }
         guard !tiles.isEmpty else { throw MapBuilderError("No block lies in this area.") }
         guard tiles.count <= 2_000 else {
-            throw MapBuilderError("This area is \(tiles.count) blocks of zoom \(zoom); the limit is 2,000. Use a smaller area or a lower --block-zoom.")
+            throw MapBuilderError("This area is \(tiles.count) blocks of zoom \(zoom); the limit is 2,000. Use a smaller area or a lower block zoom.")
         }
         return tiles
     }

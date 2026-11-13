@@ -1,7 +1,7 @@
-import MapBuilder
 import FeatureStore
-import GeoCore
 import FeatureStoreBuilder
+import GeoCore
+import MapBuilder
 
 /// The result of cutting an area and building a feature store file from it.
 public struct BuildCommandReport: Sendable {
