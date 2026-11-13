@@ -26,6 +26,16 @@ final class MapBuildModel: Identifiable {
         case failed(String)
     }
 
+    /// What a run does with what is held already.
+    enum Mode: Equatable {
+        /// Downloads what is missing and builds the blocks that are not built from these files.
+        case normal
+        /// Builds every block and level again from the files that are held: for a change of the builder that the blocks do not show.
+        case buildAgain
+        /// Deletes the files that are held, downloads them again and builds everything again: for a file that is damaged or wrong.
+        case downloadAgain
+    }
+
     /// The picker: the list, the selection, the plan and the download.
     let picker: RegionPickerModel
     private(set) var stage: Stage = .idle
@@ -44,6 +54,7 @@ final class MapBuildModel: Identifiable {
     private let register: @MainActor (URL, String) throws -> String
     private let jobs: Int
     private var task: Task<Void, Never>?
+    private var mode: Mode = .normal
 
     /// Creates the model.
     ///
@@ -90,10 +101,14 @@ final class MapBuildModel: Identifiable {
     // MARK: Run
 
     /// Starts the run for the regions that are selected, or goes on with one that was stopped.
-    func start() {
+    ///
+    /// - Parameter mode: What is done with the files and blocks that are held (see ``Mode``). A run that is stopped and then
+    ///   started with `.normal` goes on from what it has done, whatever the mode was.
+    func start(_ mode: Mode = .normal) {
         guard !isRunning else { return }
         let regions = picker.effectiveRegions
         guard !regions.isEmpty else { return }
+        self.mode = mode
         picker.selectionLocked = true
         blocks = nil
         levelBlocksDone = 0
@@ -136,6 +151,16 @@ final class MapBuildModel: Identifiable {
             if case .ready = picker.plan {} else { await picker.makePlan() }
             // A cancel while the sizes were asked must not go on to the download.
             try Task.checkCancellation()
+            guard case .ready(let first) = picker.plan else {
+                if case .failed(let message) = picker.plan { stage = .failed(message) } else { stage = .cancelled }
+                return
+            }
+            if mode == .downloadAgain {
+                // The files are deleted before the download, so a download that fails leaves none; Continue then fetches them.
+                try picker.removeFiles(of: first)
+                await picker.makePlan()
+                try Task.checkCancellation()
+            }
             guard case .ready(let plan) = picker.plan else {
                 if case .failed(let message) = picker.plan { stage = .failed(message) } else { stage = .cancelled }
                 return
@@ -158,7 +183,8 @@ final class MapBuildModel: Identifiable {
             try FileManager.default.createDirectory(at: mapsRoot, withIntermediateDirectories: true)
             stage = .buildingBlocks
             let request = BlockRequest(
-                area: .regions(regions.map(\.id)), output: folder, jobs: jobs, cacheDirectory: picker.cacheDirectory)
+                area: .regions(regions.map(\.id)), output: folder, jobs: jobs, cacheDirectory: picker.cacheDirectory,
+                rebuild: mode != .normal)
             let report = try await tools.buildBlocks(request, catalog) { progress in
                 Task { @MainActor in self.noteBlocks(progress) }
             }
@@ -166,7 +192,7 @@ final class MapBuildModel: Identifiable {
             try Task.checkCancellation()
 
             stage = .buildingLevels
-            _ = try await tools.buildLevels(LevelRequest(directory: folder, jobs: jobs)) { _ in
+            _ = try await tools.buildLevels(LevelRequest(directory: folder, jobs: jobs, rebuild: mode != .normal)) { _ in
                 Task { @MainActor in self.noteLevelBlock() }
             }
             try Task.checkCancellation()
