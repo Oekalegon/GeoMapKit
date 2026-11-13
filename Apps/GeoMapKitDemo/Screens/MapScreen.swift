@@ -86,7 +86,7 @@ struct MapScreen: View {
         }
         #endif
         .sheet(item: $editor) { session in StyleEditorScreen(session: session).environment(library) }
-        .task(id: library.selectedMapID) { loadMap() }
+        .task(id: "\(library.selectedMapID ?? "")|\(library.mapRevision)") { loadMap() }
         .onChange(of: library.revision) { _, _ in loadStyle() }
         .onDisappear { location.stop() }
         .onChange(of: scenePhase) { _, phase in

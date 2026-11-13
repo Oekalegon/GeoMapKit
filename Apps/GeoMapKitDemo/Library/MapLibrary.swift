@@ -22,6 +22,8 @@ final class MapLibrary {
     var styleToEdit: String?
     /// Counts every change of the lists or of a choice of style, so that a view that reads it is drawn again.
     private(set) var revision = 0
+    /// Counts the maps that were built or built again by the app: a map that is open is read again when it changes.
+    private(set) var mapRevision = 0
     /// The map that is shown, as the id of its item.
     var selectedMapID: String? {
         didSet { defaults.set(selectedMapID, forKey: Keys.map) }
@@ -196,6 +198,7 @@ final class MapLibrary {
         guard FileManager.default.fileExists(atPath: manifest.path) else { throw LibraryError.noManifest(folder.lastPathComponent) }
         do { _ = try StoreSet(manifestURL: manifest) } catch { throw LibraryError.failed(name, "\(error)") }
         let wanted = folder.standardizedFileURL.resolvingSymlinksInPath().path
+        mapRevision += 1
         if let known = maps.first(where: { $0.kind == .blocks && linkedFolder(of: $0)?.path == wanted }) { return known.id }
         let id = try linkFolder(folder, name: name)
         reload()
