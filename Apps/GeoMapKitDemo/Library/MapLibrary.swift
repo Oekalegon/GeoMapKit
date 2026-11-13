@@ -30,6 +30,9 @@ final class MapLibrary {
     }
 
     let mapsDirectory: URL
+    /// The folder the app builds its own maps in (question 63), or `nil` where it builds none. Only a folder inside it is ever deleted
+    /// with its map (see ``deleteWithFiles(_:buildingFolder:)``).
+    var builtMapsRoot: URL?
     /// The folder of the styles: the local one, or the one in iCloud once ``StyleSync`` has switched to it.
     private(set) var stylesDirectory: URL
     private let defaults: UserDefaults
@@ -206,7 +209,7 @@ final class MapLibrary {
     }
 
     /// The folder a link in the library leads to, or `nil` if it cannot be resolved. No access is started.
-    private func linkedFolder(of map: MapItem) -> URL? {
+    func linkedFolder(of map: MapItem) -> URL? {
         guard let link = try? JSONDecoder().decode(Link.self, from: Data(contentsOf: url(of: map))) else { return nil }
         #if os(macOS)
         let options: URL.BookmarkResolutionOptions = .withSecurityScope

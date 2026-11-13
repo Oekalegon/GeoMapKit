@@ -7,7 +7,8 @@ extension MapBuildHost {
     /// next to it and added to the library. A finished map is not opened by itself: the user is looking at another map, and the status
     /// bar offers to show it.
     static func live(library: MapLibrary) -> MapBuildHost {
-        MapBuildHost {
+        library.builtMapsRoot = (try? SourceCache.defaultDirectory())?.deletingLastPathComponent().appendingPathComponent("Maps", isDirectory: true)
+        return MapBuildHost {
             let directory = try SourceCache.defaultDirectory()
             let downloader = URLSessionDownloader(userAgent: MapBuildTools.userAgent)
             let catalog = GeofabrikCatalog(directory: directory, downloader: downloader)

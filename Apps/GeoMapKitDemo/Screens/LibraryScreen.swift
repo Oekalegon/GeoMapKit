@@ -41,6 +41,9 @@ struct LibraryScreen: View {
     @State private var newName = ""
     #if os(macOS)
     @Environment(MapBuildHost.self) private var builds
+    /// The map the user asked to delete with its files, and the size of them once it is known.
+    @State private var deletingFiles: MapItem?
+    @State private var filesSize: Int64?
     #endif
 
     /// The type of a `.gmk` file, declared by the app (see the project's `Info.plist`).
@@ -87,6 +90,14 @@ struct LibraryScreen: View {
                 }
             }
             .navigationTitle("Library")
+            #if os(macOS)
+            .confirmationDialog(
+                deleteFilesTitle, isPresented: Binding(get: { deletingFiles != nil }, set: { if !$0 { deletingFiles = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Delete map and files", role: .destructive) { if let map = deletingFiles { deleteFiles(of: map) } }
+            } message: { Text(deleteFilesMessage) }
+            #endif
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -207,9 +218,21 @@ struct LibraryScreen: View {
             }
             #endif
             Button(role: .destructive) { remove(map) } label: { Label("Remove", systemImage: "trash") }
+            #if os(macOS)
+            if library.builtFolder(of: map) != nil {
+                Button(role: .destructive) { askToDeleteFiles(of: map) } label: { Label("Delete map and files…", systemImage: "trash.fill") }
+                    .disabled(cannotDeleteFiles(of: map)).help(cannotDeleteFiles(of: map) ? "Open another map, or stop the build, first." : "")
+            }
+            #endif
         }
         .swipeActions {
             Button(role: .destructive) { remove(map) } label: { Label("Remove", systemImage: "trash") }
+            #if os(macOS)
+            if library.builtFolder(of: map) != nil {
+                Button(role: .destructive) { askToDeleteFiles(of: map) } label: { Label("Delete map and files…", systemImage: "trash.fill") }
+                    .disabled(cannotDeleteFiles(of: map)).help(cannotDeleteFiles(of: map) ? "Open another map, or stop the build, first." : "")
+            }
+            #endif
         }
     }
 
@@ -303,6 +326,40 @@ struct LibraryScreen: View {
             errors = [(error as? LibraryError) ?? .failed(name, error.localizedDescription)]
         }
     }
+
+    #if os(macOS)
+    /// Asks first: the dialog says how much is deleted, which is known when the folder has been measured.
+    private func askToDeleteFiles(of map: MapItem) {
+        filesSize = nil
+        deletingFiles = map
+        guard let folder = library.builtFolder(of: map) else { return }
+        Task {
+            let size = await Task.detached { MapLibrary.size(ofFolder: folder) }.value
+            // A late answer for a map that is no longer asked about is dropped.
+            if deletingFiles?.id == map.id { filesSize = size }
+        }
+    }
+
+    /// Whether Delete map and files would be refused now: the map is the open one, or a build writes to its folder.
+    private func cannotDeleteFiles(of map: MapItem) -> Bool {
+        if library.selectedMapID == map.id { return true }
+        guard let working = builds.model?.workingFolder, let folder = library.builtFolder(of: map) else { return false }
+        return working.standardizedFileURL.resolvingSymlinksInPath().path == folder.standardizedFileURL.path
+    }
+
+    private func deleteFiles(of map: MapItem) {
+        do { try library.deleteWithFiles(map, buildingFolder: builds.model?.workingFolder) } catch {
+            errors = [(error as? LibraryError) ?? .failed(map.name, error.localizedDescription)]
+        }
+    }
+
+    private var deleteFilesTitle: String { "Delete \u{201C}\(deletingFiles?.name ?? "")\u{201D} and its files?" }
+
+    private var deleteFilesMessage: String {
+        let size = filesSize.map { "its \(RegionPickerModel.size($0)) of files" } ?? "its files"
+        return "This deletes the map and \(size) from this Mac. The downloaded source files are kept, so building it again needs no download. It cannot be undone."
+    }
+    #endif
 
     private func remove(_ map: MapItem) {
         do { try library.delete(map) } catch { errors = [.failed(map.name, error.localizedDescription)] }

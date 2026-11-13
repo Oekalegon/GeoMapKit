@@ -50,6 +50,8 @@ final class MapBuildModel: Identifiable {
     /// Whether a Build again or Download again was stopped before it was done, and the run since (Continue) built only what is
     /// missing: the blocks it did not reach count as up to date, so the map is only partly built again.
     private(set) var rebuildPending = false
+    /// The folder the run in progress builds into, or `nil` when none runs: the library does not delete a map while it is written.
+    private(set) var workingFolder: URL?
 
     private let catalog: any RegionCatalog
     private let mapsRoot: URL
@@ -114,6 +116,7 @@ final class MapBuildModel: Identifiable {
         self.mode = mode
         if mode != .normal { rebuildPending = true }
         picker.selectionLocked = true
+        workingFolder = Self.folder(for: regions.map(\.id), in: mapsRoot)
         blocks = nil
         levelBlocksDone = 0
         downloadedFiles = false
@@ -148,6 +151,7 @@ final class MapBuildModel: Identifiable {
         defer {
             ProcessInfo.processInfo.endActivity(activity)
             picker.selectionLocked = false
+            workingFolder = nil
         }
         do {
             // A cancel that came before this task began must not start the question to the server.
