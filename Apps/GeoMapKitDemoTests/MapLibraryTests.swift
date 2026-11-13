@@ -210,6 +210,87 @@ struct MapLibraryTests {
         #expect(library.maps.count == 2 && Set(library.maps.map(\.id)).count == 2)
     }
 
+    // MARK: Delete with files
+
+    /// A library with a built map in the app's own folder for built maps, and the library's own folder beside it.
+    private func builtMap(in root: URL) throws -> (library: MapLibrary, map: MapItem, folder: URL) {
+        let builtRoot = root.appendingPathComponent("Built")
+        try FileManager.default.createDirectory(at: builtRoot, withIntermediateDirectories: true)
+        let folder = try blockSet(named: "Built/greece", in: root)
+        let library = library(root)
+        library.builtMapsRoot = builtRoot
+        try library.addBuilt(folder: folder, name: "Greece")
+        return (library, try #require(library.maps.first), folder)
+    }
+
+    @Test func aMapTheAppBuiltIsDeletedWithItsFiles() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (library, map, folder) = try builtMap(in: root)
+        // The library selects the first map it gets; the open map is not deleted, so another is open (none here).
+        #expect(library.selectedMapID == map.id)
+        library.selectedMapID = nil
+        #expect(library.builtFolder(of: map) != nil)
+        #expect(MapLibrary.size(ofFolder: folder) > 0)
+        try library.deleteWithFiles(map)
+        #expect(library.maps.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: folder.path), "the blocks are gone")
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("Built").path), "the folder for built maps stays")
+    }
+
+    @Test func aFolderOutsideTheBuiltMapsIsNeverDeleted() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let elsewhere = try blockSet(named: "commandline", in: root)
+        let library = library(root)
+        library.builtMapsRoot = root.appendingPathComponent("Built")
+        try library.addBuilt(folder: elsewhere, name: "By hand")
+        let map = try #require(library.maps.first)
+        #expect(library.builtFolder(of: map) == nil)
+        #expect(throws: LibraryError.self) { try library.deleteWithFiles(map) }
+        #expect(FileManager.default.fileExists(atPath: elsewhere.path) && library.maps.count == 1)
+        // Without a folder for built maps nothing is the app's.
+        library.builtMapsRoot = nil
+        #expect(library.builtFolder(of: map) == nil)
+    }
+
+    @Test func theFolderForBuiltMapsItselfIsNeverDeleted() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocks = try blockSet(named: "built", in: root)
+        let library = library(root)
+        library.builtMapsRoot = blocks
+        try library.addBuilt(folder: blocks, name: "Root")
+        let map = try #require(library.maps.first)
+        #expect(library.builtFolder(of: map) == nil, "a map whose folder is the root is not inside it")
+    }
+
+    @Test func theOpenMapAndAMapThatIsBeingBuiltAreNotDeleted() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (library, map, folder) = try builtMap(in: root)
+        library.selectedMapID = map.id
+        #expect(throws: LibraryError.self) { try library.deleteWithFiles(map) }
+        library.selectedMapID = nil
+        #expect(throws: LibraryError.self) { try library.deleteWithFiles(map, buildingFolder: folder) }
+        #expect(FileManager.default.fileExists(atPath: folder.path) && library.maps.count == 1)
+        try library.deleteWithFiles(map, buildingFolder: root.appendingPathComponent("Built/other"))
+        #expect(library.maps.isEmpty)
+    }
+
+    @Test func aFailedDeletionKeepsTheMapInTheLibrary() throws {
+        let root = try folder()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.appendingPathComponent("Built").path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let (library, map, folder) = try builtMap(in: root)
+        // A folder that cannot be removed: its parent is read-only.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: root.appendingPathComponent("Built").path)
+        #expect(throws: LibraryError.self) { try library.deleteWithFiles(map) }
+        #expect(library.maps.count == 1 && FileManager.default.fileExists(atPath: folder.path))
+    }
+
     @Test func aBuiltFolderWithoutAManifestOrWithABadNameIsRefused() throws {
         let root = try folder()
         defer { try? FileManager.default.removeItem(at: root) }
