@@ -47,6 +47,9 @@ final class MapBuildModel: Identifiable {
     private(set) var downloadedFiles = false
     /// Notes of the build, such as a source file that is old.
     private(set) var warnings: [String] = []
+    /// Whether a Build again or Download again was stopped before it was done, and the run since (Continue) built only what is
+    /// missing: the blocks it did not reach count as up to date, so the map is only partly built again.
+    private(set) var rebuildPending = false
 
     private let catalog: any RegionCatalog
     private let mapsRoot: URL
@@ -109,6 +112,7 @@ final class MapBuildModel: Identifiable {
         let regions = picker.effectiveRegions
         guard !regions.isEmpty else { return }
         self.mode = mode
+        if mode != .normal { rebuildPending = true }
         picker.selectionLocked = true
         blocks = nil
         levelBlocksDone = 0
@@ -131,6 +135,7 @@ final class MapBuildModel: Identifiable {
         guard !isRunning else { return }
         // A finished map starts the next choice from nothing; after a cancel or an error the selection stays for Continue.
         if case .done = stage { picker.clearSelection() }
+        rebuildPending = false
         stage = .idle
     }
 
@@ -200,6 +205,8 @@ final class MapBuildModel: Identifiable {
             stage = .registering
             let name = Self.mapName(for: regions)
             stage = .done(mapID: try register(folder, name), name: name)
+            // Only a run that built everything again has finished the rebuild; Continue did not.
+            if mode != .normal { rebuildPending = false }
         } catch is CancellationError {
             stage = .cancelled
         } catch {

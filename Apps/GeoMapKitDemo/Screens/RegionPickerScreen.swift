@@ -82,7 +82,7 @@ struct RegionPickerScreen: View {
     }
 
     private var downloadAgainTitle: String {
-        guard case .ready(let plan) = model.plan, let size = RegionPickerModel.sizeHeld(in: plan) else { return "Download the files again?" }
+        guard case .ready(let plan) = model.plan, let size = RegionPickerModel.totalSize(of: plan) else { return "Download the files again?" }
         return "Download \(RegionPickerModel.size(size)) again?"
     }
 

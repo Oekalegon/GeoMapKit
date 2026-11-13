@@ -277,8 +277,8 @@ final class RegionPickerModel: Identifiable {
         progress = [:]
     }
 
-    /// The size of the files a plan would download again, for the question before they are deleted: `nil` when no size is known.
-    static func sizeHeld(in plan: DownloadPlan) -> Int64? {
+    /// The total size of the files of a plan, for the question before they are deleted: `nil` when no size is known.
+    static func totalSize(of plan: DownloadPlan) -> Int64? {
         let sizes = plan.items.compactMap(\.size)
         return sizes.isEmpty ? nil : sizes.reduce(0, +)
     }

@@ -181,6 +181,22 @@ struct MapBuildModelTests {
         #expect(await r.calls.rebuilds.count == 2, "no build after the failed download")
     }
 
+    @Test("A rebuild that is stopped is remembered as unfinished through Continue, until a full rebuild is done")
+    func rebuildPending() async {
+        let r = await rig(blocks: { request in if request.rebuild { try await Task.sleep(for: .seconds(60)) } })
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        r.build.start()
+        await r.build.waitForRun()
+        #expect(!r.build.rebuildPending)
+        r.build.dismissResult()
+        r.picker.setSelected("europe/belgium", true)
+        r.build.start(.buildAgain)
+        await waitUntil { r.build.stage == .buildingBlocks }
+        r.build.cancel()
+        await r.build.waitForRun()
+        #expect(r.build.stage == .cancelled && r.build.rebuildPending)
+    }
+
     @Test("A cancel in the blocks stage stops the run, keeps the files and puts nothing in the library")
     func cancelInBlocks() async {
         let r = await rig(blocks: { _ in try await Task.sleep(for: .seconds(60)) })

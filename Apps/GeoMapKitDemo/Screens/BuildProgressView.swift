@@ -77,12 +77,23 @@ struct BuildProgressView: View {
         switch build.stage {
         case .done(_, let name):
             Text("The map \u{201C}\(name)\u{201D} is in the library.").font(.footnote).bold()
+            rebuildNote
         case .cancelled:
             Text("Cancelled. What was downloaded and built is kept; Continue goes on from there.").font(.footnote)
+            rebuildNote
         case .failed(let message):
             Text(message).font(.footnote).foregroundStyle(.red).textSelection(.enabled)
+            rebuildNote
         default:
             EmptyView()
+        }
+    }
+
+    /// Said when a rebuild was stopped: Continue builds what is missing, and blocks it did not reach still count as built.
+    @ViewBuilder private var rebuildNote: some View {
+        if build.rebuildPending {
+            Text("The rebuild was not finished: Continue builds only what is missing, so some blocks keep their old content. To build everything again, press Build again in Get maps.")
+                .font(.footnote).foregroundStyle(.orange)
         }
     }
 
