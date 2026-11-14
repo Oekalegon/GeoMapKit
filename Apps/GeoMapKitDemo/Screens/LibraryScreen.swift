@@ -159,7 +159,7 @@ struct LibraryScreen: View {
         }
         .sheet(isPresented: $showsFiles) {
             if let model = builds.model {
-                SourceFilesScreen(build: model, isBusy: builds.isBusy, mapNames: builtMapNames)
+                SourceFilesScreen(build: model, host: builds, mapNames: builtMapNames)
             }
         }
         .alert("Get maps", isPresented: Binding(get: { builds.problem != nil }, set: { if !$0 { builds.problem = nil } })) {

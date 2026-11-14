@@ -68,6 +68,21 @@ struct SourceCacheTests {
         #expect(entries.map(\.regionID) == entries.map(\.regionID).sorted(), "ordered by region")
     }
 
+    @Test("The file can be removed and the unfinished download of the region kept, or both")
+    func removeFileOnly() throws {
+        let (cache, directory, _) = try makeCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try store(cache, id: "norway")
+        try Data(repeating: 3, count: 40).write(to: try cache.preparePart(regionID: "norway", etag: "\"v2\"", keepBytes: false))
+        try cache.remove(regionID: "norway", includingUnfinished: false)
+        #expect(cache.status(ofRegionID: "norway").status == .missing || cache.entries().allSatisfy { $0.kind == .unfinished })
+        #expect(cache.partialDownload(regionID: "norway")?.bytes == 40, "the unfinished download stays")
+        try store(cache, id: "norway")
+        try Data(repeating: 3, count: 40).write(to: try cache.preparePart(regionID: "norway", etag: "\"v2\"", keepBytes: false))
+        try cache.remove(regionID: "norway")
+        #expect(cache.entries().isEmpty, "by default everything of the region goes")
+    }
+
     @Test("An unfinished download can be removed on its own, and the file of the region stays")
     func removeUnfinished() throws {
         let (cache, directory, _) = try makeCache()

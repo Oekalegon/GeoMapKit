@@ -217,13 +217,17 @@ public struct SourceCache: Sendable {
         try? manager.removeItem(at: partRecordURL(regionID))
     }
 
-    /// Removes the file, the record and any unfinished download of a region.
+    /// Removes the file and the record of a region, and by default any unfinished download of it.
     ///
-    /// - Parameter regionID: The region.
-    public func remove(regionID: String) throws {
+    /// - Parameters:
+    ///   - regionID: The region.
+    ///   - includingUnfinished: Whether the unfinished download of the region (the part file and its note) goes too. With `false`
+    ///     it stays: it can be a download of a newer version that was cancelled, which is a thing of its own.
+    public func remove(regionID: String, includingUnfinished: Bool = true) throws {
         let manager = FileManager.default
-        for url in [fileURL(forRegionID: regionID), recordURL(regionID), partURL(regionID), partRecordURL(regionID)]
-        where manager.fileExists(atPath: url.path) {
+        var urls = [fileURL(forRegionID: regionID), recordURL(regionID)]
+        if includingUnfinished { urls += [partURL(regionID), partRecordURL(regionID)] }
+        for url in urls where manager.fileExists(atPath: url.path) {
             try manager.removeItem(at: url)
         }
     }

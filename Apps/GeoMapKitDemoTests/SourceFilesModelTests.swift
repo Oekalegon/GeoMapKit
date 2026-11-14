@@ -120,6 +120,35 @@ struct SourceFilesModelTests {
         #expect(r.model.files.count == 1 && r.model.files.first?.bytes == 1000)
     }
 
+    @Test("Deleting a file, or a damaged file, leaves the unfinished download of its region")
+    func fileKeepsItsUnfinishedDownload() async throws {
+        let r = try rig()
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        try store(r.cache, "norway", bytes: 1000)
+        try store(r.cache, "sweden", bytes: 2000)
+        try Data(repeating: 1, count: 5).write(to: r.cache.fileURL(forRegionID: "sweden"))   // damaged
+        for id in ["norway", "sweden"] {
+            try Data(repeating: 1, count: 40).write(to: try r.cache.preparePart(regionID: id, etag: "\"v2\"", keepBytes: false))
+        }
+        await r.model.reload()
+        for file in r.model.files where file.state != .unfinished { try r.model.delete(file, isBusy: false) }
+        await r.model.reload()
+        #expect(r.model.files.count == 2 && r.model.files.allSatisfy { $0.state == .unfinished && $0.bytes == 40 })
+    }
+
+    @Test("A map whose blocks record no source is noted, because its files can look unused")
+    func unrecordedSources() async throws {
+        let r = try rig()
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        try store(r.cache, "norway", bytes: 10)
+        try map("recorded", in: r.maps, from: [["norway"]])
+        await r.model.reload()
+        #expect(!r.model.someMapsDoNotRecordSources)
+        try map("old", in: r.maps, from: [[]])
+        await r.model.reload()
+        #expect(r.model.someMapsDoNotRecordSources)
+    }
+
     @Test("Delete unused removes the files no map needs, the damaged ones and the unfinished downloads, and keeps the rest")
     func deleteUnused() async throws {
         let r = try rig()

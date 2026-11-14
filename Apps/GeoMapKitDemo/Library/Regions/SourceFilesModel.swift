@@ -43,6 +43,9 @@ final class SourceFilesModel {
     private(set) var isLoading = false
     /// The free space on the volume of the cache, if the system says.
     private(set) var availableBytes: Int64?
+    /// Whether a map of the app has blocks that do not record their source files (it was built before they were recorded): a file
+    /// that is listed as used by no map can be in use by that map.
+    private(set) var someMapsDoNotRecordSources = false
 
     private let cache: SourceCache
     private let mapsRoot: URL?
@@ -80,7 +83,9 @@ final class SourceFilesModel {
         isLoading = true
         defer { isLoading = false }
         let cache = cache, root = mapsRoot
-        let (entries, usage) = await Task.detached { (cache.entries(), Self.usage(in: root, names: mapNames)) }.value
+        let (entries, found) = await Task.detached { (cache.entries(), Self.usage(in: root, names: mapNames)) }.value
+        let usage = found.byRegion
+        someMapsDoNotRecordSources = found.unrecorded
         files = entries.map { entry in
             let state: File.State
             switch entry.kind {
@@ -99,8 +104,8 @@ final class SourceFilesModel {
         availableBytes = cache.availableBytes()
     }
 
-    /// Deletes one entry: a usable file with its record, a damaged one, or an unfinished download (which leaves the file of the
-    /// region alone). A damaged entry goes with the unfinished download of its region.
+    /// Deletes one entry: a usable file with its record, a damaged one, or an unfinished download. Each leaves the others of the same
+    /// region alone, because they are listed, sized and deleted one by one.
     ///
     /// - Parameters:
     ///   - file: The entry.
@@ -108,7 +113,11 @@ final class SourceFilesModel {
     /// - Throws: ``Failure/busy``, or the error of the file system.
     func delete(_ file: File, isBusy: Bool) throws {
         guard !isBusy else { throw Failure.busy }
-        if case .unfinished = file.state { try cache.removeUnfinished(regionID: file.regionID) } else { try cache.remove(regionID: file.regionID) }
+        if case .unfinished = file.state {
+            try cache.removeUnfinished(regionID: file.regionID)
+        } else {
+            try cache.remove(regionID: file.regionID, includingUnfinished: false)
+        }
     }
 
     /// Deletes everything in ``unused``.
@@ -127,19 +136,22 @@ final class SourceFilesModel {
         return freed
     }
 
-    /// The maps built from each source file, by region id: read from the manifests of the folders of `root`.
-    nonisolated static func usage(in root: URL?, names: [String: String]) -> [String: [String]] {
+    /// The maps built from each source file, by region id: read from the manifests of the folders of `root`, and whether a manifest
+    /// has blocks that record no source.
+    nonisolated static func usage(in root: URL?, names: [String: String]) -> (byRegion: [String: [String]], unrecorded: Bool) {
         guard let root, let folders = try? FileManager.default.contentsOfDirectory(
             at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
-        else { return [:] }
+        else { return ([:], false) }
         var usage: [String: [String]] = [:]
+        var unrecorded = false
         for folder in folders {
             guard let data = try? Data(contentsOf: folder.appendingPathComponent("manifest.json")),
                 let manifest = try? StoreManifest(json: data)
             else { continue }
             let mapName = names[folder.lastPathComponent] ?? folder.lastPathComponent
+            if manifest.blocks.contains(where: { $0.sources.isEmpty }) { unrecorded = true }
             for id in Set(manifest.blocks.flatMap(\.sources).map(\.regionID)) { usage[id, default: []].append(mapName) }
         }
-        return usage.mapValues { $0.sorted() }
+        return (usage.mapValues { $0.sorted() }, unrecorded)
     }
 }

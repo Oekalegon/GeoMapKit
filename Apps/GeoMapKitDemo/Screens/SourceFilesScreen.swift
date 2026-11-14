@@ -7,7 +7,8 @@ import SwiftUI
 /// be deleted.
 struct SourceFilesScreen: View {
     let build: MapBuildModel
-    let isBusy: Bool
+    /// The host of the build, read where it matters: a run can start or end while the sheet is open.
+    let host: MapBuildHost
     /// The names of the maps in the library by the name of their folder.
     let mapNames: [String: String]
     @State private var model: SourceFilesModel
@@ -26,9 +27,11 @@ struct SourceFilesScreen: View {
         }
     }
 
-    init(build: MapBuildModel, isBusy: Bool, mapNames: [String: String]) {
+    private var isBusy: Bool { host.isBusy }
+
+    init(build: MapBuildModel, host: MapBuildHost, mapNames: [String: String]) {
         self.build = build
-        self.isBusy = isBusy
+        self.host = host
         self.mapNames = mapNames
         _model = State(initialValue: build.makeSourceFilesModel())
     }
@@ -85,7 +88,7 @@ struct SourceFilesScreen: View {
 
     private func usage(of file: SourceFilesModel.File) -> String {
         guard case .file = file.state else { return "" }
-        return file.usedBy.isEmpty ? "No map of this app was built from it." : "Built into: " + file.usedBy.joined(separator: ", ")
+        return file.usedBy.isEmpty ? "No map of this app records being built from it." : "Built into: " + file.usedBy.joined(separator: ", ")
     }
 
     // MARK: Footer
@@ -106,7 +109,11 @@ struct SourceFilesScreen: View {
     private var summary: String {
         var text = "\(model.files.count) files, \(RegionPickerModel.size(model.totalBytes))"
         if let free = model.availableBytes { text += "; \(RegionPickerModel.size(free)) free on this Mac" }
-        return text + ". A built map does not need its source files; Build again and Add a region download what they need."
+        text += ". A built map does not need its source files; Build again and Add a region download what they need."
+        if model.someMapsDoNotRecordSources {
+            text += " Some maps do not record their source files (they were built before that), so a file listed as unused can be in use."
+        }
+        return text
     }
 
     // MARK: Deleting
