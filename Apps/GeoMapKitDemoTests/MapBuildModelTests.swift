@@ -439,15 +439,6 @@ struct MapBuildModelTests {
         #expect(long != MapBuildModel.folder(for: many + ["europe/other"], in: root).lastPathComponent)
     }
 
-    @Test("Jobs follow the cores and the memory")
-    func jobs() {
-        let gb: UInt64 = 1_000_000_000
-        #expect(MapBuildModel.defaultJobs(cores: 12, memory: 64 * gb) == 4)
-        #expect(MapBuildModel.defaultJobs(cores: 8, memory: 8 * gb) == 2, "8 GB allow two blocks at about 3 GB each")
-        #expect(MapBuildModel.defaultJobs(cores: 2, memory: 64 * gb) == 1)
-        #expect(MapBuildModel.defaultJobs(cores: 1, memory: 1 * gb) == 1)
-    }
-
     // MARK: Real build
 
     /// One region with the outline of a box, for the real build.

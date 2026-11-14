@@ -79,11 +79,12 @@ final class MapBuildModel: Identifiable {
     ///   - catalog: The list of regions the blocks are planned from.
     ///   - mapsRoot: The folder the maps are built in: each set of regions gets a folder of its own.
     ///   - tools: The builds.
-    ///   - jobs: How many blocks are built at once; by default from the cores and the memory of this Mac.
+    ///   - jobs: How many blocks are built at once; by default ``BlockRequest/recommendedJobs(cores:memory:)``. The same number is used for
+    ///     the level blocks.
     ///   - register: Puts a built folder in the library under a name and returns the id of the map.
     init(
         picker: RegionPickerModel, catalog: any RegionCatalog, mapsRoot: URL, tools: MapBuildTools = .live,
-        jobs: Int = MapBuildModel.defaultJobs(), register: @escaping @MainActor (URL, String) throws -> String
+        jobs: Int = BlockRequest.recommendedJobs(), register: @escaping @MainActor (URL, String) throws -> String
     ) {
         self.picker = picker
         self.catalog = catalog
@@ -281,15 +282,6 @@ final class MapBuildModel: Identifiable {
             slug = String(slug.prefix(60)) + "-" + String(hash, radix: 16)
         }
         return root.appendingPathComponent(slug, isDirectory: true)
-    }
-
-    /// How many blocks to build at once: half the cores, at most 4 (as the command-line tool), and no more than the memory allows at
-    /// 3 GB for each. That is a safety factor: a block takes about 0.75 GB and the run over Østlandet and Sweden peaked at 4.2 GB with
-    /// 4 jobs, about 1 GB for each. The same number is used for the level blocks.
-    nonisolated static func defaultJobs(
-        cores: Int = ProcessInfo.processInfo.activeProcessorCount, memory: UInt64 = ProcessInfo.processInfo.physicalMemory
-    ) -> Int {
-        max(1, min(cores / 2, 4, Int(memory / 3_000_000_000)))
     }
 
     private static func describe(_ error: Error) -> String {

@@ -42,6 +42,27 @@ public struct BlockRequest: Sendable {
     /// The margin of the cut, in degrees, when a request does not say.
     public static let defaultMargin = 0.1
 
+    /// How many blocks to build at once when nobody says: half the cores, at most 4, and no more than the memory allows at 3 GiB for each
+    /// after 8 GiB are left for the system, the app and whatever the user has open. The app and the command-line tool use it alike.
+    ///
+    /// Measured on 9 blocks of the Pyrenees (the densest of the source files): 4 jobs peaked at 10.3 GB (2.6 GB for each) and took 174 s,
+    /// 2 jobs 6.0 GB and 314 s, 1 job 2.9 GB and 580 s. A map in use is not slowed by the cores (frames took the same with 4 jobs running
+    /// on 18 cores), but a Mac with little memory is. `physicalMemory` is in binary units: a Mac sold as 16 GB reports 16 GiB and gets
+    /// 2 jobs, 8 GiB gets 1, 20 GiB and more can get 4.
+    ///
+    /// - Parameters:
+    ///   - cores: The number of cores; by default those of this machine.
+    ///   - memory: The physical memory in bytes; by default that of this machine.
+    /// - Returns: At least 1.
+    public static func recommendedJobs(
+        cores: Int = ProcessInfo.processInfo.activeProcessorCount, memory: UInt64 = ProcessInfo.processInfo.physicalMemory
+    ) -> Int {
+        let perJob: UInt64 = 3 << 30
+        let leftFree: UInt64 = 8 << 30
+        let usable = memory > leftFree ? memory - leftFree : 0
+        return max(1, min(cores / 2, 4, Int(usable / perJob)))
+    }
+
     /// Creates a request.
     public init(
         area: Area, output: URL, blockZoom: Int = BlockRequest.defaultBlockZoom, jobs: Int = 1, margin: Double = BlockRequest.defaultMargin, profile: BuildProfile = .full,
