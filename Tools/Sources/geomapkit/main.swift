@@ -69,7 +69,9 @@ GeoMapKit tools
       each tile of a grid (zoom 8: about 78 km), and a manifest.json that lists
       them. Each block is cut with a margin from the source files in the cache
       (nothing is downloaded; see fetch) and built on its own, up to --jobs at
-      once, each using about 0.75 GB. The manifest is updated after each block,
+      once, each using about 0.75 to 2.6 GB (dense areas). The default is half the
+      cores, at most 4, and no more than the memory allows at 3 GiB each after 8 GiB
+      are left free (16 GiB gives 2). The manifest is updated after each block,
       and a block that is already built from the same source files is left as it
       is, so a run that was stopped can be run again; --rebuild builds them again
       all the same (after a change of the builder that keeps the rule table, for
@@ -200,7 +202,7 @@ do {
             guard let value = Double(text), (0...2).contains(value) else { throw ToolError("--margin expects degrees from 0 to 2") }
             margin = value
         }
-        let defaultJobs = max(1, min(ProcessInfo.processInfo.activeProcessorCount / 2, 4))
+        let defaultJobs = BlockRequest.recommendedJobs()
         let request = BlockRequest(
             area: area, output: URL(fileURLWithPath: output), blockZoom: try whole("block-zoom", 8, in: 0...13),
             jobs: try whole("jobs", defaultJobs, in: 1...64), margin: margin,

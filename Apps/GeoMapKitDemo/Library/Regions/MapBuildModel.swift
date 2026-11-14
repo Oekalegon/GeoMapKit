@@ -79,11 +79,12 @@ final class MapBuildModel: Identifiable {
     ///   - catalog: The list of regions the blocks are planned from.
     ///   - mapsRoot: The folder the maps are built in: each set of regions gets a folder of its own.
     ///   - tools: The builds.
-    ///   - jobs: How many blocks are built at once; by default from the cores and the memory of this Mac.
+    ///   - jobs: How many blocks are built at once; by default ``BlockRequest/recommendedJobs(cores:memory:)``. The same number is used for
+    ///     the level blocks.
     ///   - register: Puts a built folder in the library under a name and returns the id of the map.
     init(
         picker: RegionPickerModel, catalog: any RegionCatalog, mapsRoot: URL, tools: MapBuildTools = .live,
-        jobs: Int = MapBuildModel.defaultJobs(), register: @escaping @MainActor (URL, String) throws -> String
+        jobs: Int = BlockRequest.recommendedJobs(), register: @escaping @MainActor (URL, String) throws -> String
     ) {
         self.picker = picker
         self.catalog = catalog
@@ -282,24 +283,6 @@ final class MapBuildModel: Identifiable {
         }
         return root.appendingPathComponent(slug, isDirectory: true)
     }
-
-    /// How many blocks to build at once: half the cores, at most 4 (as the command-line tool), and no more than the memory allows at
-    /// 3 GB for each after 8 GB are left for the system, the app and the map the user has open.
-    ///
-    /// Measured on 9 blocks of the Pyrenees (the densest of the source files): 4 jobs peaked at 10.3 GB (2.6 GB for each) and took 174 s,
-    /// 2 jobs 6.0 GB and 314 s. A map in use is not slowed by the cores (frames took the same with 4 jobs running on 18 cores), but a
-    /// Mac with little memory is: 16 GB gives 2 jobs, 8 GB gives 1. The same number is used for the level blocks.
-    nonisolated static func defaultJobs(
-        cores: Int = ProcessInfo.processInfo.activeProcessorCount, memory: UInt64 = ProcessInfo.processInfo.physicalMemory
-    ) -> Int {
-        let usable = memory > memoryLeftFree ? memory - memoryLeftFree : 0
-        return max(1, min(cores / 2, 4, Int(usable / memoryPerJob)))
-    }
-
-    /// The memory a block build is counted at: a little more than the 2.6 GB measured on dense blocks.
-    nonisolated private static let memoryPerJob: UInt64 = 3_000_000_000
-    /// The memory left to the system, the app and the open map.
-    nonisolated private static let memoryLeftFree: UInt64 = 8_000_000_000
 
     private static func describe(_ error: Error) -> String {
         if error is MapBuilderError || error is SourceError { return "\(error)" }
