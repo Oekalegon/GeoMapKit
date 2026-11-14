@@ -11,11 +11,12 @@ import AppKit
 struct LibraryScreen: View {
     @Environment(WatchLink.self) private var watch
     @Environment(MapLibrary.self) private var library
+    @Environment(TrackLibrary.self) private var tracks
     @Environment(StyleSync.self) private var sync
     @Environment(\.dismiss) private var dismiss
 
     private enum ImportKind: Identifiable {
-        case maps, styles
+        case maps, styles, tracks
         var id: Self { self }
     }
 
@@ -36,6 +37,8 @@ struct LibraryScreen: View {
     }
 
     @State private var importing: ImportKind?
+    /// What the file picker that is open was opened for (the binding to `importing` is cleared before its result arrives).
+    @State private var pickerKind: ImportKind = .maps
     @State private var errors: [LibraryError] = []
     @State private var renaming: Renaming?
     @State private var newName = ""
@@ -49,6 +52,8 @@ struct LibraryScreen: View {
 
     /// The type of a `.gmk` file, declared by the app (see the project's `Info.plist`).
     static let storeType = UTType(exportedAs: "org.oekalegon.geomapkit.store", conformingTo: .data)
+    /// A GPX file: by its extension, since the system may not know the type.
+    static let gpxType = UTType(filenameExtension: "gpx") ?? .xml
 
     var body: some View {
         NavigationStack {
@@ -60,6 +65,16 @@ struct LibraryScreen: View {
                     }
                     ForEach(library.maps) { map in mapRow(map) }
                 } header: { Text("Maps") }
+
+                Section {
+                    if tracks.items.isEmpty {
+                        Text("No tracks. Add a GPX file to see a route or a recorded track over the map.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    ForEach(tracks.items) { item in trackRow(item) }
+                } header: { Text("Tracks") } footer: {
+                    if !tracks.items.isEmpty { Text("Switch a track on to draw it over the map; the scope button moves the map to it.") }
+                }
 
                 #if os(iOS)
                 Section {
@@ -91,6 +106,7 @@ struct LibraryScreen: View {
                 }
             }
             .navigationTitle("Library")
+            .task { await tracks.loadSummaries() }
             #if os(macOS)
             .confirmationDialog(
                 deleteFilesTitle, isPresented: Binding(get: { deletingFiles != nil }, set: { if !$0 { deletingFiles = nil } }),
@@ -108,16 +124,18 @@ struct LibraryScreen: View {
                     Menu {
                         Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
                         Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
+                        Button { startImport(.tracks) } label: { Label("Add a track…", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
                     } label: { Label("Add", systemImage: "plus") }
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
             .fileImporter(
                 isPresented: Binding(get: { importing != nil }, set: { if !$0 { importing = nil } }),
-                allowedContentTypes: importing == .styles ? [.json] : [.folder, Self.storeType], allowsMultipleSelection: true
+                allowedContentTypes: importing == .styles ? [.json] : importing == .tracks ? [Self.gpxType] : [.folder, Self.storeType],
+                allowsMultipleSelection: true
             ) { result in
                 guard case .success(let urls) = result else { return }
-                finishImport(urls)
+                finishImport(urls, as: pickerKind)
             }
             #endif
             .alert("Could not add", isPresented: Binding(get: { !errors.isEmpty }, set: { if !$0 { errors = [] } })) {
@@ -142,6 +160,7 @@ struct LibraryScreen: View {
             HStack {
                 Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
                 Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
+                Button { startImport(.tracks) } label: { Label("Add a track…", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
                 Button { builds.openPicker() } label: { Label("Get maps…", systemImage: "arrow.down.circle") }
                     .disabled(builds.isBusy)
                     .help(builds.isBusy ? "A map is being built; the bar at the bottom shows it." : "Download regions and build a map")
@@ -174,24 +193,41 @@ struct LibraryScreen: View {
     /// Asks for the files to add. On the Mac this is an open panel: `.fileImporter` did not open from the menu in this sheet (the Add
     /// button did nothing), and a panel also shows the folders of blocks in `~/Maps`. On iOS the system file picker is used.
     private func startImport(_ kind: ImportKind) {
+        pickerKind = kind
         #if os(macOS)
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
         panel.canChooseDirectories = kind == .maps
-        panel.allowedContentTypes = kind == .styles ? [.json] : [.folder, Self.storeType, .json]
-        panel.message = kind == .styles ? "Choose style files (.json)" : "Choose a store file (.gmk) or a folder of blocks"
+        switch kind {
+        case .styles:
+            panel.allowedContentTypes = [.json]
+            panel.message = "Choose style files (.json)"
+        case .tracks:
+            panel.allowedContentTypes = [Self.gpxType]
+            panel.message = "Choose GPX files (.gpx)"
+        case .maps:
+            panel.allowedContentTypes = [.folder, Self.storeType, .json]
+            panel.message = "Choose a store file (.gmk) or a folder of blocks"
+        }
         panel.begin { response in
             guard response == .OK else { return }
-            finishImport(panel.urls)
+            finishImport(panel.urls, as: kind)
         }
         #else
         importing = kind
         #endif
     }
 
-    /// Adds what was chosen: a map is opened, a style is applied to the map that is open.
-    private func finishImport(_ urls: [URL]) {
+    /// Adds what was chosen: a map is opened, a style is applied to the map that is open, a track is shown and the map goes to it.
+    private func finishImport(_ urls: [URL], as kind: ImportKind) {
+        if kind == .tracks {
+            Task {
+                let result = await tracks.add(urls)
+                errors = result.errors
+            }
+            return
+        }
         let added = library.add(urls)
         errors = added.errors
         if let id = added.maps.first {
@@ -202,6 +238,48 @@ struct LibraryScreen: View {
     }
 
     // MARK: Rows
+
+    private func trackRow(_ item: TrackItem) -> some View {
+        HStack {
+            Toggle(isOn: Binding(get: { tracks.visible.contains(item.id) }, set: { on in Task { await tracks.setVisible(item, on) } })) {
+                VStack(alignment: .leading) {
+                    Text(item.name)
+                    Text(detail(of: item)).font(.caption).foregroundStyle(tracks.failures[item.id] == nil ? Color.secondary : Color.red)
+                }
+            }
+            Button {
+                Task { await tracks.setVisible(item, true) }
+                if let box = tracks.summaries[item.id]?.box { tracks.requestFit(box); dismiss() }
+            } label: { Image(systemName: "scope") }
+            .buttonStyle(.borderless).disabled(tracks.summaries[item.id]?.box == nil)
+            .help("Show the track on the map")
+        }
+        .contextMenu {
+            Button(role: .destructive) { remove(item) } label: { Label("Remove", systemImage: "trash") }
+        }
+        .swipeActions {
+            Button(role: .destructive) { remove(item) } label: { Label("Remove", systemImage: "trash") }
+        }
+    }
+
+    /// The line under a track: its length and what it is, or why it cannot be read.
+    private func detail(of item: TrackItem) -> String {
+        if let failure = tracks.failures[item.id] { return failure }
+        guard let summary = tracks.summaries[item.id] else { return "Reading…" }
+        var parts = [String(format: "%.1f km", summary.length / 1000)]
+        if summary.lines > 1 { parts.append("\(summary.lines) lines") }
+        if summary.activities > 0, let start = summary.startDate {
+            parts.append("activity of \(start.formatted(date: .abbreviated, time: .omitted))")
+        } else {
+            parts.append("route")
+        }
+        if !summary.problems.isEmpty { parts.append("\(summary.problems.count) not drawn") }
+        return parts.joined(separator: " · ")
+    }
+
+    private func remove(_ item: TrackItem) {
+        do { try tracks.delete(item) } catch { errors = [.failed(item.name, error.localizedDescription)] }
+    }
 
     private func mapRow(_ map: MapItem) -> some View {
         Button {

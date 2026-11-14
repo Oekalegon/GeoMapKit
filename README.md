@@ -22,6 +22,7 @@ Status: early. The design is in [docs/design/architecture.md](docs/design/archit
 | `Regions` | Region manifest, downloads, attribution (placeholder) |
 | `MapBuilder` | The build pipeline (blocks, levels, open sea), shared by the tool and the apps |
 | `Tracks` | GPX files, the `Route` model (distances, projection) and activity tracks; no platform framework, so the Watch can read a route |
+| `TrackOverlays` | Draws a `Route` over the map (`RouteOverlay`); `MapView(overlays:)` takes any `MapOverlay` |
 
 All library targets build for iOS, iPadOS, macOS and watchOS 26, in Swift 6 language mode.
 

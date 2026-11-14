@@ -23,6 +23,7 @@ import SwiftUI
 public struct MapView: View {
     private let source: any CellSource
     private let style: MapStyle
+    private let overlays: [any MapOverlay]
     @Binding private var center: Coordinate
     @Binding private var zoom: Double
     @Binding private var bearing: Double
@@ -81,16 +82,20 @@ public struct MapView: View {
     ///   - zoom: The fractional zoom level (256-point tiles). The view changes it when the user zooms.
     ///   - bearing: The compass direction at the top of the view, in degrees clockwise from north (0 is north up). The view
     ///     changes it when the user turns the map; labels stay upright at every bearing.
+    ///   - overlays: What is drawn over the map features and under the labels (see ``MapOverlay``): routes, tracks, markers. They
+    ///     are part of the cached image, so they are for what changes rarely; a change of the list of ids draws a new image, and the
+    ///     old one stays on screen until it is ready.
     public init(
         source: any CellSource, style: MapStyle = .standard, center: Binding<Coordinate>, zoom: Binding<Double>,
-        bearing: Binding<Double>
+        bearing: Binding<Double>, overlays: [any MapOverlay] = []
     ) {
         self.source = source
         self.style = style
+        self.overlays = overlays
         _center = center
         _zoom = zoom
         _bearing = bearing
-        _model = State(initialValue: MapModel(source: source, style: style))
+        _model = State(initialValue: MapModel(source: source, style: style, overlays: overlays))
     }
 
     public var body: some View {
@@ -153,6 +158,10 @@ public struct MapView: View {
             }
             .onChange(of: style) { _, new in
                 model.update(source: source, style: new)
+                model.request(viewport: viewport, scale: displayScale, interacting: false)
+            }
+            .onChange(of: overlays.map(\.overlayID)) { _, _ in
+                model.update(overlays: overlays)
                 model.request(viewport: viewport, scale: displayScale, interacting: false)
             }
             .task { model.request(viewport: viewport, scale: displayScale, interacting: false) }
