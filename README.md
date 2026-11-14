@@ -21,6 +21,7 @@ Status: early. The design is in [docs/design/architecture.md](docs/design/archit
 | `MapRender` | Renderer (placeholder) |
 | `Regions` | Region manifest, downloads, attribution (placeholder) |
 | `MapBuilder` | The build pipeline (blocks, levels, open sea), shared by the tool and the apps |
+| `Tracks` | GPX files, the `Route` model (distances, projection) and activity tracks; no platform framework, so the Watch can read a route |
 
 All library targets build for iOS, iPadOS, macOS and watchOS 26, in Swift 6 language mode.
 
@@ -33,7 +34,7 @@ swift run --package-path Tools -c release geomapkit scan region.osm.pbf
 swift run --package-path Tools -c release geomapkit cut region.osm.pbf --center 59.9139,10.7522 --radius-km 15
 ```
 
-`cut` prints the time per pass, peak memory (heap footprint and resident) and what the extract contains. `border-scan` checks that the borders between countries survive the build (`geomapkit border-scan region.osm.pbf --bbox S,W,N,E`): it lists the ways of national border relations that are not stored as a border, and exits with 1 if there are any with no reason; run it on an area with land, river and sea borders after changing the border rules. The commands live in the `ToolCommands` library and return reports, so they are tested; the `geomapkit` executable only parses arguments and prints.
+`cut` prints the time per pass, peak memory (heap footprint and resident) and what the extract contains. `track info file.gpx` says what a GPX file holds and whether each track is an activity (points with times, in order). `border-scan` checks that the borders between countries survive the build (`geomapkit border-scan region.osm.pbf --bbox S,W,N,E`): it lists the ways of national border relations that are not stored as a border, and exits with 1 if there are any with no reason; run it on an area with land, river and sea borders after changing the border rules. The commands live in the `ToolCommands` library and return reports, so they are tested; the `geomapkit` executable only parses arguments and prints.
 
 ## Build and test
 
