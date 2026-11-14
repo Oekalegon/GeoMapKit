@@ -439,13 +439,17 @@ struct MapBuildModelTests {
         #expect(long != MapBuildModel.folder(for: many + ["europe/other"], in: root).lastPathComponent)
     }
 
-    @Test("Jobs follow the cores and the memory")
+    @Test("Jobs follow the cores and the memory, with 8 GB left for the system and the open map")
     func jobs() {
         let gb: UInt64 = 1_000_000_000
         #expect(MapBuildModel.defaultJobs(cores: 12, memory: 64 * gb) == 4)
-        #expect(MapBuildModel.defaultJobs(cores: 8, memory: 8 * gb) == 2, "8 GB allow two blocks at about 3 GB each")
+        #expect(MapBuildModel.defaultJobs(cores: 18, memory: 48 * gb) == 4, "the Mac of the measurement")
+        #expect(MapBuildModel.defaultJobs(cores: 10, memory: 32 * gb) == 4)
+        #expect(MapBuildModel.defaultJobs(cores: 10, memory: 24 * gb) == 4)
+        #expect(MapBuildModel.defaultJobs(cores: 8, memory: 16 * gb) == 2, "16 GB: 8 GB are free after two blocks of about 3 GB")
+        #expect(MapBuildModel.defaultJobs(cores: 8, memory: 8 * gb) == 1, "8 GB leave nothing for more than one block")
         #expect(MapBuildModel.defaultJobs(cores: 2, memory: 64 * gb) == 1)
-        #expect(MapBuildModel.defaultJobs(cores: 1, memory: 1 * gb) == 1)
+        #expect(MapBuildModel.defaultJobs(cores: 1, memory: 1 * gb) == 1, "less memory than the margin is still one job")
     }
 
     // MARK: Real build

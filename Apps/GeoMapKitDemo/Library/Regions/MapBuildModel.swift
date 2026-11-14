@@ -284,13 +284,22 @@ final class MapBuildModel: Identifiable {
     }
 
     /// How many blocks to build at once: half the cores, at most 4 (as the command-line tool), and no more than the memory allows at
-    /// 3 GB for each. That is a safety factor: a block takes about 0.75 GB and the run over Østlandet and Sweden peaked at 4.2 GB with
-    /// 4 jobs, about 1 GB for each. The same number is used for the level blocks.
+    /// 3 GB for each after 8 GB are left for the system, the app and the map the user has open.
+    ///
+    /// Measured on 9 blocks of the Pyrenees (the densest of the source files): 4 jobs peaked at 10.3 GB (2.6 GB for each) and took 174 s,
+    /// 2 jobs 6.0 GB and 314 s. A map in use is not slowed by the cores (frames took the same with 4 jobs running on 18 cores), but a
+    /// Mac with little memory is: 16 GB gives 2 jobs, 8 GB gives 1. The same number is used for the level blocks.
     nonisolated static func defaultJobs(
         cores: Int = ProcessInfo.processInfo.activeProcessorCount, memory: UInt64 = ProcessInfo.processInfo.physicalMemory
     ) -> Int {
-        max(1, min(cores / 2, 4, Int(memory / 3_000_000_000)))
+        let usable = memory > memoryLeftFree ? memory - memoryLeftFree : 0
+        return max(1, min(cores / 2, 4, Int(usable / memoryPerJob)))
     }
+
+    /// The memory a block build is counted at: a little more than the 2.6 GB measured on dense blocks.
+    nonisolated private static let memoryPerJob: UInt64 = 3_000_000_000
+    /// The memory left to the system, the app and the open map.
+    nonisolated private static let memoryLeftFree: UInt64 = 8_000_000_000
 
     private static func describe(_ error: Error) -> String {
         if error is MapBuilderError || error is SourceError { return "\(error)" }
