@@ -18,8 +18,11 @@ extension ToolRunner {
         let tracks = file.tracks.map { track -> TrackInfoReport.TrackLine in
             let points = track.points
             let timed = points.isEmpty ? 0 : Double(points.filter { $0.time != nil }.count) / Double(points.count)
-            let activity: Result<ActivityTrack, NotAnActivity>
-            do { activity = .success(try track.activity()) } catch let reason as NotAnActivity { activity = .failure(reason) } catch {
+            let activity: Result<TrackInfoReport.ActivitySummary, NotAnActivity>
+            do {
+                let found = try track.activity()
+                activity = .success(.init(id: found.id, startDate: found.startDate, duration: found.duration, distance: found.distance))
+            } catch let reason as NotAnActivity { activity = .failure(reason) } catch {
                 activity = .failure(.tooFewPoints(0))
             }
             do {

@@ -18,8 +18,8 @@ struct ActivityTrackTests {
 
     @Test("A track with times is an activity, with its start, duration and distance")
     func activity() throws {
-        let track = try ActivityTrack(name: "Run", kind: "running", points: points(11))
-        #expect(track.name == "Run" && track.kind == "running" && track.points.count == 11)
+        let track = try ActivityTrack(points: points(11))
+        #expect(track.tags.isEmpty && track.points.count == 11)
         #expect(track.startDate == start && track.duration == 300)
         #expect(abs(track.distance - 1_112) < 2)
         #expect(track.id.hasPrefix("gpx-") && track.id.count == 4 + 16)
@@ -83,9 +83,31 @@ struct ActivityTrackTests {
             """
         let file = try GPXFile(data: Data(gpx.utf8))
         let run = try file.tracks[0].activity()
-        #expect(run.name == "Run" && run.kind == "running" && run.duration == 30)
+        #expect(run.tags == ["gpx.name": .string("Run"), "gpx.type": .string("running")] && run.duration == 30)
+        // The tags of the app are added, and win over those of the file.
+        let tagged = try file.tracks[0].activity(tags: ["sport": .string("trail"), "gpx.type": .string("hiking"), "rating": .integer(4)])
+        #expect(tagged.tags["sport"] == .string("trail") && tagged.tags["gpx.type"] == .string("hiking") && tagged.tags["rating"] == .integer(4))
+        #expect(tagged.tags["gpx.name"] == .string("Run"))
+        #expect(try file.tracks[0].activity().id == tagged.id, "tags are not part of the id")
         #expect(throws: NotAnActivity.self) { try file.tracks[1].activity() }
         #expect(try file.routes[0].route().length > 100)
         #expect(try file.tracks[0].activity(id: "mine").id == "mine")
+    }
+
+    @Test("Tags of any kind are kept as they are, and survive encoding")
+    func tags() throws {
+        let payload = Data([1, 2, 3, 250])
+        let date = Date(timeIntervalSince1970: 1_793_516_400)
+        let tags: [String: TagValue] = [
+            "sport": .string("trail running"), "workout": .integer(12_345), "effort": .double(7.5), "race": .bool(true),
+            "recorded": .date(date), "blob": .data(payload),
+        ]
+        let track = try ActivityTrack(id: "app-1", points: points(5), tags: tags)
+        #expect(track.tags == tags)
+        let data = try JSONEncoder().encode(tags)
+        #expect(try JSONDecoder().decode([String: TagValue].self, from: data) == tags)
+        var changed = track
+        changed.tags["sport"] = .string("hiking")
+        #expect(changed != track && changed.points == track.points)
     }
 }

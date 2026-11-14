@@ -194,4 +194,66 @@ struct GPXFileTests {
         let near = extended.waypoints(near: route, maximumDistance: 100)
         #expect(near.map(\.name) == ["Water"] && near[0].distanceAlong < 20 && near[0].isRequired == false)
     }
+
+    @Test("The hand-written time parser agrees with ISO8601DateFormatter, and leaves odd forms to it")
+    func fastTimes() throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        // Leap days, a century that is not a leap year, a leap century, the end of the year, an offset on each side, midnight.
+        for text in [
+            "2024-02-29T12:00:00Z", "2000-02-29T00:00:00Z", "2100-02-28T23:59:59Z", "1999-12-31T23:59:59Z", "2026-01-01T00:00:00Z",
+            "1970-01-01T00:00:00Z", "2026-11-01T09:00:00+02:00", "2026-11-01T05:30:00-01:30", "2026-03-29T01:59:59+00:00", "1969-07-20T20:17:40Z",
+        ] {
+            let fast = try #require(GPXParser.fastDate(text), "\(text)")
+            let slow = try #require(formatter.date(from: text))
+            #expect(fast == slow, "\(text)")
+        }
+        for text in ["2026-11-01T07:00:00.250Z", "2026-11-01T07:00:00.123456Z", "2026-11-01T07:00:00.5+01:00"] {
+            let fast = try #require(GPXParser.fastDate(text))
+            let slow = try #require(fractional.date(from: text))
+            #expect(abs(fast.timeIntervalSince(slow)) < 0.001, "\(text)")
+        }
+        #expect(GPXParser.fastDate("2026-11-01T07:00:00") == formatter.date(from: "2026-11-01T07:00:00Z"), "no zone is UTC")
+        // What it does not read, it leaves alone, so the formatter (and then the error) decide.
+        for text in [
+            "2026-13-01T07:00:00Z", "2026-02-30T07:00:00Z", "2026-11-01T24:00:00Z", "2026-11-01T07:60:00Z", "2026-11-01 07:00:00Z", "yesterday", "",
+            "2026-11-01T07:00:00.Z", "2026-11-01T07:00:00Zextra", "2026-11-01T07:00:00+0200", "2026-11-01T07:00",
+        ] {
+            #expect(GPXParser.fastDate(text) == nil, "\(text)")
+        }
+    }
+
+    @Test("A file of many timed points is read in a few seconds, not tens of seconds")
+    func manyTimedPoints() throws {
+        let count = 100_000
+        var text = "<gpx><trk><trkseg>\n"
+        text.reserveCapacity(count * 90)
+        for index in 0..<count {
+            let seconds = index % 60, minutes = index / 60 % 60, hours = index / 3600 % 24
+            text += String(
+                format: "<trkpt lat=\"%.6f\" lon=\"10.7\"><ele>10</ele><time>2026-11-01T%02d:%02d:%02dZ</time></trkpt>\n", 59.0 + Double(index) * 1e-6,
+                hours, minutes, seconds)
+        }
+        text += "</trkseg></trk></gpx>"
+        let data = Data(text.utf8)
+        let clock = ContinuousClock()
+        let started = clock.now
+        let file = try GPXFile(data: data)
+        let elapsed = clock.now - started
+        #expect(file.tracks[0].points.count == count && file.tracks[0].points.allSatisfy { $0.time != nil })
+        // ISO8601DateFormatter takes about 40 microseconds for each time, which would be 4 s or more here; the hand-written parser needs a
+        // fraction of a second. The bound leaves room for a slow machine and still fails if the formatter comes back.
+        #expect(elapsed < .seconds(3), "took \(elapsed)")
+    }
+
+    @Test("A valid file in UTF-16 is read, and a comment that mentions a document type is refused")
+    func utf16AndComments() throws {
+        let valid = "<?xml version=\"1.0\" encoding=\"UTF-16\"?><gpx><trk><name>Överste</name><trkseg><trkpt lat=\"1\" lon=\"2\"/></trkseg></trk></gpx>"
+        let file = try GPXFile(data: try #require(valid.data(using: .utf16)))
+        #expect(file.tracks[0].name == "Överste" && file.tracks[0].points.count == 1)
+        // The check is on bytes, so it cannot tell a declaration from a comment about one: both are refused, which is documented.
+        #expect(throws: GPXError.self) { try parse("<gpx><!-- <!DOCTYPE --><trk><trkseg><trkpt lat=\"1\" lon=\"2\"/></trkseg></trk></gpx>") }
+    }
 }

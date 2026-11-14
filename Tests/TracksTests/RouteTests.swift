@@ -157,4 +157,35 @@ struct RouteTests {
         let beside = route.project(Coordinate(latitude: 69.001, longitude: 18.005))
         #expect(abs(beside.distance - 111.2) < 1 && abs(beside.distanceAlong - route.length / 2) < 1)
     }
+
+    @Test("A projection inside a window is never farther than any position of the route in that window, and lies in the window")
+    func windowedProjectionOnALongRoute() throws {
+        // A wandering route of 3,000 points with a few crossings.
+        var generator = SystemRandomNumberGenerator()
+        var latitude = 59.0, longitude = 10.0
+        var points: [TrackPoint] = []
+        for index in 0..<3_000 {
+            latitude += 0.00008 * sin(Double(index) / 90) + Double.random(in: -0.00002...0.00002, using: &generator)
+            longitude += 0.00009 * cos(Double(index) / 70) + Double.random(in: -0.00002...0.00002, using: &generator)
+            points.append(TrackPoint(latitude: latitude, longitude: longitude))
+        }
+        let route = try Route(points: points)
+        for _ in 0..<150 {
+            let centre = Double.random(in: 0...route.length, using: &generator)
+            let width = Double.random(in: 50...(route.length / 3), using: &generator)
+            let window = max(0, centre - width / 2)...min(route.length, centre + width / 2)
+            let somewhere = route.coordinate(atDistance: Double.random(in: 0...route.length, using: &generator))
+            let query = Coordinate(latitude: somewhere.latitude + 0.0002, longitude: somewhere.longitude - 0.0002)
+            let found = route.project(query, in: window)
+            #expect(found.distanceAlong >= window.lowerBound - 1e-6 && found.distanceAlong <= window.upperBound + 1e-6)
+            // Sampling the window every 2 m finds nothing nearer, apart from the 2 m of the sampling.
+            var best = Double.infinity
+            var distance = window.lowerBound
+            while distance <= window.upperBound {
+                best = min(best, query.distance(to: route.coordinate(atDistance: distance)))
+                distance += 2
+            }
+            #expect(found.distance <= best + 1.5, "window \(window): \(found.distance) against \(best)")
+        }
+    }
 }

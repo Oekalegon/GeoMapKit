@@ -4,6 +4,16 @@ import Tracks
 
 /// What the `track info` command found in a GPX file.
 public struct TrackInfoReport: Sendable {
+    /// What is said about a track that is an activity: not its points.
+    public struct ActivitySummary: Sendable, Equatable {
+        public let id: String
+        public let startDate: Date
+        /// Seconds.
+        public let duration: TimeInterval
+        /// Metres.
+        public let distance: Double
+    }
+
     /// One track of the file.
     public struct TrackLine: Sendable {
         public let name: String?
@@ -16,7 +26,7 @@ public struct TrackInfoReport: Sendable {
         /// The share of the points that have a time, from 0 to 1.
         public let timedFraction: Double
         /// The activity if the track is one, or the reason it is not.
-        public let activity: Result<ActivityTrack, NotAnActivity>
+        public let activity: Result<ActivitySummary, NotAnActivity>
         /// Why the track is no route, if it is not.
         public let routeProblem: String?
     }

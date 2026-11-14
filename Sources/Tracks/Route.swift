@@ -36,10 +36,12 @@ public struct Route: Sendable, Equatable {
     /// - Throws: ``RouteError``.
     public init(name: String? = nil, points: [TrackPoint], segmentStarts: [Int]? = nil, waypoints: [RouteWaypoint] = []) throws {
         guard !points.isEmpty else { throw RouteError.empty }
-        if let starts = segmentStarts, !starts.isEmpty {
-            guard starts.first == 0, zip(starts, starts.dropFirst()).allSatisfy({ $0 < $1 }), starts.last! < points.count else {
+        var resolvedStarts = [0]
+        if let starts = segmentStarts, let last = starts.last {
+            guard starts.first == 0, zip(starts, starts.dropFirst()).allSatisfy({ $0 < $1 }), last < points.count else {
                 throw RouteError.invalidSegmentStarts
             }
+            resolvedStarts = starts
         }
         var distances = [0.0]
         distances.reserveCapacity(points.count)
@@ -58,7 +60,7 @@ public struct Route: Sendable, Equatable {
         self.name = name
         self.points = points
         self.distances = distances
-        self.segmentStarts = (segmentStarts?.isEmpty ?? true) ? [0] : segmentStarts!
+        self.segmentStarts = resolvedStarts
         self.waypoints = waypoints
         boundingBox = BoundingBox(south: south, west: west, north: north, east: east)
     }
@@ -120,9 +122,21 @@ public struct Route: Sendable, Equatable {
             let only = points[0].coordinate
             return RouteProjection(coordinate: only, distanceAlong: 0, distance: coordinate.distance(to: only), stepIndex: 0)
         }
-        for index in 0..<(points.count - 1) {
+        // The first step that can overlap the window: the last point at or before its start. Without this the cost of a call would grow with
+        // the length of the route, which a follower on the Watch calls every second.
+        var first = 0
+        if lower > 0 {
+            var low = 0, high = points.count - 2
+            while low < high {
+                let middle = (low + high + 1) / 2
+                if distances[middle] <= lower { low = middle } else { high = middle - 1 }
+            }
+            first = low
+        }
+        for index in first..<(points.count - 1) {
             let startDistance = distances[index], endDistance = distances[index + 1]
-            if endDistance < lower || startDistance > upper { continue }
+            if startDistance > upper { break }
+            if endDistance < lower { continue }
             let a = flat(points[index].coordinate), b = flat(points[index + 1].coordinate)
             let dx = b.x - a.x, dy = b.y - a.y
             let squared = dx * dx + dy * dy

@@ -1,16 +1,14 @@
 import Foundation
 import GeoCore
 
-/// A recorded activity: points that all have a time, in order. This is the input of the heat map and of the segment statistics, and it
-/// is the same whether it comes from a GPX file or from the workout store of the system (the app makes one from each, so the kit
-/// knows nothing about HealthKit).
+/// A recorded activity: points that all have a time, in order, with an id and tags that the app chooses. This is the input of the heat map
+/// and of the segment statistics. The package fills it from a GPX file; an app fills it from whatever it has (a workout store, its own
+/// recordings). The package knows nothing about where a track came from, what sport it was, or what the tags mean.
 public struct ActivityTrack: Sendable, Equatable, Identifiable {
-    /// The id: the one given, or one made from the start time, the number of points and the first position.
+    /// The id: the one the app gave, or one made from the start time, the number of points and the first position.
     public let id: String
-    /// The name, if the source has one.
-    public let name: String?
-    /// The kind of activity as the source says (for example `running`), if it does.
-    public let kind: String?
+    /// Anything the app wants to keep with the activity: its sport, its source, its name, an encoded payload. The package never reads it.
+    public var tags: [String: TagValue]
     /// The points that have a time, in order, with times that never go back.
     public let points: [TrackPoint]
     /// The time of the first point.
@@ -27,12 +25,11 @@ public struct ActivityTrack: Sendable, Equatable, Identifiable {
     ///
     /// - Parameters:
     ///   - id: The id; by default made by ``makeID(startDate:pointCount:first:)``.
-    ///   - name: The name.
-    ///   - kind: The kind of activity.
     ///   - points: The points in order.
+    ///   - tags: The app's tags.
     ///   - rules: What makes a track an activity.
     /// - Throws: ``NotAnActivity``.
-    public init(id: String? = nil, name: String? = nil, kind: String? = nil, points: [TrackPoint], rules: ActivityRules = .standard) throws {
+    public init(id: String? = nil, points: [TrackPoint], tags: [String: TagValue] = [:], rules: ActivityRules = .standard) throws {
         guard !points.isEmpty else { throw NotAnActivity.tooFewPoints(0) }
         let timed = points.filter { $0.time != nil }
         let fraction = Double(timed.count) / Double(points.count)
@@ -55,8 +52,7 @@ public struct ActivityTrack: Sendable, Equatable, Identifiable {
         var distance = 0.0
         for (previous, current) in zip(fixed, fixed.dropFirst()) { distance += previous.coordinate.distance(to: current.coordinate) }
         self.id = id ?? Self.makeID(startDate: first, pointCount: fixed.count, first: fixed[0].coordinate)
-        self.name = name
-        self.kind = kind
+        self.tags = tags
         self.points = fixed
         startDate = first
         duration = last.timeIntervalSince(first)

@@ -32,12 +32,20 @@ public struct GPXTrack: Sendable, Equatable {
 
     /// The track as an activity, if it is one.
     ///
+    /// The name and the type of the file become the tags `gpx.name` and `gpx.type` (as strings) when the file has them; what they mean
+    /// is for the app to say.
+    ///
     /// - Parameters:
     ///   - id: The id of the activity; by default one made from the start time, the number of points and the first position, so the same
     ///     activity read twice (or from two files) gets the same id.
+    ///   - tags: More tags to add, which win over the two above.
     ///   - rules: What makes a track an activity.
     /// - Throws: ``NotAnActivity`` with the reason.
-    public func activity(id: String? = nil, rules: ActivityRules = .standard) throws -> ActivityTrack {
-        try ActivityTrack(id: id, name: name, kind: type, points: points, rules: rules)
+    public func activity(id: String? = nil, tags: [String: TagValue] = [:], rules: ActivityRules = .standard) throws -> ActivityTrack {
+        var all: [String: TagValue] = [:]
+        if let name { all["gpx.name"] = .string(name) }
+        if let type { all["gpx.type"] = .string(type) }
+        all.merge(tags) { _, new in new }
+        return try ActivityTrack(id: id, points: points, tags: all, rules: rules)
     }
 }
