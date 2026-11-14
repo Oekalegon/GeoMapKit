@@ -210,6 +210,37 @@ public enum ReportFormatter {
         return lines.joined(separator: "\n")
     }
 
+    /// The text for a border scan: the counts, the ways that are no border for a reason, and the ones that are no border and should be.
+    public static func text(for report: BorderScanReport) -> String {
+        let audit = report.audit
+        var lines = [
+            "Area:      \(report.cut.fileName), cut \(Formatting.seconds(report.cut.totalTime)), audit \(Formatting.seconds(report.auditTime))",
+            "Ways of national border relations (admin_level=2): \(Formatting.count(audit.memberWays))",
+            "  stored as countryBorder:         \(Formatting.count(audit.stored))",
+        ]
+        for reason in BorderAuditReport.Expected.allCases {
+            let count = audit.expected[reason, default: 0]
+            guard count > 0 else { continue }
+            let text = reason == .coastline ? "a coastline (no border)" : "the limit of one country's waters (no border)"
+            lines.append("  \(pad(text + ":", 32)) \(Formatting.count(count))")
+        }
+        lines.append("  outside the stored area:         \(Formatting.count(audit.outsideStoredArea))")
+        lines.append("  not in the extract:              \(Formatting.count(audit.notInExtract))")
+        if audit.isClean {
+            lines.append("Every border way in the area is stored or has a reason not to be.")
+        } else {
+            lines.append("")
+            lines.append("NOT STORED AS A BORDER, WITH NO REASON: \(Formatting.count(audit.unexpectedCount)) ways")
+            for group in audit.unexpected {
+                lines.append("  \(pad(Formatting.count(group.count), 7, left: true))  \(group.signature)")
+                for example in group.examples {
+                    lines.append("           way \(example.wayID) in \(example.relations.joined(separator: " | "))")
+                }
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     /// The text for a build: the cut, then the file and what went into it.
     public static func text(for report: BuildCommandReport) -> String {
         let statistics = report.statistics
