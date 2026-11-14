@@ -35,6 +35,68 @@ struct SourceCacheTests {
         #expect(cache.list().map(\.regionID) == ["norway"])
     }
 
+    @Test("The entries are the files, the files that cannot be used and the unfinished downloads, with the bytes they take")
+    func entries() throws {
+        let (cache, directory, _) = try makeCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        #expect(cache.entries().isEmpty)
+        try store(cache, id: "europe/norway", bytes: 1000)
+        try store(cache, id: "sweden", bytes: 500)
+        // Sweden is damaged: the file is not what the record says.
+        try Data(repeating: 1, count: 10).write(to: cache.fileURL(forRegionID: "sweden"))
+        // Finland has an unfinished download only, and Norway one as well as its file.
+        let part = try cache.preparePart(regionID: "finland", etag: "\"v1\"", keepBytes: false)
+        try Data(repeating: 2, count: 300).write(to: part)
+        try Data(repeating: 3, count: 40).write(to: try cache.preparePart(regionID: "europe/norway", etag: nil, keepBytes: false))
+        // A file with no record, and a record with no file.
+        try Data(repeating: 4, count: 70).write(to: cache.fileURL(forRegionID: "denmark"))
+        try store(cache, id: "iceland", bytes: 20)
+        try FileManager.default.removeItem(at: cache.fileURL(forRegionID: "iceland"))
+
+        let entries = cache.entries()
+        func entry(_ id: String) -> SourceCache.Entry? { entries.first { $0.id == id } }
+        guard case .file(let record)? = entry("europe/norway#file")?.kind else { Issue.record("norway is not a file"); return }
+        #expect(record.regionID == "europe/norway" && entry("europe/norway#file")?.bytes == 1000)
+        #expect(entry("europe/norway#unfinished")?.kind == .unfinished && entry("europe/norway#unfinished")?.bytes == 40)
+        #expect(entry("finland#unfinished")?.bytes == 300)
+        guard case .damaged? = entry("sweden#damaged")?.kind else { Issue.record("sweden is not damaged"); return }
+        #expect(entry("sweden#damaged")?.bytes == 10)
+        #expect(entry("denmark#damaged")?.bytes == 70, "a file with no record cannot be trusted")
+        guard case .damaged? = entry("iceland#damaged")?.kind else { Issue.record("iceland is not damaged"); return }
+        #expect(entry("iceland#damaged")?.bytes == 0)
+        #expect(entries.count == 6)
+        #expect(entries.map(\.regionID) == entries.map(\.regionID).sorted(), "ordered by region")
+    }
+
+    @Test("The file can be removed and the unfinished download of the region kept, or both")
+    func removeFileOnly() throws {
+        let (cache, directory, _) = try makeCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try store(cache, id: "norway")
+        try Data(repeating: 3, count: 40).write(to: try cache.preparePart(regionID: "norway", etag: "\"v2\"", keepBytes: false))
+        try cache.remove(regionID: "norway", includingUnfinished: false)
+        #expect(cache.status(ofRegionID: "norway").status == .missing || cache.entries().allSatisfy { $0.kind == .unfinished })
+        #expect(cache.partialDownload(regionID: "norway")?.bytes == 40, "the unfinished download stays")
+        try store(cache, id: "norway")
+        try Data(repeating: 3, count: 40).write(to: try cache.preparePart(regionID: "norway", etag: "\"v2\"", keepBytes: false))
+        try cache.remove(regionID: "norway")
+        #expect(cache.entries().isEmpty, "by default everything of the region goes")
+    }
+
+    @Test("An unfinished download can be removed on its own, and the file of the region stays")
+    func removeUnfinished() throws {
+        let (cache, directory, _) = try makeCache()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try store(cache, id: "norway")
+        try Data(repeating: 3, count: 40).write(to: try cache.preparePart(regionID: "norway", etag: "\"v2\"", keepBytes: false))
+        try cache.removeUnfinished(regionID: "norway")
+        #expect(cache.partialDownload(regionID: "norway") == nil)
+        guard case .current = cache.status(ofRegionID: "norway").status else { Issue.record("the file went too"); return }
+        try cache.removeUnfinished(regionID: "norway")
+        try cache.remove(regionID: "norway")
+        #expect(cache.entries().isEmpty)
+    }
+
     @Test("A file is current for 30 days after it was checked and stale after, and a check starts the time again")
     func timeLimit() throws {
         let (cache, directory, clock) = try makeCache()

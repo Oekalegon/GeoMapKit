@@ -43,6 +43,7 @@ struct LibraryScreen: View {
     @Environment(MapBuildHost.self) private var builds
     /// The map the user asked to delete with its files, and the size of them once it is known.
     @State private var deletingFiles: MapItem?
+    @State private var showsFiles = false
     @State private var filesSize: Int64?
     #endif
 
@@ -142,8 +143,10 @@ struct LibraryScreen: View {
                 Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
                 Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
                 Button { builds.openPicker() } label: { Label("Get maps…", systemImage: "arrow.down.circle") }
-                    .disabled(builds.isBusy).help(builds.isBusy ? "A map is being built; wait for it, or dismiss its result." : "")
+                    .disabled(builds.isBusy)
                     .help(builds.isBusy ? "A map is being built; the bar at the bottom shows it." : "Download regions and build a map")
+                Button { showsFiles = builds.ensureModel() != nil } label: { Label("Downloaded files…", systemImage: "externaldrive") }
+                    .help("See the files the maps were built from, and delete the ones you do not need")
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
@@ -153,6 +156,11 @@ struct LibraryScreen: View {
         }
         .sheet(isPresented: Bindable(builds).showsPicker) {
             if let model = builds.model { RegionPickerScreen(build: model, onStarted: { dismiss() }) }
+        }
+        .sheet(isPresented: $showsFiles) {
+            if let model = builds.model {
+                SourceFilesScreen(build: model, host: builds, mapNames: builtMapNames)
+            }
         }
         .alert("Get maps", isPresented: Binding(get: { builds.problem != nil }, set: { if !$0 { builds.problem = nil } })) {
             Button("OK") { builds.problem = nil }
@@ -349,6 +357,15 @@ struct LibraryScreen: View {
         if library.selectedMapID == map.id { return true }
         guard let working = builds.model?.workingFolder, let folder = library.builtFolder(of: map) else { return false }
         return working.standardizedFileURL.resolvingSymlinksInPath().path == folder.standardizedFileURL.path
+    }
+
+    /// The names of the maps the app built, by the name of their folder, for the list of downloaded files.
+    private var builtMapNames: [String: String] {
+        var names: [String: String] = [:]
+        for map in library.maps {
+            if let folder = library.builtFolder(of: map) { names[folder.lastPathComponent] = map.name }
+        }
+        return names
     }
 
     /// Opens the picker for regions that are built into the folder of this map.

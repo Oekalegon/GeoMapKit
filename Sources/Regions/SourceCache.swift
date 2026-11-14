@@ -112,6 +112,69 @@ public struct SourceCache: Sendable {
         }
     }
 
+    /// One thing in the cache folder that takes space: a usable file, one that cannot be used, or an unfinished download.
+    public struct Entry: Equatable, Sendable, Identifiable {
+        /// What it is.
+        public enum Kind: Equatable, Sendable {
+            /// A file with a readable record whose size agrees with the file (current or stale).
+            case file(CachedSource)
+            /// A file or record that cannot be trusted, with the reason (see ``CacheStatus/damaged(_:)``). It is downloaded again when needed.
+            case damaged(String)
+            /// The bytes of a download that did not finish; a new download continues after them.
+            case unfinished
+        }
+
+        /// The region.
+        public let regionID: String
+        /// What it is.
+        public let kind: Kind
+        /// The bytes it takes on disk (the file, or the part file); 0 for a record whose file is missing.
+        public let bytes: Int64
+
+        /// A region can have a file and an unfinished download at the same time, so the kind is part of the identity.
+        public var id: String {
+            switch kind {
+            case .file: "\(regionID)#file"
+            case .damaged: "\(regionID)#damaged"
+            case .unfinished: "\(regionID)#unfinished"
+            }
+        }
+    }
+
+    /// Everything in the cache folder that takes space, ordered by region: files, files that cannot be used (also a file with no
+    /// record, and a record with no file) and unfinished downloads.
+    ///
+    /// - Returns: The entries; empty if the folder does not exist.
+    public func entries() -> [Entry] {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return [] }
+        // The name of a file is the percent-encoded region id plus a suffix, so the id can be read back from it.
+        func regionID(_ name: String, suffix: String) -> String? {
+            guard name.hasSuffix(suffix) else { return nil }
+            return String(name.dropLast(suffix.count)).removingPercentEncoding
+        }
+        var found: [Entry] = []
+        var seen = Set<String>()
+        for name in names.sorted() {
+            if let id = regionID(name, suffix: ".osm.pbf.json") {
+                seen.insert(id)
+                let bytes = Self.size(of: fileURL(forRegionID: id)) ?? 0
+                switch status(ofRegionID: id) {
+                case (.damaged(let reason), _): found.append(Entry(regionID: id, kind: .damaged(reason), bytes: bytes))
+                case (_, let record?): found.append(Entry(regionID: id, kind: .file(record), bytes: bytes))
+                default: break
+                }
+            } else if let id = regionID(name, suffix: ".osm.pbf.part") {
+                found.append(Entry(regionID: id, kind: .unfinished, bytes: Self.size(of: partURL(id)) ?? 0))
+            }
+        }
+        // A file with no record: nothing says what it is, and ``status(ofRegionID:)`` does not trust it.
+        for name in names.sorted() {
+            guard let id = regionID(name, suffix: ".osm.pbf"), !seen.contains(id) else { continue }
+            found.append(Entry(regionID: id, kind: .damaged("the record is missing"), bytes: Self.size(of: fileURL(forRegionID: id)) ?? 0))
+        }
+        return found.sorted { ($0.regionID, $0.id) < ($1.regionID, $1.id) }
+    }
+
     // MARK: Changing
 
     /// Records that the server was asked and the file is current.
@@ -154,13 +217,27 @@ public struct SourceCache: Sendable {
         try? manager.removeItem(at: partRecordURL(regionID))
     }
 
-    /// Removes the file, the record and any unfinished download of a region.
+    /// Removes the file and the record of a region, and by default any unfinished download of it.
+    ///
+    /// - Parameters:
+    ///   - regionID: The region.
+    ///   - includingUnfinished: Whether the unfinished download of the region (the part file and its note) goes too. With `false`
+    ///     it stays: it can be a download of a newer version that was cancelled, which is a thing of its own.
+    public func remove(regionID: String, includingUnfinished: Bool = true) throws {
+        let manager = FileManager.default
+        var urls = [fileURL(forRegionID: regionID), recordURL(regionID)]
+        if includingUnfinished { urls += [partURL(regionID), partRecordURL(regionID)] }
+        for url in urls where manager.fileExists(atPath: url.path) {
+            try manager.removeItem(at: url)
+        }
+    }
+
+    /// Removes the unfinished download of a region (the part file and its note) and leaves the file of the region alone.
     ///
     /// - Parameter regionID: The region.
-    public func remove(regionID: String) throws {
+    public func removeUnfinished(regionID: String) throws {
         let manager = FileManager.default
-        for url in [fileURL(forRegionID: regionID), recordURL(regionID), partURL(regionID), partRecordURL(regionID)]
-        where manager.fileExists(atPath: url.path) {
+        for url in [partURL(regionID), partRecordURL(regionID)] where manager.fileExists(atPath: url.path) {
             try manager.removeItem(at: url)
         }
     }

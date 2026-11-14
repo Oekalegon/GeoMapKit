@@ -31,15 +31,20 @@ final class MapBuildHost {
     ///
     /// - Parameter adding: The map the chosen regions are added to, or `nil` to make a map of their own.
     func openPicker(adding: MapBuildModel.Target? = nil) {
-        guard !isBusy else { return }
+        guard !isBusy, let model = ensureModel() else { return }
+        model.setTarget(adding)
+        showsPicker = true
+    }
+
+    /// The build model, made when first needed; `nil` (with ``problem`` set) if the folders cannot be used.
+    func ensureModel() -> MapBuildModel? {
         if model == nil {
             do { model = try make() } catch {
                 problem = "The folder for the source files cannot be used: \(error)"
-                return
+                return nil
             }
         }
-        model?.setTarget(adding)
-        showsPicker = true
+        return model
     }
 }
 #endif
