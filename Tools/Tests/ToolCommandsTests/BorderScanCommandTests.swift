@@ -22,8 +22,8 @@ struct BorderScanCommandTests {
         let report = try ToolRunner.borderScan(urls: [input], area: area)
         #expect(report.isClean && report.audit.memberWays == 0 && report.audit.stored == 0)
         let text = ReportFormatter.text(for: report)
-        #expect(text.contains("Every border way in the area is stored or has a reason not to be."))
-        #expect(!text.contains("NOT STORED"))
+        #expect(text.contains("No national border relation in the area; nothing was checked."))
+        #expect(!text.contains("Every border way") && !text.contains("NOT STORED"))
     }
 
     @Test("a missing file is an error")
@@ -57,6 +57,18 @@ struct BorderScanCommandTests {
         #expect(text.contains("NOT STORED AS A BORDER, WITH NO REASON: 1 ways"))
         #expect(text.contains("2 relations boundary=administrative admin_level=2 waterway=river"))
         #expect(text.contains("way 77 in Greece | Turkey"))
-        #expect(!text.contains("Every border way"))
+        #expect(!text.contains("Every border way") && !text.contains("nothing was checked"))
+    }
+
+    @Test("an area with border ways that are all stored says so")
+    func cleanWithBorders() throws {
+        let input = try tinyFile()
+        defer { try? FileManager.default.removeItem(at: input) }
+        let cut = try ToolRunner.borderScan(urls: [input], area: area).cut
+        var audit = BorderAuditReport()
+        audit.memberWays = 5
+        audit.stored = 5
+        let text = ReportFormatter.text(for: BorderScanReport(cut: cut, audit: audit, auditTime: .seconds(1)))
+        #expect(text.contains("Every border way in the area is stored or has a reason not to be.") && !text.contains("nothing was checked"))
     }
 }

@@ -7,7 +7,8 @@ import OSMPBF
 ///
 /// A border is mapped in several ways (tagged ways, untagged ways that only the relation says are a border, rivers, lines in the sea),
 /// and each has been lost to a rule that was meant for something else. The audit finds the next one on real data. It does not find a
-/// border that no relation holds, or a relation that is missing from the extract.
+/// border that no relation holds, or a relation that is missing from the extract. A way counts as being in the stored area when one of
+/// its nodes is in it, so a long segment that crosses a corner of the area with no node inside is not checked; border ways have many nodes.
 public enum BorderAudit {
     /// Builds the store of an extract and audits it.
     ///
@@ -27,19 +28,24 @@ public enum BorderAudit {
                 }
             }
         }
-        return audit(extract, stored: stored, maxExamples: maxExamples)
+        return audit(extract, stored: stored, storedArea: file.boundingBox, maxExamples: maxExamples)
     }
 
     /// Audits an extract against the ways that were stored as `countryBorder`.
     ///
     /// - Parameters:
-    ///   - extract: The extract. Its bounding box is the stored area.
+    ///   - extract: The extract.
     ///   - stored: The ids of the ways that are stored as `countryBorder`.
+    ///   - storedArea: The area the store covers: the extent of the built file. The builder writes whole cells only, so this can be
+    ///     smaller than the box the extract was cut with.
     ///   - maxExamples: How many example ways to keep for each group.
     /// - Returns: The report.
-    public static func audit(_ extract: OSMExtract, stored: Set<Int64>, maxExamples: Int = 3) -> BorderAuditReport {
+    public static func audit(
+        _ extract: OSMExtract, stored: Set<Int64>, storedArea: BoundingBox, maxExamples: Int = 3
+    ) -> BorderAuditReport {
         let classifier = FeatureClassifier()
-        var relationsOfWay: [Int64: Set<String>] = [:]
+        // Relation ids, as the builder counts them: two relations of one name are two.
+        var relationsOfWay: [Int64: [Int64: String]] = [:]
         for position in extract.relations.indices {
             let tags = extract.relations.tags(at: position)
             guard tags.value(forKey: "boundary") == "administrative", tags.value(forKey: "admin_level") == "2",
@@ -47,7 +53,7 @@ public enum BorderAudit {
             else { continue }
             let name = tags.value(forKey: "name:en") ?? tags.value(forKey: "name") ?? "relation \(extract.relations.ids[position])"
             for member in extract.relations[position].relation.members where member.type == .way {
-                relationsOfWay[member.id, default: []].insert(name)
+                relationsOfWay[member.id, default: [:]][extract.relations.ids[position]] = name
             }
         }
 
@@ -65,7 +71,7 @@ public enum BorderAudit {
             }
             // The extract keeps all of a relation's ways, far outside the cut; only what lies in the stored area counts.
             guard extract.ways.nodeIDs(at: position).contains(where: { id in
-                extract.node(withID: id).map { extract.boundingBox.contains($0.coordinate) } ?? false
+                extract.node(withID: id).map { storedArea.contains($0.coordinate) } ?? false
             }) else {
                 report.outsideStoredArea += 1
                 continue
@@ -83,7 +89,7 @@ public enum BorderAudit {
                 var group = groups[signature] ?? BorderAuditReport.Group(signature: signature, count: 0, examples: [])
                 group.count += 1
                 if group.examples.count < maxExamples {
-                    group.examples.append(BorderAuditReport.Example(wayID: wayID, relations: relations.sorted()))
+                    group.examples.append(BorderAuditReport.Example(wayID: wayID, relations: relations.values.sorted()))
                 }
                 groups[signature] = group
             }

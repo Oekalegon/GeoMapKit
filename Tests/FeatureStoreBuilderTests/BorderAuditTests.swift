@@ -1,4 +1,5 @@
 import Foundation
+import GeoCore
 import Testing
 
 @testable import FeatureStoreBuilder
@@ -11,6 +12,14 @@ struct BorderAuditTests {
         [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2"), ("name", "Suomi")],
         [("type", "boundary"), ("boundary", "administrative"), ("admin_level", "2"), ("name", "Россия")],
     ]
+
+    /// The area the builder writes for a world: the nine cells of the block (the cut reaches half a cell beyond them).
+    private func storedArea(_ world: SyntheticWorld) -> BoundingBox {
+        let northWest = world.block.point(0, 0), southEast = world.block.point(3, 3)
+        return BoundingBox(
+            south: Double(southEast.latitude) / 1e7, west: Double(northWest.longitude) / 1e7,
+            north: Double(northWest.latitude) / 1e7, east: Double(southEast.longitude) / 1e7)
+    }
 
     /// A way (id 10) across the block, in the national border relations: both, or only the first.
     private func world(tags: [(String, String)], relations: Int = 2) -> SyntheticWorld {
@@ -52,7 +61,7 @@ struct BorderAuditTests {
         }
         let extract = try group.extract()
         // Nothing stored: a border that was lost.
-        let report = BorderAudit.audit(extract, stored: [], maxExamples: 2)
+        let report = BorderAudit.audit(extract, stored: [], storedArea: storedArea(group), maxExamples: 2)
         #expect(!report.isClean && report.unexpectedCount == 5)
         let first = try #require(report.unexpected.first)
         #expect(first.signature == "1 relation boundary=administrative admin_level=2 waterway=river" && first.count == 4)
@@ -61,7 +70,7 @@ struct BorderAuditTests {
         #expect(shared.signature == "2 relations boundary=administrative admin_level=2 waterway=river")
         #expect(shared.examples == [BorderAuditReport.Example(wayID: 10, relations: ["Suomi", "Россия"].sorted())])
         // Stored: the same extract is clean again.
-        #expect(BorderAudit.audit(extract, stored: [10, 11, 12, 13, 14]).isClean)
+        #expect(BorderAudit.audit(extract, stored: [10, 11, 12, 13, 14], storedArea: storedArea(group)).isClean)
     }
 
     @Test("A way the relation names but the file lacks, and a way outside the stored area, are counted and not listed")
@@ -71,8 +80,33 @@ struct BorderAuditTests {
         outside.node(7, 6.0, 6.0); outside.node(8, 6.5, 6.0)
         outside.way(20, [7, 8], level2)
         outside.relation(52, [(10, "outer", 1), (20, "outer", 1), (21, "outer", 1)], relationTags[0])
-        let report = BorderAudit.audit(try outside.extract(), stored: [10])
+        let report = BorderAudit.audit(try outside.extract(), stored: [10], storedArea: storedArea(outside))
         #expect(report.memberWays == 3 && report.stored == 1 && report.isClean)
-        #expect(report.outsideStoredArea + report.notInExtract == 2 && report.notInExtract >= 1)
+        #expect(report.notInExtract == 1, "way 21 is not in the file")
+        #expect(report.outsideStoredArea == 1, "way 20 is in the extract (its relation touches the block) but far from the stored cells")
+    }
+
+    @Test("A way that lies in the margin of the cut, outside the cells the builder writes, is not a failure")
+    func marginOfTheCut() throws {
+        var margin = SyntheticWorld()
+        margin.node(1, 0.5, 1.0); margin.node(2, 1.5, 1.0)
+        margin.way(10, [1, 2], level2)
+        margin.relation(50, [(10, "outer", 1)], relationTags[0])
+        // Between the block and the edge of the cut: half a cell wide.
+        margin.node(3, -0.4, 1.0); margin.node(4, -0.2, 1.0)
+        margin.way(11, [3, 4], level2)
+        margin.relation(51, [(11, "outer", 1)], relationTags[1])
+        let report = try BorderAudit.run(on: try margin.extract())
+        #expect(report.isClean && report.stored == 1 && report.outsideStoredArea == 1, "way 11 is cut but not written")
+    }
+
+    @Test("Two relations of one name are two relations: a limit that both hold is no limit of one country")
+    func relationsAreCountedById() {
+        var twins = world(tags: level2 + [("border_type", "territorial")], relations: 1)
+        twins.relation(51, [(10, "outer", 1)], relationTags[0])
+        let extract = try? twins.extract()
+        let report = extract.map { BorderAudit.audit($0, stored: [], storedArea: storedArea(twins)) }
+        #expect(report?.expected.isEmpty == true)
+        #expect(report?.unexpected.first?.signature.hasPrefix("2 relations") == true)
     }
 }

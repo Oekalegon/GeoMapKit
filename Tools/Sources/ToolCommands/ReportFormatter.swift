@@ -226,7 +226,9 @@ public enum ReportFormatter {
         }
         lines.append("  outside the stored area:         \(Formatting.count(audit.outsideStoredArea))")
         lines.append("  not in the extract:              \(Formatting.count(audit.notInExtract))")
-        if audit.isClean {
+        if audit.memberWays == 0 {
+            lines.append("No national border relation in the area; nothing was checked.")
+        } else if audit.isClean {
             lines.append("Every border way in the area is stored or has a reason not to be.")
         } else {
             lines.append("")
