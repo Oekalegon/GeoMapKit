@@ -24,6 +24,7 @@ let package = Package(
         .library(name: "Regions", targets: ["Regions"]),
         .library(name: "MapBuilder", targets: ["MapBuilder"]),
         .library(name: "Tracks", targets: ["Tracks"]),
+        .library(name: "TrackOverlays", targets: ["TrackOverlays"]),
     ],
     targets: [
         // Web Mercator maths, tile coordinates, geometry.
@@ -56,6 +57,9 @@ let package = Package(
         // GPX files, the Route model and activity tracks (v2). Free of any platform framework, so the Watch can read a Route.
         .target(name: "Tracks", dependencies: ["GeoCore"]),
 
+        // Overlays that draw tracks and routes over the map (a `Route` as a line with start, end and waypoint markers).
+        .target(name: "TrackOverlays", dependencies: ["GeoCore", "MapRender", "MapStyle", "Tracks"]),
+
         // Builds small PBF files for tests (test-only; no product).
         .target(name: "PBFTestSupport", path: "Tests/PBFTestSupport"),
 
@@ -69,6 +73,7 @@ let package = Package(
         .testTarget(name: "MapBuilderTests", dependencies: ["MapBuilder", "MapStyle", "FeatureStore", "FeatureStoreBuilder", "GeoCore", "OSMPBF", "Regions"]),
         .testTarget(name: "RegionsTests", dependencies: ["Regions", "GeoCore"]),
         .testTarget(name: "TracksTests", dependencies: ["Tracks", "GeoCore"]),
+        .testTarget(name: "TrackOverlaysTests", dependencies: ["TrackOverlays", "MapRender", "MapStyle", "Tracks", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
 )

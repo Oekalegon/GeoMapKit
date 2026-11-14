@@ -58,7 +58,17 @@ public struct GPXFile: Sendable, Equatable {
     ///   - maximumDistance: How far from the route a waypoint may be, in metres.
     /// - Returns: The waypoints with their distance along the route, in the order of the file.
     public func waypoints(near route: Route, maximumDistance: Double = 100) -> [RouteWaypoint] {
-        waypoints.compactMap { waypoint in
+        // A waypoint outside the box of the route, widened by the distance, cannot be near it: the projection looks at every step of the
+        // route, so it is not done for the many waypoints of a file that lie elsewhere.
+        let box = route.boundingBox
+        let degreesOfLatitude = maximumDistance / 111_000
+        let widest = max(abs(box.south), abs(box.north)) + degreesOfLatitude
+        let degreesOfLongitude = widest >= 89.9 ? 360 : degreesOfLatitude / max(cos(widest * .pi / 180), 1e-6)
+        return waypoints.compactMap { waypoint in
+            let at = waypoint.point.coordinate
+            guard at.latitude >= box.south - degreesOfLatitude, at.latitude <= box.north + degreesOfLatitude,
+                at.longitude >= box.west - degreesOfLongitude, at.longitude <= box.east + degreesOfLongitude
+            else { return nil }
             let projection = route.project(waypoint.point.coordinate)
             guard projection.distance <= maximumDistance else { return nil }
             return RouteWaypoint(name: waypoint.name, coordinate: waypoint.point.coordinate, distanceAlong: projection.distanceAlong)

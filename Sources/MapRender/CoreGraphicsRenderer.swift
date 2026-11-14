@@ -10,7 +10,7 @@ import MapStyle
 /// path, fill and stroke calls, so it is cheap to create and safe to share.
 ///
 /// Order within a scene: background, then every step (casings before fills, so crossing outlines join), then the
-/// labels on top.
+/// overlays, then the labels on top.
 public struct CoreGraphicsRenderer: MapRenderer {
     /// Creates a renderer.
     public init() {}
@@ -58,8 +58,73 @@ public struct CoreGraphicsRenderer: MapRenderer {
                 drawBody(sceneStep, classStyle: classStyle, viewport: viewport, in: context)
             }
         }
+        drawOverlays(scene.overlays, in: context)
         drawLabels(scene, style: style, in: context)
         drawAttribution(scene, display: style.attribution, in: context)
+    }
+
+    // MARK: Overlays
+
+    private func drawOverlays(_ items: [OverlayItem], in context: CGContext) {
+        for item in items {
+            switch item {
+            case .line(let line): strokeOverlay(line.points, style: line.style, in: context)
+            case .polygon(let polygon):
+                if let fill = polygon.fill {
+                    context.setFillColor(fill.cgColor)
+                    context.beginPath()
+                    for ring in polygon.rings { addClosed(ring, to: context) }
+                    context.fillPath(using: .evenOdd)
+                }
+                if let outline = polygon.outline {
+                    for ring in polygon.rings where ring.count >= 3 { strokeOverlay(ring + [ring[0]], style: outline, in: context) }
+                }
+            case .marker(let marker): drawMarker(marker, in: context)
+            }
+        }
+    }
+
+    /// A line with its casing under it. Each is stroked in one piece, so a translucent line is no darker where it crosses itself.
+    private func strokeOverlay(_ points: [ScreenPoint], style: OverlayLineStyle, in context: CGContext) {
+        guard points.count >= 2 else { return }
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        func stroke(color: MapColor, width: Double, dash: [Double]) {
+            guard width > 0 else { return }
+            // A translucent stroke is blended as a group, not piece by piece; an opaque one needs no layer, which matters when there are
+            // thousands of lines.
+            let translucent = color.alpha < 1
+            if translucent {
+                context.setAlpha(color.alpha)
+                context.beginTransparencyLayer(auxiliaryInfo: nil)
+            }
+            context.setStrokeColor(MapColor(red: color.red, green: color.green, blue: color.blue).cgColor)
+            context.setLineWidth(width)
+            context.setLineDash(phase: 0, lengths: dash.map { CGFloat($0) })
+            context.beginPath()
+            context.move(to: CGPoint(x: points[0].x, y: points[0].y))
+            for point in points.dropFirst() { context.addLine(to: CGPoint(x: point.x, y: point.y)) }
+            context.strokePath()
+            if translucent { context.endTransparencyLayer() }
+        }
+        if let casing = style.casing {
+            stroke(color: casing.color, width: style.width + 2 * casing.extraPoints, dash: style.dash)
+        }
+        stroke(color: style.color, width: style.width, dash: style.dash)
+    }
+
+    private func drawMarker(_ marker: OverlayMarker, in context: CGContext) {
+        guard marker.radius > 0 else { return }
+        let centre = CGPoint(x: marker.center.x, y: marker.center.y)
+        if let outline = marker.outline, marker.outlineWidth > 0 {
+            let outer = marker.radius + marker.outlineWidth
+            context.setFillColor(outline.cgColor)
+            context.fillEllipse(in: CGRect(x: centre.x - outer, y: centre.y - outer, width: 2 * outer, height: 2 * outer))
+        }
+        context.setFillColor(marker.fill.cgColor)
+        context.fillEllipse(in: CGRect(x: centre.x - marker.radius, y: centre.y - marker.radius, width: 2 * marker.radius, height: 2 * marker.radius))
     }
 
     /// Draws the data credit in the bottom-right corner, small, on a light halo so it stays readable.

@@ -19,10 +19,14 @@ import SwiftUI
 /// To show another store, give the view a new identity (`.id(...)`); a changed `style` is picked up by itself.
 /// On the Mac the scroll wheel zooms about the pointer, and a two-finger scroll on a trackpad pans.
 ///
+/// Overlays (a route, tracks, markers: see ``MapOverlay``) are drawn into the same image, over the map features and under the labels, so
+/// they are for what changes rarely; a change of the list of overlay ids draws a new image, and the old one stays on screen until then.
+///
 /// The data credit is drawn over the map, in the corner of the view, as the style's `attribution` setting says.
 public struct MapView: View {
     private let source: any CellSource
     private let style: MapStyle
+    private let overlays: [any MapOverlay]
     @Binding private var center: Coordinate
     @Binding private var zoom: Double
     @Binding private var bearing: Double
@@ -50,8 +54,12 @@ public struct MapView: View {
     ///   - style: The style. Changing it draws a new image.
     ///   - center: The coordinate in the middle of the view. The view changes it when the user pans.
     ///   - zoom: The fractional zoom level (256-point tiles). The view changes it when the user zooms.
-    public init(file: FeatureStoreFile, style: MapStyle = .standard, center: Binding<Coordinate>, zoom: Binding<Double>) {
-        self.init(source: file, style: style, center: center, zoom: zoom, bearing: .constant(0))
+    ///   - overlays: What is drawn over the map features and under the labels (see ``MapOverlay``).
+    public init(
+        file: FeatureStoreFile, style: MapStyle = .standard, center: Binding<Coordinate>, zoom: Binding<Double>,
+        overlays: [any MapOverlay] = []
+    ) {
+        self.init(source: file, style: style, center: center, zoom: zoom, bearing: .constant(0), overlays: overlays)
     }
 
     /// Creates a map view that can be turned, from one store file.
@@ -64,9 +72,9 @@ public struct MapView: View {
     ///   - bearing: The compass direction at the top of the view, in degrees clockwise from north (0 is north up).
     public init(
         file: FeatureStoreFile, style: MapStyle = .standard, center: Binding<Coordinate>, zoom: Binding<Double>,
-        bearing: Binding<Double>
+        bearing: Binding<Double>, overlays: [any MapOverlay] = []
     ) {
-        self.init(source: file, style: style, center: center, zoom: zoom, bearing: bearing)
+        self.init(source: file, style: style, center: center, zoom: zoom, bearing: bearing, overlays: overlays)
     }
 
     /// Creates a map view that can be turned, from a store: one file, or a set of block files (a `StoreSet`).
@@ -81,16 +89,20 @@ public struct MapView: View {
     ///   - zoom: The fractional zoom level (256-point tiles). The view changes it when the user zooms.
     ///   - bearing: The compass direction at the top of the view, in degrees clockwise from north (0 is north up). The view
     ///     changes it when the user turns the map; labels stay upright at every bearing.
+    ///   - overlays: What is drawn over the map features and under the labels (see ``MapOverlay``): routes, tracks, markers. They
+    ///     are part of the cached image, so they are for what changes rarely; a change of the list of ids draws a new image, and the
+    ///     old one stays on screen until it is ready.
     public init(
         source: any CellSource, style: MapStyle = .standard, center: Binding<Coordinate>, zoom: Binding<Double>,
-        bearing: Binding<Double>
+        bearing: Binding<Double>, overlays: [any MapOverlay] = []
     ) {
         self.source = source
         self.style = style
+        self.overlays = overlays
         _center = center
         _zoom = zoom
         _bearing = bearing
-        _model = State(initialValue: MapModel(source: source, style: style))
+        _model = State(initialValue: MapModel(source: source, style: style, overlays: overlays))
     }
 
     public var body: some View {
@@ -153,6 +165,10 @@ public struct MapView: View {
             }
             .onChange(of: style) { _, new in
                 model.update(source: source, style: new)
+                model.request(viewport: viewport, scale: displayScale, interacting: false)
+            }
+            .onChange(of: overlays.map(\.overlayID)) { _, _ in
+                model.update(overlays: overlays)
                 model.request(viewport: viewport, scale: displayScale, interacting: false)
             }
             .task { model.request(viewport: viewport, scale: displayScale, interacting: false) }

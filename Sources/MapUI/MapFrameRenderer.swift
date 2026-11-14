@@ -12,8 +12,10 @@ struct MapFrameRenderer: Sendable {
     let source: any CellSource
     /// The style to draw with.
     let style: MapStyle
-    /// Identifies the style for ``MapFrame/styleID``.
+    /// Identifies the style (and the overlays) for ``MapFrame/styleID``.
     let styleID: Int
+    /// What is drawn over the map features: routes, tracks, markers.
+    var overlays: [any MapOverlay] = []
 
     /// Draws a frame.
     ///
@@ -23,7 +25,8 @@ struct MapFrameRenderer: Sendable {
     /// - Throws: ``MapRenderError`` if no band can be read or the image cannot be created, and the store errors.
     func frame(for viewport: MapViewport, scale: Double) throws -> MapFrame {
         let scale = min(max(scale, 1), 3)
-        let scene = try MapSceneBuilder(source: source, style: style).scene(for: viewport)
+        var scene = try MapSceneBuilder(source: source, style: style).scene(for: viewport)
+        scene.overlays = overlays.flatMap { $0.items(for: viewport) }
         // The credit is not part of the image: the image is larger than the view and turns, so its corner is not the view's.
         // `MapView` shows the credit itself, in the corner of the view.
         var drawn = style

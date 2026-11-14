@@ -47,6 +47,10 @@ targets:
         product: Regions
       - package: GeoMapKit
         product: MapBuilder
+      - package: GeoMapKit
+        product: Tracks
+      - package: GeoMapKit
+        product: TrackOverlays
       - target: GeoMapKitDemoWatch
         platformFilter: iOS
     settings:
@@ -136,6 +140,10 @@ targets:
         product: Regions
       - package: GeoMapKit
         product: MapBuilder
+      - package: GeoMapKit
+        product: Tracks
+      - package: GeoMapKit
+        product: TrackOverlays
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

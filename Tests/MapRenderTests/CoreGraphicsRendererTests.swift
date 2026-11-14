@@ -315,4 +315,81 @@ struct CoreGraphicsRendererTests {
         let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 2))
         #expect(close(pixel(image, x: image.width - 10, y: image.height - 10), to: MapStyle.standard.background))
     }
+
+    // MARK: Overlays
+
+    private func overlayScene(_ items: [OverlayItem], steps: [SceneStep] = []) -> MapScene {
+        MapScene(viewport: viewport, band: .detail, steps: steps, cellCount: 1, overlays: items)
+    }
+
+    private let red = MapColor(hex: 0xFF0000)
+    private let white = MapColor(hex: 0xFFFFFF)
+
+    @Test("An overlay line is drawn in its colour with its casing on both sides, and the map shows beyond it")
+    func overlayLineAndCasing() throws {
+        let style = OverlayLineStyle(color: red, width: 6, casing: .init(color: white, extraPoints: 2))
+        let scene = overlayScene([.line(OverlayLine(points: [ScreenPoint(x: 10, y: 40), ScreenPoint(x: 90, y: 40)], style: style))])
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: scene, style: .standard, scale: 1))
+        #expect(close(pixel(image, x: 50, y: 40), to: red))
+        #expect(close(pixel(image, x: 50, y: 36), to: white) && close(pixel(image, x: 50, y: 44), to: white), "the casing is 2 points wider on each side")
+        #expect(close(pixel(image, x: 50, y: 30), to: MapStyle.standard.background) && close(pixel(image, x: 50, y: 50), to: MapStyle.standard.background))
+        // The ends are round: a point just past the end of the line, inside the cap, is red, and one a cap and a casing further is not.
+        #expect(close(pixel(image, x: 91, y: 40), to: red))
+        #expect(close(pixel(image, x: 99, y: 40), to: MapStyle.standard.background))
+    }
+
+    @Test("An overlay is drawn over the features of the map: the water is under a line that crosses it")
+    func overlayOverFeatures() throws {
+        let square = [ScreenPoint(x: 20, y: 10), ScreenPoint(x: 80, y: 10), ScreenPoint(x: 80, y: 70), ScreenPoint(x: 20, y: 70), ScreenPoint(x: 20, y: 10)]
+        let water = SceneStep(
+            step: DrawStep(featureClass: .waterArea, part: .body),
+            areas: [SceneArea(featureClass: .waterArea, objectID: 1, rings: [square], outline: [])])
+        let road = SceneStep(
+            step: DrawStep(featureClass: .roadMajor, part: .body),
+            lines: [SceneLine(featureClass: .roadMajor, objectID: 2, points: [ScreenPoint(x: 0, y: 40), ScreenPoint(x: 100, y: 40)])])
+        let overlay = OverlayItem.line(OverlayLine(points: [ScreenPoint(x: 0, y: 40), ScreenPoint(x: 100, y: 40)], style: OverlayLineStyle(color: red, width: 8)))
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: overlayScene([overlay], steps: [water, road]), style: .standard, scale: 1))
+        #expect(close(pixel(image, x: 50, y: 40), to: red), "over the road and the water")
+        let lake = try #require(MapStyle.standard.style(for: .waterArea)?.fill?.color.value(atZoom: 16))
+        #expect(close(pixel(image, x: 50, y: 20), to: lake))
+    }
+
+    @Test("A translucent overlay line is no darker where it crosses itself")
+    func translucentLineCrossingItself() throws {
+        let style = OverlayLineStyle(color: MapColor(hex: 0xFF0000, alpha: 0.5), width: 6)
+        let loop = [ScreenPoint(x: 10, y: 40), ScreenPoint(x: 80, y: 40), ScreenPoint(x: 45, y: 10), ScreenPoint(x: 45, y: 70)]
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: overlayScene([.line(OverlayLine(points: loop, style: style))]), style: .standard, scale: 1))
+        let single = pixel(image, x: 20, y: 40), crossing = pixel(image, x: 45, y: 40)
+        #expect(single[0] > 150 && single[1] < 200, "half red over the background: \(single)")
+        #expect(abs(Int(single[0]) - Int(crossing[0])) <= 3 && abs(Int(single[1]) - Int(crossing[1])) <= 3, "\(single) against \(crossing)")
+    }
+
+    @Test("A marker is a filled circle with an outline outside it, and a dashed line has gaps")
+    func markerAndDash() throws {
+        let marker = OverlayMarker(center: ScreenPoint(x: 30, y: 30), radius: 5, fill: red, outline: white, outlineWidth: 2)
+        let dashed = OverlayLine(
+            points: [ScreenPoint(x: 10, y: 60), ScreenPoint(x: 90, y: 60)],
+            style: OverlayLineStyle(color: red, width: 4, dash: [10, 10]))
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: overlayScene([.marker(marker), .line(dashed)]), style: .standard, scale: 1))
+        #expect(close(pixel(image, x: 30, y: 30), to: red))
+        #expect(close(pixel(image, x: 30, y: 36), to: white), "the outline is between 5 and 7 points from the centre")
+        #expect(close(pixel(image, x: 30, y: 40), to: MapStyle.standard.background))
+        // The dashes are round-capped, so with a 10 point pattern of the line width 4 the gaps shrink to 6 points; the middle of one stays open.
+        let painted = (12..<88).filter { close(pixel(image, x: $0, y: 60), to: red) }
+        #expect(!painted.isEmpty && painted.count < 76 - 15, "painted columns: \(painted.count)")
+    }
+
+    @Test("A polygon is filled by the even-odd rule, so a ring inside it is a hole, and its outline is drawn")
+    func polygon() throws {
+        func ring(_ a: Double, _ b: Double, _ c: Double, _ d: Double) -> [ScreenPoint] {
+            [ScreenPoint(x: a, y: b), ScreenPoint(x: c, y: b), ScreenPoint(x: c, y: d), ScreenPoint(x: a, y: d)]
+        }
+        let polygon = OverlayPolygon(
+            rings: [ring(10, 10, 90, 70), ring(40, 30, 60, 50)], fill: MapColor(hex: 0x00AA00),
+            outline: OverlayLineStyle(color: red, width: 2))
+        let image = try pixels(of: CoreGraphicsRenderer().pngData(for: overlayScene([.polygon(polygon)]), style: .standard, scale: 1))
+        #expect(close(pixel(image, x: 20, y: 20), to: MapColor(hex: 0x00AA00)))
+        #expect(close(pixel(image, x: 50, y: 40), to: MapStyle.standard.background), "the hole")
+        #expect(close(pixel(image, x: 50, y: 10), to: red), "the outline")
+    }
 }

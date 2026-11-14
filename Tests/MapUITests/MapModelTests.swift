@@ -1,3 +1,4 @@
+import CoreGraphics
 import FeatureStore
 import Foundation
 import GeoCore
@@ -113,5 +114,57 @@ struct MapModelTests {
         model.request(viewport: MapViewport(center: centre, zoom: 16, width: 0, height: 100), scale: 1, interacting: false)
         try await Task.sleep(for: .milliseconds(100))
         #expect(model.frame == nil && model.errorDescription == nil)
+    }
+
+    // MARK: Overlays
+
+    /// An overlay with a big red marker at a coordinate.
+    private struct MarkerOverlay: MapOverlay {
+        let overlayID = UUID()
+        let coordinate: Coordinate
+        func items(for viewport: MapViewport) -> [OverlayItem] {
+            [.marker(OverlayMarker(center: viewport.screenPoint(for: coordinate), radius: 8, fill: MapColor(hex: 0xFF0000)))]
+        }
+    }
+
+    private func redPixel(in frame: MapFrame, at point: (x: Int, y: Int)) -> Bool {
+        let image = frame.image
+        var buffer = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+            let context = CGContext(
+                data: &buffer, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4, space: space,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return false }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let index = (point.y * image.width + point.x) * 4
+        return buffer[index] > 240 && buffer[index + 1] < 20 && buffer[index + 2] < 20
+    }
+
+    @Test func aChangeOfOverlaysDrawsAgainAndTheOldFrameStaysUntilThen() async throws {
+        let (store, centre) = try file()
+        let model = MapModel(file: store, style: .standard)
+        let view = MapViewport(center: centre, zoom: 16, width: 200, height: 100)
+        model.request(viewport: view, scale: 1, interacting: false)
+        let first = try await waitForFrame(model)
+        #expect(!redPixel(in: first, at: (200, 150)), "no marker yet")
+
+        let overlay = MarkerOverlay(coordinate: centre)
+        model.update(overlays: [overlay])
+        #expect(model.overlayIDs == [overlay.overlayID])
+        #expect(model.frame != nil, "the map does not blink while the new image is drawn")
+        model.request(viewport: view, scale: 1, interacting: false)
+        var second: MapFrame?
+        for _ in 0..<200 where second == nil {
+            if let frame = model.frame, frame.styleID != first.styleID { second = frame }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        let drawn = try #require(second)
+        #expect(redPixel(in: drawn, at: (200, 150)), "the marker is in the image, at the centre of the frame")
+
+        // A new style keeps the overlays; removing them draws the map without.
+        model.update(source: store, style: .standard)
+        #expect(model.overlayIDs == [overlay.overlayID])
+        model.update(overlays: [])
+        #expect(model.overlayIDs.isEmpty)
     }
 }

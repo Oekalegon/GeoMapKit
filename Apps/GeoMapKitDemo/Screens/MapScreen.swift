@@ -7,6 +7,7 @@ import SwiftUI
 /// The map of the selected store, with the library, the style and the position of the user.
 struct MapScreen: View {
     @Environment(MapLibrary.self) private var library
+    @Environment(TrackLibrary.self) private var tracks
     @Environment(WatchLink.self) private var watch
     #if os(macOS)
     @Environment(MapBuildHost.self) private var builds
@@ -17,6 +18,8 @@ struct MapScreen: View {
     @State private var bearing = 0.0
     @State private var style: MapStyle = .standard
     @State private var message: String?
+    /// The size of the map view, to fit a track in it.
+    @State private var mapSize = CGSize(width: 600, height: 400)
     @State private var showLibrary = false
     @State private var cutting = false
     /// The copy that was just cut, while the user is asked whether to send it to the Watch.
@@ -30,9 +33,9 @@ struct MapScreen: View {
     /// The library, with what it needs from the environment.
     @ViewBuilder private var libraryScreen: some View {
         #if os(macOS)
-        LibraryScreen().environment(library).environment(watch).environment(builds)
+        LibraryScreen().environment(library).environment(tracks).environment(watch).environment(builds)
         #else
-        LibraryScreen().environment(library).environment(watch)
+        LibraryScreen().environment(library).environment(tracks).environment(watch)
         #endif
     }
 
@@ -42,10 +45,11 @@ struct MapScreen: View {
                 if let opened {
                     GeometryReader { proxy in
                         ZStack {
-                            MapView(source: opened.source, style: style, center: $center, zoom: $zoom, bearing: $bearing)
+                            MapView(source: opened.source, style: style, center: $center, zoom: $zoom, bearing: $bearing, overlays: tracks.overlays)
                                 .id(opened.id)
                             locationDot(in: proxy.size)
                         }
+                        .onChange(of: proxy.size, initial: true) { _, size in mapSize = size }
                     }
                     // The map runs under the home indicator; the title bar stays.
                     .ignoresSafeArea(edges: .bottom)
@@ -104,6 +108,13 @@ struct MapScreen: View {
         .sheet(item: $editor) { session in StyleEditorScreen(session: session).environment(library) }
         .task(id: "\(library.selectedMapID ?? "")|\(library.mapRevision)") { loadMap() }
         .onChange(of: library.revision) { _, _ in loadStyle() }
+        .onChange(of: tracks.fit) { _, request in
+            // The library asked to see a track: the map goes there, north up.
+            guard let box = request?.box else { return }
+            center = MapLibrary.mercatorMiddle(of: box)
+            zoom = MapLibrary.zoom(fitting: box, in: mapSize, limits: MapView.zoomRange)
+            bearing = 0
+        }
         .onDisappear { location.stop() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { location.resume() } else { location.stop() }

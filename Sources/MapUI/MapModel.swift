@@ -1,4 +1,5 @@
 import FeatureStore
+import Foundation
 import MapRender
 import MapStyle
 import Observation
@@ -24,8 +25,8 @@ final class MapModel {
     private var latest: (viewport: MapViewport, scale: Double, interacting: Bool)?
 
     /// Creates a model that draws a store: one file, or a set of block files.
-    init(source: any CellSource, style: MapStyle) {
-        renderer = MapFrameRenderer(source: source, style: style, styleID: 0)
+    init(source: any CellSource, style: MapStyle, overlays: [any MapOverlay] = []) {
+        renderer = MapFrameRenderer(source: source, style: style, styleID: 0, overlays: overlays)
     }
 
     /// Creates a model that draws one store file.
@@ -36,7 +37,7 @@ final class MapModel {
     /// Replaces the store or the style, dropping the cached frame if it no longer matches.
     func update(source: any CellSource, style: MapStyle) {
         generation += 1
-        renderer = MapFrameRenderer(source: source, style: style, styleID: generation)
+        renderer = MapFrameRenderer(source: source, style: style, styleID: generation, overlays: renderer.overlays)
         frame = nil
     }
 
@@ -44,6 +45,16 @@ final class MapModel {
     func update(file: FeatureStoreFile, style: MapStyle) {
         update(source: file, style: style)
     }
+
+    /// Replaces the overlays. The frame on screen stays until the new one is drawn (the map must not blink when a track is shown or
+    /// hidden), but it is stale: it is never kept as the answer to a request, so the next `request` draws again.
+    func update(overlays: [any MapOverlay]) {
+        generation += 1
+        renderer = MapFrameRenderer(source: renderer.source, style: renderer.style, styleID: generation, overlays: overlays)
+    }
+
+    /// The ids of the overlays that are drawn.
+    var overlayIDs: [UUID] { renderer.overlays.map(\.overlayID) }
 
     /// Tells the model what should be on screen.
     ///

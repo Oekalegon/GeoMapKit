@@ -256,4 +256,20 @@ struct GPXFileTests {
         // The check is on bytes, so it cannot tell a declaration from a comment about one: both are refused, which is documented.
         #expect(throws: GPXError.self) { try parse("<gpx><!-- <!DOCTYPE --><trk><trkseg><trkpt lat=\"1\" lon=\"2\"/></trkseg></trk></gpx>") }
     }
+
+    @Test("The waypoints that are kept are those within the distance of the route, however far from it the others are")
+    func waypointsAgreeWithTheProjection() throws {
+        let route = try Route(points: [TrackPoint(latitude: 69.0, longitude: 18.0), TrackPoint(latitude: 69.0, longitude: 18.02), TrackPoint(latitude: 69.01, longitude: 18.03)])
+        var generator = SystemRandomNumberGenerator()
+        var file = GPXFile()
+        for index in 0..<400 {
+            let point = TrackPoint(latitude: Double.random(in: 68.995...69.015, using: &generator), longitude: Double.random(in: 17.99...18.04, using: &generator))
+            file.waypoints.append(GPXWaypoint(name: "w\(index)", point: point))
+        }
+        for distance in [30.0, 100, 250] {
+            let expected = file.waypoints.filter { route.project($0.point.coordinate).distance <= distance }.map(\.name)
+            let found = file.waypoints(near: route, maximumDistance: distance).map(\.name)
+            #expect(found == expected && !expected.isEmpty && expected.count < file.waypoints.count, "within \(distance) m")
+        }
+    }
 }
