@@ -56,6 +56,9 @@ final class RegionPickerModel: Identifiable {
     /// The folder of the source cache.
     var cacheDirectory: URL { cache.directory }
 
+    /// The source cache the files go to.
+    var sourceCache: SourceCache { cache }
+
     /// The text of the search field.
     var search = ""
 
@@ -178,6 +181,11 @@ final class RegionPickerModel: Identifiable {
     func displayName(of region: SourceRegion) -> String {
         guard let parentID = region.parentID, let parent = index?.region(withID: parentID), !region.name.contains(parent.name) else { return region.name }
         return "\(region.name) (\(parent.name))"
+    }
+
+    /// The name of a region by its id, as ``displayName(of:)`` gives it; the id itself when the list is not loaded or does not know it.
+    func displayName(ofRegionID id: String) -> String {
+        index?.region(withID: id).map(displayName(of:)) ?? id
     }
 
     /// The free space on the volume of the source cache, in bytes, or `nil` if the system does not say.

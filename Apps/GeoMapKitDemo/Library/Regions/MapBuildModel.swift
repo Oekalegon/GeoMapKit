@@ -124,6 +124,11 @@ final class MapBuildModel: Identifiable {
         self.target = target
     }
 
+    /// The model of the downloaded files, for the screen that lists them.
+    func makeSourceFilesModel() -> SourceFilesModel {
+        SourceFilesModel(cache: picker.sourceCache, mapsRoot: mapsRoot) { [picker] in picker.displayName(ofRegionID: $0) }
+    }
+
     // MARK: Run
 
     /// Starts the run for the regions that are selected, or goes on with one that was stopped.
