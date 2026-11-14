@@ -19,8 +19,15 @@ public final class RouteOverlay: MapOverlay, Sendable {
     /// How it looks.
     public let style: RouteOverlayStyle
 
-    /// The points to keep for each segment of the route, by zoom level. Computed when a level is first drawn.
-    private let simplified = Mutex<[Int: [[Int]]]>([:])
+    /// The points to keep for each segment of the route, by zoom level, for the levels drawn last (see ``cachedLevels``). A level is
+    /// computed when it is first drawn; it holds up to one index for each point of the route, so the number kept is bounded.
+    private let simplified = Mutex<(order: [Int], levels: [Int: [[Int]]])>(([], [:]))
+
+    /// How many zoom levels are kept: the one in use and the two before it, which is what zooming in and out across a level border needs.
+    static let cachedLevels = 3
+
+    /// How many zoom levels are held now (for tests).
+    var heldLevelCount: Int { simplified.withLock { $0.levels.count } }
 
     /// The most a simplified line may differ from the route, in screen points at the level's zoom (so up to twice that at the
     /// highest zoom of the level).
@@ -69,7 +76,14 @@ public final class RouteOverlay: MapOverlay, Sendable {
     /// The indices to draw for each segment at a zoom, from the cache or computed.
     private func segmentIndices(forZoom zoom: Double) -> [[Int]] {
         let level = min(max(Int(zoom.rounded(.down)), 0), 24)
-        if let cached = simplified.withLock({ $0[level] }) { return cached }
+        let found: [[Int]]? = simplified.withLock { cache in
+            guard let cached = cache.levels[level] else { return nil }
+            // The level in use is the newest.
+            cache.order.removeAll { $0 == level }
+            cache.order.append(level)
+            return cached
+        }
+        if let found { return found }
         let world = 256 * exp2(Double(level))
         // The points in the flat plane of the level (Web Mercator, in points of that zoom), like the viewport's own projection.
         var x = [Double](), y = [Double]()
@@ -87,7 +101,12 @@ public final class RouteOverlay: MapOverlay, Sendable {
         let result = (0..<(starts.count - 1)).map { index in
             RouteSimplifier.keep(x: x, y: y, in: starts[index]..<starts[index + 1], tolerance: Self.tolerance)
         }
-        simplified.withLock { $0[level] = result }
+        simplified.withLock { cache in
+            cache.levels[level] = result
+            cache.order.removeAll { $0 == level }
+            cache.order.append(level)
+            while cache.order.count > Self.cachedLevels { cache.levels[cache.order.removeFirst()] = nil }
+        }
         return result
     }
 }

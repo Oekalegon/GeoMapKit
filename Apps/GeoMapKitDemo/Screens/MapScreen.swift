@@ -18,6 +18,8 @@ struct MapScreen: View {
     @State private var bearing = 0.0
     @State private var style: MapStyle = .standard
     @State private var message: String?
+    /// The size of the map view, to fit a track in it.
+    @State private var mapSize = CGSize(width: 600, height: 400)
     @State private var showLibrary = false
     @State private var cutting = false
     /// The copy that was just cut, while the user is asked whether to send it to the Watch.
@@ -47,6 +49,7 @@ struct MapScreen: View {
                                 .id(opened.id)
                             locationDot(in: proxy.size)
                         }
+                        .onChange(of: proxy.size, initial: true) { _, size in mapSize = size }
                     }
                     // The map runs under the home indicator; the title bar stays.
                     .ignoresSafeArea(edges: .bottom)
@@ -108,8 +111,8 @@ struct MapScreen: View {
         .onChange(of: tracks.fit) { _, request in
             // The library asked to see a track: the map goes there, north up.
             guard let box = request?.box else { return }
-            center = MapLibrary.middle(of: box)
-            zoom = MapLibrary.zoom(fitting: box, limits: MapView.zoomRange)
+            center = MapLibrary.mercatorMiddle(of: box)
+            zoom = MapLibrary.zoom(fitting: box, in: mapSize, limits: MapView.zoomRange)
             bearing = 0
         }
         .onDisappear { location.stop() }

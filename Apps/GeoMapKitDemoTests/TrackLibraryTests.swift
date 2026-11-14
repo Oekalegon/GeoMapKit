@@ -1,5 +1,6 @@
 import Foundation
 import GeoCore
+import MapRender
 import Testing
 import TrackOverlays
 import Tracks
@@ -80,7 +81,8 @@ struct TrackLibraryTests {
         #expect(messages.contains { $0.contains("broken.gpx") && $0.contains("line") }, "the line of the error: \(messages)")
         #expect(messages.contains { $0.contains("empty.gpx") && $0.contains("no track or route") })
         #expect(messages.contains { $0.contains("entity.gpx") && $0.contains("document type") })
-        #expect(try FileManager.default.contentsOfDirectory(atPath: tracks.directory.path) == ["good.gpx"], "nothing refused is copied")
+        let files = try FileManager.default.contentsOfDirectory(atPath: tracks.directory.path).filter { !$0.hasPrefix(".") }
+        #expect(files == ["good.gpx"], "nothing refused is copied")
     }
 
     @Test("A file with a track across the antimeridian is added with the other lines, and says what was not drawn")
@@ -171,5 +173,86 @@ struct TrackLibraryTests {
         #expect(tracks.items.isEmpty && tracks.visible.isEmpty && tracks.overlays.isEmpty)
         // And that is remembered: the next start does not try to show it.
         #expect(library(r).visible.isEmpty)
+    }
+
+    @Test("What was read of a file is kept for the next start, and a file that changed is read again")
+    func summariesAreKept() async throws {
+        let r = try rig()
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        let first = library(r)
+        await first.add([try write(run, as: "a.gpx", in: r)])
+        let item = try #require(first.items.first)
+        let original = try #require(first.summaries["a.gpx"])
+        await first.setVisible(item, false)
+        #expect(FileManager.default.fileExists(atPath: first.directory.appendingPathComponent(".summaries.json").path))
+        #expect(first.items.map(\.id) == ["a.gpx"], "the file of the cache is not a track")
+
+        // The file is replaced by garbage of the same size and date: if the next start read it, it would fail.
+        let url = first.url(of: item)
+        let modified = try #require(try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)
+        try Data(repeating: 0x78, count: Int(item.bytes)).write(to: url)
+        try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: url.path)
+        let second = library(r)
+        await second.loadSummaries()
+        #expect(second.summaries["a.gpx"] == original && second.failures.isEmpty, "the summary came from the cache, the file was not read")
+
+        // A file of another size is another file: it is read, and it is not GPX.
+        try Data("not gpx at all".utf8).write(to: url)
+        let third = library(r)
+        await third.loadSummaries()
+        #expect(third.summaries["a.gpx"] == nil && third.failures["a.gpx"] != nil)
+    }
+
+    @Test("A track that is removed while its file is being read leaves nothing behind")
+    func removedWhileReading() async throws {
+        let r = try rig()
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        let tracks = library(r)
+        try FileManager.default.createDirectory(at: tracks.directory, withIntermediateDirectories: true)
+        try Data(run.utf8).write(to: tracks.directory.appendingPathComponent("a.gpx"))
+        tracks.reload()
+        let item = try #require(tracks.items.first)
+        async let reading: Void = tracks.loadSummaries()
+        try tracks.delete(item)
+        await reading
+        #expect(tracks.items.isEmpty && tracks.summaries.isEmpty && tracks.failures.isEmpty)
+    }
+
+    // MARK: Fitting the map to a track
+
+    @Test("The map is fitted to the height of a track as well as to its width")
+    func fitsInBothDirections() {
+        let size = CGSize(width: 600, height: 400)
+        let padding = 40.0
+        /// Whether both corners of the box are inside the view with the padding, when the map is centred on the box.
+        func fits(_ box: BoundingBox, at zoom: Double) -> Bool {
+            let view = MapViewport(center: MapLibrary.mercatorMiddle(of: box), zoom: zoom, width: size.width, height: size.height)
+            let corners = [
+                Coordinate(latitude: box.north, longitude: box.west), Coordinate(latitude: box.south, longitude: box.east),
+            ].map(view.screenPoint(for:))
+            return corners.allSatisfy {
+                $0.x >= padding - 0.5 && $0.x <= size.width - padding + 0.5 && $0.y >= padding - 0.5 && $0.y <= size.height - padding + 0.5
+            }
+        }
+        let limits = 2.0...20.0
+        // A track that runs north to south, about 22 km, with almost no longitude: it was fitted by its width, at the highest zoom.
+        let tall = BoundingBox(south: 59.80, west: 10.7500, north: 60.00, east: 10.7501)
+        let tallZoom = MapLibrary.zoom(fitting: tall, in: size, limits: limits)
+        #expect(tallZoom < 13 && fits(tall, at: tallZoom) && !fits(tall, at: tallZoom + 0.5), "zoom \(tallZoom)")
+        // A wide one is fitted by its width.
+        let wide = BoundingBox(south: 59.90, west: 10.0, north: 59.9001, east: 11.0)
+        let wideZoom = MapLibrary.zoom(fitting: wide, in: size, limits: limits)
+        #expect(fits(wide, at: wideZoom) && !fits(wide, at: wideZoom + 0.5))
+        // Nearly square, in a view that is wider than it is tall: the height decides.
+        let square = BoundingBox(south: 59.90, west: 10.70, north: 59.95, east: 10.78)
+        let squareZoom = MapLibrary.zoom(fitting: square, in: size, limits: limits)
+        #expect(fits(square, at: squareZoom) && !fits(square, at: squareZoom + 0.3))
+        // The middle of a tall box is halfway down on the map, not halfway in latitude.
+        let tallMiddle = MapLibrary.mercatorMiddle(of: BoundingBox(south: 50, west: 10, north: 70, east: 12))
+        #expect(tallMiddle.longitude == 11 && tallMiddle.latitude > 61.4 && tallMiddle.latitude < 61.8, "\(tallMiddle)")
+        // A single point goes to the highest zoom, a box larger than the world to the lowest, and a view with no room still gives a zoom.
+        #expect(MapLibrary.zoom(fitting: BoundingBox(south: 59, west: 10, north: 59, east: 10), in: size, limits: limits) == 20)
+        #expect(MapLibrary.zoom(fitting: BoundingBox(south: -80, west: -180, north: 80, east: 180), in: size, limits: limits) == 2)
+        #expect(limits.contains(MapLibrary.zoom(fitting: square, in: .zero, limits: limits)))
     }
 }

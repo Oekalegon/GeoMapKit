@@ -140,4 +140,16 @@ struct RouteOverlayTests {
         #expect(a.overlayID != b.overlayID && a.overlayID == a.overlayID)
         #expect(a.style == .standard && a.route == line)
     }
+
+    @Test("Only the zoom levels used last are kept, and a level that was dropped is computed again to the same result")
+    func boundedCache() throws {
+        var pairs: [(Double, Double)] = []
+        for index in 0..<3_000 { pairs.append((59.91 + 0.002 * sin(Double(index) / 100), 10.70 + Double(index) * 0.00003)) }
+        let overlay = RouteOverlay(route: try route(pairs))
+        let first = overlay.items(for: viewport(zoom: 12))
+        for zoom in [13.0, 14, 15, 16, 17, 18] { _ = overlay.items(for: viewport(zoom: zoom)) }
+        #expect(overlay.heldLevelCount == RouteOverlay.cachedLevels)
+        #expect(overlay.items(for: viewport(zoom: 12)) == first, "level 12 was dropped and is computed again")
+        #expect(overlay.heldLevelCount == RouteOverlay.cachedLevels)
+    }
 }

@@ -36,12 +36,27 @@ final class TrackLibrary {
     /// The overlays of the tracks that are shown and have been read.
     private var loaded: [String: [RouteOverlay]] = [:]
 
+    /// What was read from a file, kept between starts of the app so that the list does not read every file again: the summary is
+    /// valid as long as the file has the same size and modification date.
+    private struct CachedSummary: Codable {
+        var bytes: Int64
+        /// Seconds since 1970 as the file system gives them, kept as a number: a date written as text loses its fractions of a second.
+        var modified: Double
+        var summary: TrackSummary
+    }
+
+    private var cache: [String: CachedSummary] = [:]
+    private var cacheURL: URL { directory.appendingPathComponent(".summaries.json") }
+
     /// Opens the library in a folder: the Documents of the app, or another folder (tests use a new one).
     init(root: URL = URL.documentsDirectory, defaults: UserDefaults = .standard) {
         directory = root.appendingPathComponent("Tracks", isDirectory: true)
         self.defaults = defaults
         visible = Set(defaults.stringArray(forKey: Self.visibleKey) ?? [])
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if let data = try? Data(contentsOf: directory.appendingPathComponent(".summaries.json")) {
+            cache = (try? JSONDecoder().decode([String: CachedSummary].self, from: data)) ?? [:]
+        }
         reload()
         Task { await loadVisible() }
     }
@@ -68,6 +83,20 @@ final class TrackLibrary {
         let ids = Set(items.map(\.id))
         let missing = visible.subtracting(ids)
         if !missing.isEmpty { visible.subtract(missing); remember() }
+        // A summary is only as good as the file it was read from: one that has changed is read again.
+        for item in items {
+            guard let cached = cache[item.id] else { continue }
+            // The date is compared within a millisecond: file systems and file providers round it differently.
+            if cached.bytes == item.bytes, abs(cached.modified - item.date.timeIntervalSince1970) < 0.001 {
+                summaries[item.id] = summaries[item.id] ?? cached.summary
+            } else {
+                // The file changed outside the app: what was read is dropped, and the file is read again when it is next needed.
+                cache[item.id] = nil
+                summaries[item.id] = nil
+                loaded[item.id] = nil
+            }
+        }
+        cache = cache.filter { ids.contains($0.key) }
         summaries = summaries.filter { ids.contains($0.key) }
         failures = failures.filter { ids.contains($0.key) }
         loaded = loaded.filter { ids.contains($0.key) }
@@ -89,7 +118,7 @@ final class TrackLibrary {
             let name = url.lastPathComponent
             guard url.pathExtension.lowercased() == "gpx" else { errors.append(.failed(name, "it is not a GPX file (.gpx)")); continue }
             do {
-                let read = try await Self.read(url)
+                let read = try await Self.read(url, buildOverlays: true)
                 let target = uniqueURL(name: url.deletingPathExtension().lastPathComponent)
                 try FileManager.default.copyItem(at: url, to: target)
                 added.append(target.lastPathComponent)
@@ -104,6 +133,7 @@ final class TrackLibrary {
         }
         reload()
         remember()
+        for id in added { if let item = items.first(where: { $0.id == id }), let summary = summaries[id] { store(summary, for: item) } }
         if let first = added.first, let box = summaries[first]?.box { requestFit(box) }
         return (added, errors)
     }
@@ -152,16 +182,28 @@ final class TrackLibrary {
     }
 
     private func load(_ item: TrackItem) async {
-        guard loaded[item.id] == nil || summaries[item.id] == nil else { return }
+        let shown = visible.contains(item.id)
+        // The list needs only the summary: a file that has one (read before, and not changed) is not read for it.
+        guard (shown && loaded[item.id] == nil) || summaries[item.id] == nil else { return }
         do {
-            let read = try await Self.read(url(of: item))
+            let read = try await Self.read(url(of: item), buildOverlays: shown)
+            // The track may have been removed while its file was read.
+            guard items.contains(where: { $0.id == item.id }) else { return }
             summaries[item.id] = read.summary
             failures[item.id] = nil
+            store(read.summary, for: item)
             // The routes are kept only for a track that is shown, and only if it still is when the file has been read.
             if visible.contains(item.id) { loaded[item.id] = read.overlays }
         } catch {
+            guard items.contains(where: { $0.id == item.id }) else { return }
             failures[item.id] = error.localizedDescription
         }
+    }
+
+    /// Keeps what was read from a file for the next start.
+    private func store(_ summary: TrackSummary, for item: TrackItem) {
+        cache[item.id] = CachedSummary(bytes: item.bytes, modified: item.date.timeIntervalSince1970, summary: summary)
+        if let data = try? JSONEncoder().encode(cache) { try? data.write(to: cacheURL, options: .atomic) }
     }
 
     private func remember() { defaults.set(visible.sorted(), forKey: Self.visibleKey) }
@@ -174,7 +216,9 @@ final class TrackLibrary {
     }
 
     /// Reads a GPX file off the main thread: what can be drawn, and what it holds.
-    private nonisolated static func read(_ url: URL) async throws -> Read {
+    ///
+    /// - Parameter buildOverlays: Whether to keep the routes as overlays; for a summary only, they are dropped at once.
+    private nonisolated static func read(_ url: URL, buildOverlays: Bool) async throws -> Read {
         try await Task.detached(priority: .userInitiated) {
             let name = url.lastPathComponent
             let file: GPXFile
@@ -185,7 +229,7 @@ final class TrackLibrary {
                 do {
                     var route = try make()
                     route.waypoints = file.waypoints(near: route)
-                    overlays.append(RouteOverlay(route: route))
+                    if buildOverlays { overlays.append(RouteOverlay(route: route)) }
                     summary.lines += 1
                     summary.points += route.points.count
                     summary.length += route.length
@@ -202,7 +246,7 @@ final class TrackLibrary {
                 }
             }
             for route in file.routes where !route.points.isEmpty { add({ try route.route() }, label: route.name) }
-            guard !overlays.isEmpty else {
+            guard summary.lines > 0 else {
                 throw LibraryError.failed(name, summary.problems.first ?? "it has no track or route")
             }
             return Read(summary: summary, overlays: overlays)

@@ -2,7 +2,7 @@ import Foundation
 import GeoCore
 
 /// What is known about a GPX file once it has been read: the tracks and routes in it that can be drawn.
-struct TrackSummary: Equatable, Sendable {
+struct TrackSummary: Equatable, Sendable, Codable {
     /// How many tracks and routes of the file are drawn.
     var lines = 0
     var points = 0

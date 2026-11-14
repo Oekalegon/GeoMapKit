@@ -93,9 +93,13 @@ public struct CoreGraphicsRenderer: MapRenderer {
         context.setLineJoin(.round)
         func stroke(color: MapColor, width: Double, dash: [Double]) {
             guard width > 0 else { return }
-            // Opacity is applied to the whole stroke as a group, not to the pieces of it.
-            context.setAlpha(color.alpha)
-            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            // A translucent stroke is blended as a group, not piece by piece; an opaque one needs no layer, which matters when there are
+            // thousands of lines.
+            let translucent = color.alpha < 1
+            if translucent {
+                context.setAlpha(color.alpha)
+                context.beginTransparencyLayer(auxiliaryInfo: nil)
+            }
             context.setStrokeColor(MapColor(red: color.red, green: color.green, blue: color.blue).cgColor)
             context.setLineWidth(width)
             context.setLineDash(phase: 0, lengths: dash.map { CGFloat($0) })
@@ -103,7 +107,7 @@ public struct CoreGraphicsRenderer: MapRenderer {
             context.move(to: CGPoint(x: points[0].x, y: points[0].y))
             for point in points.dropFirst() { context.addLine(to: CGPoint(x: point.x, y: point.y)) }
             context.strokePath()
-            context.endTransparencyLayer()
+            if translucent { context.endTransparencyLayer() }
         }
         if let casing = style.casing {
             stroke(color: casing.color, width: style.width + 2 * casing.extraPoints, dash: style.dash)

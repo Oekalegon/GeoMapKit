@@ -1,6 +1,7 @@
 import FeatureStore
 import Foundation
 import GeoCore
+import MapRender
 import MapStyle
 import Observation
 
@@ -403,6 +404,37 @@ final class MapLibrary {
     static func zoom(fitting box: BoundingBox, limits: ClosedRange<Double>) -> Double {
         let degrees = max(box.east - box.west, 0.0001)
         let zoom = log2(360 / degrees * 600 / 256)
+        return min(max(zoom, limits.lowerBound), limits.upperBound)
+    }
+
+    /// The middle of a box as the map shows it: halfway in longitude and halfway down in the Web Mercator height, which for a tall box is
+    /// not halfway in latitude.
+    static func mercatorMiddle(of box: BoundingBox) -> Coordinate {
+        func y(_ latitude: Double) -> Double {
+            let clamped = min(max(latitude, -TileID.maximumLatitude), TileID.maximumLatitude)
+            return asinh(tan(clamped * .pi / 180))
+        }
+        let latitude = atan(sinh((y(box.south) + y(box.north)) / 2)) * 180 / .pi
+        return Coordinate(latitude: latitude, longitude: (box.west + box.east) / 2)
+    }
+
+    /// The zoom at which a box fits in a view, in width and in height, with a margin around it, within limits. The height is the
+    /// Web Mercator height, so a track that runs north to south (little longitude, a lot of latitude) is fitted by its height.
+    ///
+    /// - Parameters:
+    ///   - box: What must be seen.
+    ///   - size: The size of the view in points.
+    ///   - padding: The space to leave at every side, in points.
+    ///   - limits: The lowest and highest zoom.
+    static func zoom(fitting box: BoundingBox, in size: CGSize, padding: Double = 40, limits: ClosedRange<Double>) -> Double {
+        // The part of the world (0 to 1) that the box covers across and down.
+        func y(_ latitude: Double) -> Double {
+            let clamped = min(max(latitude, -TileID.maximumLatitude), TileID.maximumLatitude)
+            return (1 - asinh(tan(clamped * .pi / 180)) / .pi) / 2
+        }
+        let width = max((box.east - box.west) / 360, 1e-9), height = max(y(box.south) - y(box.north), 1e-9)
+        let across = max(size.width - 2 * padding, 32), down = max(size.height - 2 * padding, 32)
+        let zoom = min(log2(across / (MapViewport.tileSize * width)), log2(down / (MapViewport.tileSize * height)))
         return min(max(zoom, limits.lowerBound), limits.upperBound)
     }
 

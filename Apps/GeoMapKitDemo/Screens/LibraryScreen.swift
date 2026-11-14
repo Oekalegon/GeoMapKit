@@ -131,7 +131,7 @@ struct LibraryScreen: View {
             }
             .fileImporter(
                 isPresented: Binding(get: { importing != nil }, set: { if !$0 { importing = nil } }),
-                allowedContentTypes: importing == .styles ? [.json] : importing == .tracks ? [Self.gpxType] : [.folder, Self.storeType],
+                allowedContentTypes: importing == .styles ? [.json] : importing == .tracks ? [Self.gpxType, .xml, .data] : [.folder, Self.storeType],
                 allowsMultipleSelection: true
             ) { result in
                 guard case .success(let urls) = result else { return }
@@ -204,7 +204,7 @@ struct LibraryScreen: View {
             panel.allowedContentTypes = [.json]
             panel.message = "Choose style files (.json)"
         case .tracks:
-            panel.allowedContentTypes = [Self.gpxType]
+            panel.allowedContentTypes = [Self.gpxType, .xml]
             panel.message = "Choose GPX files (.gpx)"
         case .maps:
             panel.allowedContentTypes = [.folder, Self.storeType, .json]
