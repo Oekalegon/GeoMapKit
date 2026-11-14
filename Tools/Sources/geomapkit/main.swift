@@ -21,6 +21,12 @@ GeoMapKit tools
       Sweden): they are read as one, and an object in more than one file is
       taken from the first, so list them in order of preference.
 
+  geomapkit track info <file.gpx>
+      Say what a GPX file holds: its tracks (points, segments, length, box, the share of points with a time, and whether the
+      track is an activity, one that a heat map can use: at least 90 % of the points with a time, in order, or why not), its planned
+      routes and its waypoints. A file larger than 50 MB or with more than a million points is refused, and so is one with a
+      document type declaration. Nothing is written.
+
   geomapkit border-scan <file.osm.pbf>... (--bbox south,west,north,east | --center lat,lon --radius-km R) [--examples N] [--limit N]
   geomapkit border-scan --from-cache (area as above) [--cache DIR] [--allow-stale] [--examples N]
       Check the borders between countries. Cut the area, build its store in
@@ -313,6 +319,11 @@ do {
             }
         }
         print(ReportFormatter.text(for: report))
+    case "track":
+        guard rest.first == "info" else { throw ToolError("track needs a subcommand: info") }
+        let parsed = try CommandLineArguments(Array(rest.dropFirst()), knownOptions: [])
+        guard let path = parsed.positional.first else { throw ToolError("track info needs a GPX file") }
+        print(ReportFormatter.text(for: try ToolRunner.trackInfo(url: URL(fileURLWithPath: path))))
     case "border-scan":
         let parsed = try CommandLineArguments(
             rest, knownOptions: ["bbox", "center", "radius-km", "limit", "cache", "examples"], knownFlags: ["from-cache", "allow-stale"])

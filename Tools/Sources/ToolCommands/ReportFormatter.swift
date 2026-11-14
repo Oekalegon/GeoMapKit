@@ -210,6 +210,40 @@ public enum ReportFormatter {
         return lines.joined(separator: "\n")
     }
 
+    /// The text for a GPX file: its tracks (with whether each is an activity), routes and waypoints.
+    public static func text(for report: TrackInfoReport) -> String {
+        var lines = ["File:      \(report.fileName), \(Formatting.bytes(report.fileSize))" + (report.creator.map { ", created by \($0)" } ?? "")]
+        if let name = report.name { lines.append("Name:      \(name)") }
+        func quoted(_ name: String?) -> String { name.map { "\"\($0)\"" } ?? "(no name)" }
+        func kilometres(_ metres: Double?) -> String { metres.map { String(format: "%.2f km", $0 / 1000) } ?? "length unknown" }
+        lines.append("Tracks:    \(report.tracks.count)")
+        for (index, track) in report.tracks.enumerated() {
+            let type = track.type.map { " (\($0))" } ?? ""
+            lines.append("  \(index + 1). \(quoted(track.name))\(type): \(Formatting.count(track.points)) points in \(track.segments) segment\(track.segments == 1 ? "" : "s"), \(kilometres(track.length))")
+            if let box = track.box {
+                lines.append(String(format: "     Box: %.5f,%.5f to %.5f,%.5f", box.south, box.west, box.north, box.east))
+            }
+            if let problem = track.routeProblem { lines.append("     Problem: \(problem)") }
+            lines.append("     Times: \(Int((track.timedFraction * 100).rounded())) % of the points have a time")
+            switch track.activity {
+            case .success(let activity):
+                let hours = Int(activity.duration) / 3600, minutes = Int(activity.duration) % 3600 / 60, seconds = Int(activity.duration) % 60
+                let formatter = ISO8601DateFormatter()
+                lines.append(String(
+                    format: "     Activity: yes, started %@, %d:%02d:%02d, %.2f km, id %@", formatter.string(from: activity.startDate), hours, minutes,
+                    seconds, activity.distance / 1000, activity.id))
+            case .failure(let reason):
+                lines.append("     Activity: no, \(reason.localizedDescription)")
+            }
+        }
+        lines.append("Routes:    \(report.routes.count)")
+        for (index, route) in report.routes.enumerated() {
+            lines.append("  \(index + 1). \(quoted(route.name)): \(Formatting.count(route.points)) points, \(kilometres(route.length))" + (route.routeProblem.map { " (\($0))" } ?? ""))
+        }
+        lines.append("Waypoints: \(report.waypoints)" + (report.waypoints > 0 ? " (\(report.waypointsNearATrack) within 100 m of a track)" : ""))
+        return lines.joined(separator: "\n")
+    }
+
     /// The text for a border scan: the counts, the ways that are no border for a reason, and the ones that are no border and should be.
     public static func text(for report: BorderScanReport) -> String {
         let audit = report.audit

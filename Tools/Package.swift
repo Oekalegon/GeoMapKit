@@ -28,6 +28,7 @@ let package = Package(
                 .product(name: "MapRender", package: "GeoMapKit"),
                 .product(name: "Regions", package: "GeoMapKit"),
                 .product(name: "MapBuilder", package: "GeoMapKit"),
+                .product(name: "Tracks", package: "GeoMapKit"),
             ]
         ),
         // A Mac test app for MapView: swift run mapviewer [file.gmk].

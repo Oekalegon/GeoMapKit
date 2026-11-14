@@ -4,7 +4,7 @@ import PackageDescription
 
 // GeoMapKit v1 scope: map rendering only (see docs/design/architecture.md).
 // Every library target must build for iOS, iPadOS, macOS and watchOS.
-// Routing and tracks are added in later versions.
+// Tracks (GPX, the Route model, activities) are the first v2 target; routing comes in v3.
 
 let package = Package(
     name: "GeoMapKit",
@@ -23,6 +23,7 @@ let package = Package(
         .library(name: "MapUI", targets: ["MapUI"]),
         .library(name: "Regions", targets: ["Regions"]),
         .library(name: "MapBuilder", targets: ["MapBuilder"]),
+        .library(name: "Tracks", targets: ["Tracks"]),
     ],
     targets: [
         // Web Mercator maths, tile coordinates, geometry.
@@ -52,6 +53,9 @@ let package = Package(
         // The build pipeline: blocks, levels and open sea from source files in the cache. Shared by the command-line tool and the apps.
         .target(name: "MapBuilder", dependencies: ["GeoCore", "OSMPBF", "FeatureStore", "FeatureStoreBuilder", "MapStyle", "Regions"]),
 
+        // GPX files, the Route model and activity tracks (v2). Free of any platform framework, so the Watch can read a Route.
+        .target(name: "Tracks", dependencies: ["GeoCore"]),
+
         // Builds small PBF files for tests (test-only; no product).
         .target(name: "PBFTestSupport", path: "Tests/PBFTestSupport"),
 
@@ -64,6 +68,7 @@ let package = Package(
         .testTarget(name: "FeatureStoreTests", dependencies: ["FeatureStore", "GeoCore"]),
         .testTarget(name: "MapBuilderTests", dependencies: ["MapBuilder", "MapStyle", "FeatureStore", "FeatureStoreBuilder", "GeoCore", "OSMPBF", "Regions"]),
         .testTarget(name: "RegionsTests", dependencies: ["Regions", "GeoCore"]),
+        .testTarget(name: "TracksTests", dependencies: ["Tracks", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
 )
