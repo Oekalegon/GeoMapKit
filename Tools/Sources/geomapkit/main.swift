@@ -21,6 +21,19 @@ GeoMapKit tools
       Sweden): they are read as one, and an object in more than one file is
       taken from the first, so list them in order of preference.
 
+  geomapkit border-scan <file.osm.pbf>... (--bbox south,west,north,east | --center lat,lon --radius-km R) [--examples N] [--limit N]
+  geomapkit border-scan --from-cache (area as above) [--cache DIR] [--allow-stale] [--examples N]
+      Check the borders between countries. Cut the area, build its store in
+      memory (nothing is written) and list every way of a national border
+      relation (boundary=administrative, admin_level=2) in the area that is
+      not stored as a border, with its tags and relations. Not a failure: a
+      coastline, and the limit of the waters of one country (border_type
+      territorial, eez, contiguous, in one relation only). Anything else is
+      listed and the exit code is 1, so the scan can be run after a change of
+      the border rules. It cannot find a border that no relation holds. Use an
+      area with borders on land, in rivers and in the sea; a few degrees take
+      one to four minutes and up to 9 GB for dense areas such as the Alps.
+
   geomapkit build <file.osm.pbf>... (--bbox south,west,north,east | --center lat,lon --radius-km R)
                   --output <file.gmk> [--profile full|watch] [--limit N]
   geomapkit build --from-cache (area as above) --output <file.gmk> [--cache DIR] [--allow-stale] [--profile full|watch]
@@ -298,6 +311,31 @@ do {
             }
         }
         print(ReportFormatter.text(for: report))
+    case "border-scan":
+        let parsed = try CommandLineArguments(
+            rest, knownOptions: ["bbox", "center", "radius-km", "limit", "cache", "examples"], knownFlags: ["from-cache", "allow-stale"])
+        guard parsed.hasFlag("from-cache") || !parsed.positional.isEmpty else { throw ToolError("border-scan needs a file, or --from-cache") }
+        guard !(parsed.hasFlag("from-cache") && !parsed.positional.isEmpty) else {
+            throw ToolError("border-scan takes files or --from-cache, not both")
+        }
+        let area = try AreaArgument.parse(
+            bbox: parsed.value(for: "bbox"), center: parsed.value(for: "center"), radiusKilometres: parsed.value(for: "radius-km"))
+        var options = AreaCutter.Options()
+        if let limit = parsed.value(for: "limit") {
+            guard let value = Int(limit) else { throw ToolError("--limit expects a whole number") }
+            options.relationMemberLimit = value
+        }
+        var urls = parsed.positional.map { URL(fileURLWithPath: $0) }
+        if parsed.hasFlag("from-cache") {
+            let sources = try await ToolRunner.cachedSources(
+                area: area, cacheDirectory: parsed.value(for: "cache").map { URL(fileURLWithPath: $0) }, allowStale: parsed.hasFlag("allow-stale"))
+            for warning in sources.warnings { FileHandle.standardError.write(Data("warning: \(warning)\n".utf8)) }
+            urls = sources.files
+        }
+        let report = try ToolRunner.borderScan(
+            urls: urls, area: area, options: options, maxExamples: try wholeNumberOption(parsed, "examples", 3, in: 0...100))
+        print(ReportFormatter.text(for: report))
+        if !report.isClean { exit(1) }
     case "build":
         let parsed = try CommandLineArguments(
             rest, knownOptions: ["bbox", "center", "radius-km", "limit", "output", "profile", "cache"], knownFlags: ["from-cache", "allow-stale"])

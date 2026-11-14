@@ -118,7 +118,7 @@ public enum ToolRunner {
         )
     }
 
-    private static func cutExtract(
+    static func cutExtract(
         urls: [URL], area: BoundingBox, options: AreaCutter.Options
     ) throws -> (extract: OSMExtract, report: CutReport) {
         guard !urls.isEmpty else { throw ToolError("needs at least one PBF file") }
