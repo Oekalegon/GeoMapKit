@@ -22,8 +22,9 @@ extension MapBuilder {
     ///   - downloader: The network for the region index, or `nil` for `URLSession`.
     ///   - userAgent: The user agent of that `URLSession`; an app passes its own name.
     ///   - progress: Called when a block is done, from the calling task.
-    ///   - onProgress: Called with the state of the whole run when it starts, whenever a block starts and whenever one is done, from the
-    ///     calling task. A progress bar is drawn from it.
+    ///   - onProgress: Called with the state of the whole run when it starts, whenever a block starts, whenever one is done and every
+    ///     ``BlockRequest/progressInterval`` while blocks run (with the parts of the running blocks), from the calling task. A progress bar
+    ///     is drawn from it.
     /// - Returns: The report.
     /// - Throws: ``MapBuilderError`` for a bad request, an unknown region or source files that are not in the cache; the errors of the
     ///   cutter, the builder and the files; `CancellationError`.
@@ -147,7 +148,7 @@ extension MapBuilder {
                 partial: partial)
         }
         onProgress(state())
-        let interval = request.progressInterval
+        let interval = max(request.progressInterval, .milliseconds(10))
         try await withThrowingTaskGroup(of: RunEvent.self) { group in
             // A task that wakes the loop below, which otherwise waits for a block to end, to report how far the running blocks are.
             func tick() {

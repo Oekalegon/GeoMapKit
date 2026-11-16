@@ -37,7 +37,7 @@ public struct BlockRequest: Sendable {
     /// Whether the sea of open-sea blocks is added after the build (question 53); `false` leaves the holes, for a comparison.
     public var fillsOpenSea: Bool
     /// How often the progress of the blocks that are running is reported, as the parts of them that are done; the default is a quarter of a
-    /// second, so that a progress display moves without being drawn again at every step.
+    /// second and the shortest is 10 ms, so that a progress display moves without being drawn again at every step.
     public var progressInterval: Duration = .milliseconds(250)
 
     /// The zoom of the block grid when a request does not say.

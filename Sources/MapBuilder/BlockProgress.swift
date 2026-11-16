@@ -16,7 +16,7 @@ public struct BlockProgress: Sendable, Equatable {
     public var built: Int
     /// The time since the first block was started.
     public var elapsed: Duration
-    /// The time left, or `nil` while too few blocks are built to say.
+    /// The time left, or `nil` until the work done in this run is about one block's worth.
     public var remaining: Duration?
 
     /// The part done, from 0 to 1; 1 for a run without blocks. The running blocks count by the part they have done.

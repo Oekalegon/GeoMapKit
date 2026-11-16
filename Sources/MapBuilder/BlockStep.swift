@@ -4,9 +4,9 @@ import OSMPBF
 /// A step of the work on one block, and how much of the block's time it takes: the weights of the progress of a block.
 ///
 /// The weights are the seconds of each step in a release build of a block of Franche-Comté (47.0 to 48.3 N, 5.6 to 7.1 E; one source
-/// file; 33 s for the block): the nodes of the cut 1.7, the ways 2.6, the relations 0.7, the member ways 2.5, the outside nodes 1.4, the
-/// assembly 0.6; then the build: the sea 0.1, the relations 1.9, the ways 15.6, the nodes 1.2, the writing 0.7; and 3.0 for what is left (the
-/// check and the file). A block that is cut from several files spends more of its time in the cut, so the bar is not exact there; it
+/// file; 33 s for the block, of which the ways of the build are 15.6 s, about half of the weights): the nodes of the cut 1.7, the ways 2.6, the relations 0.7, the member ways 2.5, the outside nodes 1.4, the
+/// assembly 0.6; then the build: the sea 0.1, the relations 1.9, the ways 15.6, the nodes 1.2, the writing 0.7; and 3.0 for finishing, which is not measured as a step but is what is left of the process time (start-up, the check and the
+/// file). A block that is cut from several files spends more of its time in the cut, so the bar is not exact there; it
 /// only has to move steadily and never go back.
 enum BlockStep: Int, CaseIterable {
     case cutNodes, cutWays, cutRelations, cutMemberWays, cutOutsideNodes, cutAssembly
