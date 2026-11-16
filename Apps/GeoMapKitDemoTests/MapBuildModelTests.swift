@@ -52,7 +52,7 @@ struct MapBuildModelTests {
             buildLevels: { request, progress in
                 await calls.add("levels \(request.directory.lastPathComponent)")
                 await calls.noteRebuild("levels", request.rebuild)
-                progress(LevelOutcome(topZoom: 9, x: 1, y: 2, status: .upToDate))
+                progress(LevelProgress(total: 6, finished: 1, running: 1, elapsed: .seconds(1)))
                 try await levels()
                 return LevelRunReport(
                     outcomes: [], summaries: [], manifestURL: request.directory.appendingPathComponent("manifest.json"),

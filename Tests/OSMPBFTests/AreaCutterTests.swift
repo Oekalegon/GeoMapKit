@@ -369,4 +369,36 @@ struct NodeTableTests {
         #expect(large.firstDuplicateID == nil)
         #expect(table([3, 7, 3]).firstDuplicateID == 3)
     }
+
+    @Test("The step callback reports the part of each stage that is read, from 0 to 1, never going back within a stage")
+    func stepReports() throws {
+        var steps: [(AreaCutter.Pass, Double)] = []
+        _ = try AreaCutter().cut(PBFReader(data: World.file()), to: World.box, step: { steps.append(($0, $1)) })
+        #expect(!steps.isEmpty && steps.allSatisfy { (0...1).contains($0.1) })
+        for pass in AreaCutter.Pass.allCases {
+            let parts = steps.filter { $0.0 == pass }.map(\.1)
+            #expect(parts == parts.sorted())
+        }
+        // The first stage reads the whole file once, so it ends at 1.
+        #expect(steps.last { $0.0 == .insideNodes }?.1 == 1)
+    }
+
+    @Test("With several files the part counts the bytes of all of them, so it grows through the files")
+    func stepReportsSeveralFiles() throws {
+        let data = World.file()
+        var parts: [Double] = []
+        _ = try AreaCutter().cut(
+            [PBFReader(data: data), PBFReader(data: data)], to: World.box,
+            step: { if $0 == .insideNodes { parts.append($1) } })
+        #expect(parts == parts.sorted() && parts.last == 1)
+        // Half way through the list, the first file is read and the second not: the part is about a half.
+        #expect(parts.contains { abs($0 - 0.5) < 0.05 })
+    }
+
+    @Test("The reader reports the part of the file that is read after each block")
+    func readerPosition() throws {
+        var parts: [Double] = []
+        try PBFReader(data: World.file()).forEachBlock(position: { parts.append($0) }) { _ in }
+        #expect(!parts.isEmpty && parts == parts.sorted() && parts.last == 1 && parts.allSatisfy { $0 > 0 })
+    }
 }

@@ -206,4 +206,21 @@ struct BuildLevelsTests {
             }
         }
     }
+
+    @Test("The progress of the levels counts every level block, and ends complete")
+    func levelProgress() async throws {
+        let folder = try blocks()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var states: [LevelProgress] = []
+        let report = try await MapBuilder.buildLevels(
+            LevelRequest(directory: folder, topZooms: [8, 6], jobs: 2), onProgress: { states.append($0) })
+        let last = try #require(states.last)
+        #expect(last.total == report.outcomes.count && last.finished == last.total && last.running == 0 && last.fraction == 1)
+        #expect(states.allSatisfy { $0.running <= 2 && $0.finished <= $0.total && $0.total == last.total })
+        #expect(states.map(\.finished) == states.map(\.finished).sorted())
+        // A second run: the blocks that are up to date count as finished from the start.
+        var again: [LevelProgress] = []
+        _ = try await MapBuilder.buildLevels(LevelRequest(directory: folder, topZooms: [8, 6]), onProgress: { again.append($0) })
+        #expect(again.first?.finished == again.first?.total && again.last?.fraction == 1)
+    }
 }

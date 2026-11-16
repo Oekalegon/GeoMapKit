@@ -489,4 +489,16 @@ struct FeatureStoreBuilderTests {
         let same = try FeatureStoreFile(data: try builder.build(from: extract, writing: extract.boundingBox).data)
         #expect(try same.cells() == whole.cells())
     }
+
+    @Test("The progress closure sees the stages in order, and the part of the ways that are done grows from 0 to below 1")
+    func progressStages() throws {
+        var world = SyntheticWorld.standard()
+        let extract = try world.extract()
+        var seen: [(BuildStage, Double)] = []
+        _ = try FeatureStoreBuilder().build(from: extract, progress: { seen.append(($0, $1)) })
+        let stages = seen.map(\.0).reduce(into: [BuildStage]()) { if $0.last != $1 { $0.append($1) } }
+        #expect(stages == [.sea, .relations, .ways, .nodes, .writing])
+        let ways = seen.filter { $0.0 == .ways }.map(\.1)
+        #expect(ways.first == 0 && ways == ways.sorted() && ways.allSatisfy { $0 >= 0 && $0 < 1 })
+    }
 }

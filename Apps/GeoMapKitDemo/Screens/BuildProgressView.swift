@@ -109,8 +109,9 @@ struct BuildProgressView: View {
                 if build.stage == .buildingBlocks, let progress = build.blocks { ProgressView(value: progress.fraction) }
                 else if build.stage == .buildingBlocks { ProgressView().controlSize(.small) }
             }
-            stageRow("Levels", state: state(of: .buildingLevels), detail: build.levelBlocksDone > 0 ? "\(build.levelBlocksDone) level blocks" : nil) {
-                if build.stage == .buildingLevels { ProgressView().controlSize(.small) }
+            stageRow("Levels", state: state(of: .buildingLevels), detail: levelsDetail) {
+                if build.stage == .buildingLevels, let progress = build.levels { ProgressView(value: progress.fraction) }
+                else if build.stage == .buildingLevels { ProgressView().controlSize(.small) }
             }
             stageRow("Library", state: state(of: .registering), detail: nil) { EmptyView() }
             ForEach(build.warnings, id: \.self) { Text($0).font(.footnote).foregroundStyle(.orange) }
@@ -149,6 +150,15 @@ struct BuildProgressView: View {
         guard let progress = build.blocks else { return nil }
         var text = "\(progress.finished) of \(progress.total) blocks"
         if build.stage == .buildingBlocks, let remaining = progress.remaining {
+            text += ", about \(BuildStatusSummary.timeLeft(remaining)) left"
+        }
+        return text
+    }
+
+    private var levelsDetail: String? {
+        guard let progress = build.levels else { return nil }
+        var text = "\(progress.finished) of \(progress.total) level blocks"
+        if build.stage == .buildingLevels, let remaining = progress.remaining {
             text += ", about \(BuildStatusSummary.timeLeft(remaining)) left"
         }
         return text

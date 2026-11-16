@@ -16,10 +16,14 @@ extension MapBuilder {
     /// - Parameters:
     ///   - request: The folder, the levels, the number of jobs and the margin.
     ///   - progress: Called with each level block when it is done.
+    ///   - onProgress: Called with the state of the whole run when it starts, whenever a level block starts and whenever one is done, from the
+    ///     calling task. A progress bar is drawn from it.
     /// - Returns: What was built, the size of each level and the time.
     /// - Throws: ``MapBuilderError`` for a folder without a manifest, blocks without an overview band and bad arguments, and the errors of
     ///   building and writing.
-    public static func buildLevels(_ request: LevelRequest, progress: (LevelOutcome) -> Void = { _ in }) async throws -> LevelRunReport {
+    public static func buildLevels(
+        _ request: LevelRequest, progress: (LevelOutcome) -> Void = { _ in }, onProgress: (LevelProgress) -> Void = { _ in }
+    ) async throws -> LevelRunReport {
         guard !request.topZooms.isEmpty, Set(request.topZooms).count == request.topZooms.count,
             request.topZooms.allSatisfy({ StoreManifest.Level.topZooms.contains($0) })
         else { throw MapBuilderError("The levels must be different top zooms from \(StoreManifest.Level.topZooms.lowerBound) to \(StoreManifest.Level.topZooms.upperBound)") }
@@ -102,13 +106,27 @@ extension MapBuilder {
         // Build the blocks, up to `jobs` at a time.
         let jobs = max(request.jobs, 1)
         var next = 0
+        var running = 0
+        let levelTotal = outcomes.count + tasks.count
+        var finishedCount = outcomes.count
+        let finishedAtStart = finishedCount
+        let buildStart = clock.now
         let margin = request.margin
         let baseManifest = base
+        func state() -> LevelProgress {
+            let elapsed = clock.now - buildStart
+            return LevelProgress(
+                total: levelTotal, finished: finishedCount, running: running, elapsed: elapsed,
+                remaining: BlockProgress.estimateRemaining(
+                    left: Double(levelTotal - finishedCount), doneInRun: Double(finishedCount - finishedAtStart), elapsed: elapsed,
+                    minimumDone: 4))
+        }
         try await withThrowingTaskGroup(of: BuiltLevelBlock.self) { group in
             func start() {
                 guard next < tasks.count else { return }
                 let task = tasks[next]
                 next += 1
+                running += 1
                 group.addTask {
                     try Task.checkCancellation()
                     do {
@@ -120,9 +138,13 @@ extension MapBuilder {
                     }
                 }
             }
+            onProgress(state())
             for _ in 0..<min(jobs, tasks.count) { start() }
+            onProgress(state())
             while let result = try await group.next() {
                 try Task.checkCancellation()
+                running -= 1
+                finishedCount += 1
                 let task = result.task
                 let topZoom = task.spec.topZoom
                 if let built = result.block {
@@ -145,6 +167,7 @@ extension MapBuilder {
                 try writeManifest(manifest, to: manifestURL)
                 progress(outcomes[task.position]!)
                 start()
+                onProgress(state())
             }
         }
         let summaries = manifest.levels.filter { request.topZooms.contains($0.topZoom) }.map {

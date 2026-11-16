@@ -42,11 +42,13 @@ public struct FeatureStoreBuilder: Sendable {
 
     /// Builds the file.
     ///
-    /// - Parameter extract: The cut area.
+    /// - Parameters:
+    ///   - extract: The cut area.
+    ///   - progress: See ``build(from:writing:progress:)``.
     /// - Returns: The file data and a report.
     /// - Throws: `CancellationError` if the task is cancelled, or `FeatureStoreError` if a value does not fit the format.
-    public func build(from extract: OSMExtract) throws -> BuildResult {
-        try build(from: extract, writing: extract.boundingBox)
+    public func build(from extract: OSMExtract, progress: ((BuildStage, Double) -> Void)? = nil) throws -> BuildResult {
+        try build(from: extract, writing: extract.boundingBox, progress: progress)
     }
 
     /// Builds the file for the cells of one part of the extract.
@@ -58,9 +60,13 @@ public struct FeatureStoreBuilder: Sendable {
     /// - Parameters:
     ///   - extract: The cut area, larger than `area` by a margin.
     ///   - area: The part to write. Its edges should be cell borders (see ``cellAlignedBox(covering:)``).
+    ///   - progress: Called when a stage starts with the stage and 0, and during the ways stage with the part of the ways that are done,
+    ///     from 0 to 1, on the calling thread. For a progress display; it must be quick.
     /// - Returns: The file data, with the cells inside `area`, and a report.
     /// - Throws: `CancellationError` if the task is cancelled, or `FeatureStoreError` if a value does not fit the format.
-    public func build(from extract: OSMExtract, writing area: BoundingBox) throws -> BuildResult {
+    public func build(
+        from extract: OSMExtract, writing area: BoundingBox, progress: ((BuildStage, Double) -> Void)? = nil
+    ) throws -> BuildResult {
         let inside = extract.boundingBox
         let part = BoundingBox(
             south: max(area.south, inside.south), west: max(area.west, inside.west), north: min(area.north, inside.north),
@@ -72,15 +78,20 @@ public struct FeatureStoreBuilder: Sendable {
         var emitter = FeatureEmitter(writer: writer, profile: profile, columns: range?.columns, rows: range?.rows)
         if let range { emitter.report.cellsInArea = range.columns.count * range.rows.count }
 
+        progress?(.sea, 0)
         var shore = ShoreContext(extract: extract, classifier: classifier)
         let sea = try range.flatMap { try prepareSea(of: extract, columns: $0.columns, rows: $0.rows, into: &emitter) }
         shore.sea = sea.map { SeaLookup(rings: $0.whole.rings) }
 
         // The index of the border relations, built by whichever step needs it first and shared with the other.
         var borders: BorderNames?
+        progress?(.relations, 0)
         let suppressed = try storeRelations(of: extract, borders: &borders, shore: &shore, into: &emitter)
-        try storeWays(of: extract, suppressed: suppressed, borders: &borders, shore: &shore, into: &emitter)
+        progress?(.ways, 0)
+        try storeWays(of: extract, suppressed: suppressed, borders: &borders, shore: &shore, progress: progress, into: &emitter)
+        progress?(.nodes, 0)
         try storeNodes(of: extract, into: &emitter)
+        progress?(.writing, 0)
         if let range, let sea { try storeSea(sea, columns: range.columns, rows: range.rows, into: &emitter) }
         return BuildResult(data: try emitter.writer.data(), report: emitter.report)
     }

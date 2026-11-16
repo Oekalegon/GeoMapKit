@@ -135,15 +135,27 @@ extension MapBuilder {
         let buildStart = clock.now
         let total = tasks.count
         let finishedAtStart = finishedCount
+        let fractions = BlockFractions()
         func state() -> BlockProgress {
             let elapsed = clock.now - buildStart
+            let partial = fractions.sum
             return BlockProgress(
                 total: total, finished: finishedCount, running: running, built: built, elapsed: elapsed,
                 remaining: BlockProgress.estimateRemaining(
-                    left: total - finishedCount, finishedInRun: finishedCount - finishedAtStart, elapsed: elapsed))
+                    left: Double(total - finishedCount) - partial, doneInRun: Double(finishedCount - finishedAtStart) + partial,
+                    elapsed: elapsed),
+                partial: partial)
         }
         onProgress(state())
-        try await withThrowingTaskGroup(of: BuiltBlock.self) { group in
+        let interval = request.progressInterval
+        try await withThrowingTaskGroup(of: RunEvent.self) { group in
+            // A task that wakes the loop below, which otherwise waits for a block to end, to report how far the running blocks are.
+            func tick() {
+                group.addTask {
+                    try? await Task.sleep(for: interval)
+                    return .tick
+                }
+            }
             func start() {
                 guard next < toBuild.count else { return }
                 let task = toBuild[next]
@@ -153,15 +165,27 @@ extension MapBuilder {
                 let sources = task.regions.compactMap { records[$0.id] }
                 let profile = request.profile
                 let target = blocksFolder.appendingPathComponent("\(request.blockZoom)-\(task.tile.x)-\(task.tile.y).gmk")
+                let position = task.position
                 group.addTask {
                     try Task.checkCancellation()
-                    return try Self.buildBlock(task, files: files, sources: sources, profile: profile, target: target)
+                    return .built(try Self.buildBlock(
+                        task, files: files, sources: sources, profile: profile, target: target,
+                        report: { fractions.set($0, forBlock: position) }))
                 }
             }
             for _ in 0..<min(jobs, toBuild.count) { start() }
+            if !toBuild.isEmpty { tick() }
             onProgress(state())
-            while let result = try await group.next() {
+            while let event = try await group.next() {
                 try Task.checkCancellation()
+                guard case .built(let result) = event else {
+                    if running > 0 {
+                        tick()
+                        onProgress(state())
+                    }
+                    continue
+                }
+                fractions.remove(block: result.task.position)
                 running -= 1
                 finishedCount += 1
                 let task = result.task
@@ -201,6 +225,7 @@ extension MapBuilder {
                 }
                 start()
                 onProgress(state())
+                if running == 0 { group.cancelAll() }
             }
         }
         // Open sea has no coastline in its cut and so no sea of its own: it is filled from what its neighbours show (question 53). The
@@ -280,6 +305,12 @@ extension MapBuilder {
             for region in task.regions { found[region.id] = region }
         }
         return found.values.sorted { $0.id < $1.id }
+    }
+
+    /// What the loop of a run waits for: a block that is done, or the time to report the progress of the running ones.
+    private enum RunEvent: Sendable {
+        case built(BuiltBlock)
+        case tick
     }
 
     private struct BuiltBlock: Sendable {
@@ -396,15 +427,22 @@ extension MapBuilder {
     }
 
     /// Cuts and builds one block and writes its file. Runs on any thread; holds the cut in memory while it runs.
+    ///
+    /// `report` is called while it runs with how far the block is, from 0 to 1 (see ``BlockStep``).
     private static func buildBlock(
-        _ task: BlockTask, files: [URL], sources: [CachedSource], profile: BuildProfile, target: URL
+        _ task: BlockTask, files: [URL], sources: [CachedSource], profile: BuildProfile, target: URL,
+        report: @escaping @Sendable (Double) -> Void
     ) throws -> BuiltBlock {
         let clock = ContinuousClock()
         let started = clock.now
         let readers = try files.map { try PBFReader(url: $0) }
-        let extract = try AreaCutter().cut(readers, to: task.cutBox)
+        let extract = try AreaCutter().cut(
+            readers, to: task.cutBox, progress: { report(BlockStep($0).start) },
+            step: { report(BlockStep($0).fraction(part: $1)) })
         let writeBox = FeatureStoreBuilder.cellAlignedBox(covering: tileBox(task.tile))
-        let result = try FeatureStoreBuilder(profile: profile).build(from: extract, writing: writeBox)
+        let result = try FeatureStoreBuilder(profile: profile).build(
+            from: extract, writing: writeBox, progress: { report(BlockStep($0).fraction(part: $1)) })
+        report(BlockStep.finishing.start)
         let file = try FeatureStoreFile(data: result.data)
         let name = target.lastPathComponent
         guard file.cellCount > 0 else { return BuiltBlock(task: task, fileName: name, block: nil) }

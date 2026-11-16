@@ -47,8 +47,10 @@ final class MapBuildModel: Identifiable {
     private(set) var stage: Stage = .idle
     /// The progress of the blocks, once the stage has begun.
     private(set) var blocks: BlockProgress?
+    /// The progress of the level blocks, once they have begun.
+    private(set) var levels: LevelProgress?
     /// The level blocks that are done.
-    private(set) var levelBlocksDone = 0
+    var levelBlocksDone: Int { levels?.finished ?? 0 }
     /// Whether this run had files to download (otherwise the stage is shown as skipped).
     private(set) var downloadedFiles = false
     /// Notes of the build, such as a source file that is old.
@@ -112,7 +114,7 @@ final class MapBuildModel: Identifiable {
 
     /// What the status bar says.
     var summary: BuildStatusSummary {
-        .make(stage: stage, downloadFraction: downloadFraction, blocks: blocks, levelBlocksDone: levelBlocksDone)
+        .make(stage: stage, downloadFraction: downloadFraction, blocks: blocks, levels: levels)
     }
 
     /// Sets the map the next run adds to, or `nil` for a map of its own. Does nothing while a run is going or its end is shown.
@@ -147,7 +149,7 @@ final class MapBuildModel: Identifiable {
         picker.selectionLocked = true
         workingFolder = runTarget?.folder ?? Self.folder(for: regions.map(\.id), in: mapsRoot)
         blocks = nil
-        levelBlocksDone = 0
+        levels = nil
         downloadedFiles = false
         warnings = []
         stage = .checking
@@ -231,8 +233,8 @@ final class MapBuildModel: Identifiable {
             try Task.checkCancellation()
 
             stage = .buildingLevels
-            _ = try await tools.buildLevels(LevelRequest(directory: folder, jobs: jobs, rebuild: mode != .normal)) { _ in
-                Task { @MainActor in self.noteLevelBlock() }
+            _ = try await tools.buildLevels(LevelRequest(directory: folder, jobs: jobs, rebuild: mode != .normal)) { progress in
+                Task { @MainActor in self.noteLevels(progress) }
             }
             try Task.checkCancellation()
 
@@ -249,13 +251,13 @@ final class MapBuildModel: Identifiable {
     }
 
     private func noteBlocks(_ progress: BlockProgress) {
-        guard stage == .buildingBlocks, progress.finished >= (blocks?.finished ?? 0) else { return }
+        guard stage == .buildingBlocks, progress.finished >= (blocks?.finished ?? 0), progress.fraction >= (blocks?.fraction ?? 0) else { return }
         blocks = progress
     }
 
-    private func noteLevelBlock() {
-        guard stage == .buildingLevels else { return }
-        levelBlocksDone += 1
+    private func noteLevels(_ progress: LevelProgress) {
+        guard stage == .buildingLevels, progress.finished >= (levels?.finished ?? 0) else { return }
+        levels = progress
     }
 
     // MARK: Names

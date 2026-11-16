@@ -10,6 +10,8 @@ public struct BlockProgress: Sendable, Equatable {
     public var finished: Int
     /// The blocks being cut and built now.
     public var running: Int
+    /// The parts of the running blocks that are done, added up (2.5 for four blocks that are on average 62 % done).
+    public var partial: Double
     /// The blocks built in this run (not the ones that were up to date).
     public var built: Int
     /// The time since the first block was started.
@@ -17,14 +19,17 @@ public struct BlockProgress: Sendable, Equatable {
     /// The time left, or `nil` while too few blocks are built to say.
     public var remaining: Duration?
 
-    /// The part done, from 0 to 1; 1 for a run without blocks.
-    public var fraction: Double { total > 0 ? min(Double(finished) / Double(total), 1) : 1 }
+    /// The part done, from 0 to 1; 1 for a run without blocks. The running blocks count by the part they have done.
+    public var fraction: Double { total > 0 ? min((Double(finished) + partial) / Double(total), 1) : 1 }
 
     /// Creates a progress value.
-    public init(total: Int, finished: Int, running: Int, built: Int, elapsed: Duration, remaining: Duration? = nil) {
+    public init(
+        total: Int, finished: Int, running: Int, built: Int, elapsed: Duration, remaining: Duration? = nil, partial: Double = 0
+    ) {
         self.total = total
         self.finished = finished
         self.running = running
+        self.partial = partial
         self.built = built
         self.elapsed = elapsed
         self.remaining = remaining
@@ -42,5 +47,19 @@ public struct BlockProgress: Sendable, Equatable {
     public static func estimateRemaining(left: Int, finishedInRun: Int, elapsed: Duration, minimumBuilt: Int = 4) -> Duration? {
         guard left > 0, finishedInRun >= max(minimumBuilt, 1) else { return nil }
         return elapsed * left / finishedInRun
+    }
+
+    /// The time left, from the work done so far, counting the parts of the running blocks.
+    ///
+    /// - Parameters:
+    ///   - left: The blocks that are not finished, less the parts of the running blocks that are done.
+    ///   - doneInRun: The blocks finished in this run, with the parts of the running ones (blocks that were up to date cost no time and
+    ///     are not counted).
+    ///   - elapsed: The time since the first block was started.
+    ///   - minimumDone: The least work, in blocks, that gives an estimate.
+    /// - Returns: The estimate, or `nil` when less than `minimumDone` is done or nothing is left.
+    public static func estimateRemaining(left: Double, doneInRun: Double, elapsed: Duration, minimumDone: Double = 1) -> Duration? {
+        guard left > 0, doneInRun >= max(minimumDone, 0.01) else { return nil }
+        return elapsed * (left / doneInRun)
     }
 }
