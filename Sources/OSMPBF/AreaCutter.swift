@@ -99,9 +99,9 @@ public struct AreaCutter: Sendable {
     ///   ``PBFError`` if the file is malformed, or `CancellationError` if the
     ///   surrounding task was cancelled.
     public func cut(
-        _ reader: PBFReader, to box: BoundingBox, progress: ((Pass) -> Void)? = nil
+        _ reader: PBFReader, to box: BoundingBox, progress: ((Pass) -> Void)? = nil, step: ((Pass, Double) -> Void)? = nil
     ) throws -> OSMExtract {
-        try cut([reader], to: box, progress: progress)
+        try cut([reader], to: box, progress: progress, step: step)
     }
 
     /// Cuts an area out of several files, as if they were one.
@@ -113,14 +113,26 @@ public struct AreaCutter: Sendable {
     ///   - readers: The PBF files, in order of preference. At least one.
     ///   - box: The area. It must be valid and must not cross the antimeridian.
     ///   - progress: Called when each stage starts (once per stage, not per file), on the calling thread.
+    ///   - step: Called while a stage reads the files with the stage and the part of it that is done, from 0 to 1: the share of the bytes of all
+    ///     the files that is read in this stage. A stage that stops early (the member ways, when all are found) does not reach 1. On the
+    ///     calling thread, at most once per blob.
     /// - Returns: The extract.
     /// - Throws: ``AreaCutterError/noInput`` for an empty list, ``AreaCutterError/invalidBoundingBox`` for an invalid box,
     ///   ``AreaCutterError/duplicateID(kind:id:)`` if an object ID repeats within one file, a ``PBFError`` if a file is
     ///   malformed, or `CancellationError` if the surrounding task was cancelled.
     public func cut(
-        _ readers: [PBFReader], to box: BoundingBox, progress: ((Pass) -> Void)? = nil
+        _ readers: [PBFReader], to box: BoundingBox, progress: ((Pass) -> Void)? = nil, step: ((Pass, Double) -> Void)? = nil
     ) throws -> OSMExtract {
         guard box.isValid else { throw AreaCutterError.invalidBoundingBox }
+        // The part of the bytes of all the files that a stage has read when file `index` is `part` read.
+        let sizes = readers.map(\.byteCount)
+        let totalBytes = Double(max(sizes.reduce(0, +), 1))
+        func scan(_ pass: Pass, _ index: Int, kinds: OSMObjectKinds, _ body: (OSMBlock) throws -> Void) throws {
+            let before = Double(sizes[..<index].reduce(0, +))
+            let own = Double(sizes[index])
+            try readers[index].forEachBlock(
+                kinds: kinds, position: step.map { report in { report(pass, (before + $0 * own) / totalBytes) } }, body)
+        }
         guard let firstReader = readers.first else { throw AreaCutterError.noInput }
         let header = try firstReader.header()
         let memberLimit = max(0, options.relationMemberLimit)
@@ -132,11 +144,11 @@ public struct AreaCutter: Sendable {
         var nodeTagKeys: [UInt32] = []
         var nodeTagValues: [UInt32] = []
         var insideIDs = Set<Int64>()
-        for (index, reader) in readers.enumerated() {
+        for index in readers.indices {
             // What the files before this one hold is not taken again; the same ID twice in this file is caught below.
             let earlier = insideIDs
             let start = records.count
-            try reader.forEachBlock(kinds: .nodes) { block in
+            try scan(.insideNodes, index, kinds: .nodes) { block in
                 try Task.checkCancellation()
                 for node in block.nodes where box.contains(node.coordinate) {
                     if index > 0, earlier.contains(node.id) { continue }
@@ -157,9 +169,9 @@ public struct AreaCutter: Sendable {
         progress?(.ways)
         var keptWayIDs = Set<Int64>()
         var ways = WayAccumulator()
-        for (index, reader) in readers.enumerated() {
+        for index in readers.indices {
             let earlier = index > 0 ? keptWayIDs : []
-            try reader.forEachBlock(kinds: .ways) { block in
+            try scan(.ways, index, kinds: .ways) { block in
                 try Task.checkCancellation()
                 for way in block.ways where way.nodeIDs.contains(where: inside.contains) {
                     if earlier.contains(way.id) { continue }
@@ -176,10 +188,10 @@ public struct AreaCutter: Sendable {
         var selected: [Int64: OSMRelation] = [:]
         var pending: [OSMRelation] = []
         var pendingIDs = Set<Int64>()
-        for (index, reader) in readers.enumerated() {
+        for index in readers.indices {
             let earlierSelected = index > 0 ? Set(selected.keys) : []
             let earlierPending = index > 0 ? pendingIDs : []
-            try reader.forEachBlock(kinds: .relations) { block in
+            try scan(.relations, index, kinds: .relations) { block in
                 try Task.checkCancellation()
                 for relation in block.relations {
                     if earlierSelected.contains(relation.id) { continue }
@@ -234,9 +246,9 @@ public struct AreaCutter: Sendable {
         // Pass 4: the member ways that were not already kept.
         if !wantedWayIDs.isEmpty {
             progress?(.memberWays)
-            for (index, reader) in readers.enumerated() {
+            for index in readers.indices {
                 let earlier = index > 0 ? keptWayIDs : []
-                try reader.forEachBlock(kinds: .ways) { block in
+                try scan(.memberWays, index, kinds: .ways) { block in
                     try Task.checkCancellation()
                     for way in block.ways where wantedWayIDs.contains(way.id) {
                         if earlier.contains(way.id) { continue }
@@ -262,9 +274,9 @@ public struct AreaCutter: Sendable {
             progress?(.outsideNodes)
             let wantedSet = Set(wanted.ids)
             var found = Set<Int64>()
-            for (index, reader) in readers.enumerated() {
+            for index in readers.indices {
                 let earlier = index > 0 ? found : []
-                try reader.forEachBlock(kinds: .nodes) { block in
+                try scan(.outsideNodes, index, kinds: .nodes) { block in
                     try Task.checkCancellation()
                     for node in block.nodes where wantedSet.contains(node.id) {
                         if earlier.contains(node.id) { continue }

@@ -8,8 +8,8 @@ import Regions
 struct MapBuildTools: Sendable {
     /// Builds the blocks of a request. The catalog is the list of regions that is already loaded, so no index is fetched again.
     var buildBlocks: @Sendable (BlockRequest, any RegionCatalog, @escaping @Sendable (BlockProgress) -> Void) async throws -> BlockRunReport
-    /// Builds the levels of a set of blocks; called with each level block when it is done.
-    var buildLevels: @Sendable (LevelRequest, @escaping @Sendable (LevelOutcome) -> Void) async throws -> LevelRunReport
+    /// Builds the levels of a set of blocks; called with the state of the run when a level block starts or is done.
+    var buildLevels: @Sendable (LevelRequest, @escaping @Sendable (LevelProgress) -> Void) async throws -> LevelRunReport
 
     /// The name the app gives itself to the servers it asks.
     static let userAgent = "GeoMapKitDemo"
@@ -20,6 +20,6 @@ struct MapBuildTools: Sendable {
             try await MapBuilder.buildRegion(request, catalog: catalog, userAgent: userAgent, onProgress: { progress($0) })
         },
         buildLevels: { request, progress in
-            try await MapBuilder.buildLevels(request, progress: { progress($0) })
+            try await MapBuilder.buildLevels(request, onProgress: { progress($0) })
         })
 }

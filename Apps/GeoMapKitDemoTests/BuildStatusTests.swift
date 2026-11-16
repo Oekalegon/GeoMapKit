@@ -8,8 +8,8 @@ import Testing
 @Suite("Build status bar")
 @MainActor
 struct BuildStatusTests {
-    private func summary(_ stage: MapBuildModel.Stage, download: Double? = nil, blocks: BlockProgress? = nil, levels: Int = 0) -> BuildStatusSummary {
-        .make(stage: stage, downloadFraction: download, blocks: blocks, levelBlocksDone: levels)
+    private func summary(_ stage: MapBuildModel.Stage, download: Double? = nil, blocks: BlockProgress? = nil, levels: LevelProgress? = nil) -> BuildStatusSummary {
+        .make(stage: stage, downloadFraction: download, blocks: blocks, levels: levels)
     }
 
     @Test("Each stage has a title; the bar is determinate only where a fraction is known")
@@ -18,7 +18,9 @@ struct BuildStatusTests {
         let download = summary(.downloading, download: 0.4)
         #expect(download.title == "Downloading" && download.fraction == 0.4 && download.detail == "40 %")
         #expect(summary(.downloading).fraction == nil)
-        #expect(summary(.buildingLevels, levels: 3).detail == "3 level blocks")
+        let levels = LevelProgress(total: 8, finished: 3, running: 2, elapsed: .seconds(60))
+        #expect(summary(.buildingLevels, levels: levels).fraction == 0.375 && summary(.buildingLevels, levels: levels).detail == "37 %")
+        #expect(summary(.buildingLevels).fraction == nil)
         #expect(summary(.registering).title == "Adding to the library")
     }
 

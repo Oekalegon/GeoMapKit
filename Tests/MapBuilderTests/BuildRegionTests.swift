@@ -316,4 +316,29 @@ struct BuildRegionTests {
         #expect(again.first?.finished == built(report).count && again.last?.finished == again.last?.total)
         #expect(again.map(\.running).max() == (cutAgain > 0 ? 1 : 0))
     }
+
+    @Test("The bar moves while the blocks run: the fraction never goes back and counts the running blocks by their part")
+    func partialProgress() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        var states: [BlockProgress] = []
+        var asked = request(s, jobs: 2)
+        asked.progressInterval = .milliseconds(1)
+        _ = try await MapBuilder.buildRegion(asked, catalog: s.catalog, onProgress: { states.append($0) })
+        #expect(states.map(\.fraction) == states.map(\.fraction).sorted())
+        #expect(states.allSatisfy { $0.partial >= 0 && $0.partial <= Double($0.running) && $0.fraction <= 1 })
+        #expect(states.last?.partial == 0 && states.last?.fraction == 1)
+    }
+
+    @Test("A progress interval of zero is raised to a minimum: the run ends and does not flood the callback")
+    func zeroInterval() async throws {
+        let s = try setup()
+        defer { try? FileManager.default.removeItem(at: s.output.deletingLastPathComponent()) }
+        var states: [BlockProgress] = []
+        var asked = request(s, jobs: 2)
+        asked.progressInterval = .zero
+        _ = try await MapBuilder.buildRegion(asked, catalog: s.catalog, onProgress: { states.append($0) })
+        #expect(states.last?.fraction == 1)
+        #expect(states.count < 2000)
+    }
 }

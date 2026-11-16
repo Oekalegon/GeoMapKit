@@ -19,8 +19,8 @@ struct BuildStatusSummary: Equatable {
     ///   - stage: Where the run is.
     ///   - downloadFraction: The part of the files downloaded, or `nil` when no size is known.
     ///   - blocks: The progress of the blocks, once they have begun.
-    ///   - levelBlocksDone: The level blocks that are done.
-    static func make(stage: MapBuildModel.Stage, downloadFraction: Double?, blocks: BlockProgress?, levelBlocksDone: Int) -> BuildStatusSummary {
+    ///   - levels: The progress of the level blocks, once they have begun.
+    static func make(stage: MapBuildModel.Stage, downloadFraction: Double?, blocks: BlockProgress?, levels: LevelProgress?) -> BuildStatusSummary {
         switch stage {
         case .idle:
             return BuildStatusSummary(title: "", fraction: nil, detail: nil, hasEnded: true)
@@ -34,8 +34,10 @@ struct BuildStatusSummary: Equatable {
             if let remaining = blocks.remaining { detail += ", about \(timeLeft(remaining)) left" }
             return BuildStatusSummary(title: "Building blocks", fraction: blocks.fraction, detail: detail, hasEnded: false)
         case .buildingLevels:
-            return BuildStatusSummary(
-                title: "Building levels", fraction: nil, detail: levelBlocksDone > 0 ? "\(levelBlocksDone) level blocks" : nil, hasEnded: false)
+            guard let levels, levels.total > 0 else { return BuildStatusSummary(title: "Building levels", fraction: nil, detail: nil, hasEnded: false) }
+            var detail = percent(levels.fraction)
+            if let remaining = levels.remaining { detail += ", about \(timeLeft(remaining)) left" }
+            return BuildStatusSummary(title: "Building levels", fraction: levels.fraction, detail: detail, hasEnded: false)
         case .registering:
             return BuildStatusSummary(title: "Adding to the library", fraction: nil, detail: nil, hasEnded: false)
         case .done(_, let name):

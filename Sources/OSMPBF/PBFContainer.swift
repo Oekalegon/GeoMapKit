@@ -15,16 +15,21 @@ struct PBFContainer {
 
     private let data: Data
 
+    /// The size of the file in bytes.
+    var byteCount: Int { data.count }
+
     init(_ data: Data) {
         self.data = data
     }
 
     /// Calls `body` for each blob with its type and decompressed payload.
     ///
-    /// - Parameter body: Receives the blob type and payload. Return `false` to stop.
+    /// - Parameters:
+    ///   - position: Called after each blob with the number of bytes of the file that are read so far.
+    ///   - body: Receives the blob type and payload. Return `false` to stop.
     /// - Throws: ``PBFError`` if the container is malformed, truncated or too large,
     ///   or whatever `body` throws.
-    func forEachBlob(_ body: (_ type: String, _ payload: Data) throws -> Bool) throws {
+    func forEachBlob(position: ((Int) -> Void)? = nil, _ body: (_ type: String, _ payload: Data) throws -> Bool) throws {
         var offset = data.startIndex
         while offset < data.endIndex {
             guard data.endIndex - offset >= 4 else { throw PBFError.truncated }
@@ -45,6 +50,7 @@ struct PBFContainer {
             offset += blobSize
 
             if try !body(type, payload) { return }
+            position?(offset - data.startIndex)
         }
     }
 

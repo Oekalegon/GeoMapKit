@@ -5,13 +5,16 @@ extension FeatureStoreBuilder {
     /// Stores every way as a line or area feature, except those a multipolygon already holds.
     func storeWays(
         of extract: OSMExtract, suppressed: Set<Int64>, borders: inout BorderNames?, shore: inout ShoreContext,
-        into emitter: inout FeatureEmitter
+        progress: ((BuildStage, Double) -> Void)? = nil, into emitter: inout FeatureEmitter
     ) throws {
         // Built when the first footway needs it: an extract without footways never pays for it.
         var roads: RoadIndex?
         var town: TownIndex?
         for position in extract.ways.indices {
-            if position % 4096 == 0 { try Task.checkCancellation() }
+            if position % 4096 == 0 {
+                try Task.checkCancellation()
+                progress?(.ways, Double(position) / Double(extract.ways.count))
+            }
             let id = extract.ways.ids[position]
             if suppressed.contains(id) {
                 emitter.report.waysSuppressed += 1

@@ -30,6 +30,9 @@ public struct PBFReader: Sendable {
         self.container = PBFContainer(data)
     }
 
+    /// The size of the file in bytes.
+    public var byteCount: Int { container.byteCount }
+
     /// Reads the header block, which must be the first blob in the file.
     ///
     /// - Returns: The decoded header.
@@ -55,11 +58,15 @@ public struct PBFReader: Sendable {
     ///   - kinds: The object kinds to decode. Other kinds are skipped without being
     ///     decoded, which makes passes that need only one kind much cheaper. Blocks
     ///     are still decompressed.
+    ///   - position: Called after each blob of the file with the part of the file that is read, from 0 to 1, for a progress display.
     ///   - body: Called once per data block, in file order.
     /// - Throws: ``PBFError`` if the file is malformed, or whatever `body` throws.
-    public func forEachBlock(kinds: OSMObjectKinds = .all, _ body: (OSMBlock) throws -> Void) throws {
+    public func forEachBlock(
+        kinds: OSMObjectKinds = .all, position: ((Double) -> Void)? = nil, _ body: (OSMBlock) throws -> Void
+    ) throws {
         var sawHeader = false
-        try container.forEachBlob { type, payload in
+        let size = Double(max(container.byteCount, 1))
+        try container.forEachBlob(position: position.map { report in { report(Double($0) / size) } }) { type, payload in
             if !sawHeader {
                 guard type == "OSMHeader" else { throw PBFError.missingHeader }
                 _ = try HeaderBlockDecoder.decode(payload)
