@@ -108,16 +108,19 @@ struct SourceFilesScreen: View {
             Text(summary).font(.footnote).foregroundStyle(.secondary)
             HStack {
                 Button("Delete unused files…") { pending = .unused }
+                    .fixedSize()
                     .disabled(isBusy || model.unused.isEmpty)
                     .help("Files that no map of this app was built from, files that cannot be used, and unfinished downloads")
-                Button("Choose folder…") { choosing = true }
-                    .disabled(isBusy)
-                    .help("Use another folder for the source files, such as ~/Library/Application Support/GeoMapKit/Sources, which the command-line tool also uses")
-                if folder != .own {
-                    Button("Use the app's own folder") { useFolder(nil) }.disabled(isBusy)
-                        .help("Go back to the folder of the app itself")
-                }
                 Spacer()
+                Menu("Folder") {
+                    Button("Choose folder…") { choosing = true }
+                        .help("Use another folder for the source files, such as ~/Library/Application Support/GeoMapKit/Sources, which the command-line tool also uses")
+                    if folder != .own {
+                        Button("Use the app's own folder") { useFolder(nil) }
+                            .help("Go back to the folder of the app itself")
+                    }
+                }
+                .menuIndicator(.visible).fixedSize().disabled(isBusy)
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
         }
