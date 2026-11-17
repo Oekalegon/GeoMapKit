@@ -88,3 +88,99 @@ struct RequiredRegionsTests {
         #expect(needed == ["a", "b", "mid"])
     }
 }
+
+@Suite("MapBuilder.requiredRegions: one file for the same ground")
+struct SettledRegionsTests {
+    private func region(_ id: String, parent: String? = nil, west: Double, east: Double, south: Double = 40, north: Double = 44) -> SourceRegion {
+        let ring = [
+            Coordinate(latitude: south, longitude: west), Coordinate(latitude: south, longitude: east),
+            Coordinate(latitude: north, longitude: east), Coordinate(latitude: north, longitude: west),
+        ]
+        return SourceRegion(
+            id: id, name: id, parentID: parent, pbfURL: URL(string: "https://download.example.org/\(id).osm.pbf")!,
+            outline: [RegionPolygon(outer: ring)])
+    }
+
+    private func held(_ ids: [String]) throws -> (SourceCache, URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-settle-\(UUID().uuidString)")
+        let cache = SourceCache(directory: root)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        for id in ids {
+            let part = try cache.preparePart(regionID: id, etag: "\"e\"", keepBytes: false)
+            try Data("x".utf8).write(to: part)
+            try cache.install(
+                regionID: id, from: URL(string: "https://download.example.org/\(id).osm.pbf")!,
+                info: RemoteFileInfo(size: 1, etag: "\"e\"", lastModified: "Mon"))
+        }
+        return (cache, root)
+    }
+
+    /// Spain (0 to 10) with two parts, a neighbour country east of it, and a continent that covers a gap between neighbour outlines.
+    private func world() throws -> RegionIndex {
+        try RegionIndex(regions: [
+            region("spain", parent: "europe", west: 0, east: 10), region("south", parent: "spain", west: 0, east: 5),
+            region("north", parent: "spain", west: 5, east: 10), region("europe", west: -5, east: 30),
+            region("pt", parent: "europe", west: 10, east: 14), region("rest", parent: "europe", west: 14, east: 18),
+        ])
+    }
+
+    @Test("A selected region is the source of its blocks; its parts are not planned")
+    func selectedWins() throws {
+        let needed = try MapBuilder.requiredRegions(area: .regions(["spain"]), in: try world()).map(\.id)
+        #expect(needed.contains("spain") && !needed.contains("south") && !needed.contains("north"))
+    }
+
+    @Test("A parent and a part of it are never planned together")
+    func noParentWithPart() throws {
+        let index = try world()
+        let needed = try MapBuilder.requiredRegions(area: .regions(["pt"]), in: index).map(\.id)
+        #expect(!(needed.contains("europe") && needed.contains("south")))
+        #expect(!(needed.contains("spain") && needed.contains("south")))
+    }
+
+    @Test("A held file stands in for a part of it that is not held")
+    func heldParentCovers() throws {
+        let (cache, root) = try held(["spain", "pt"])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let needed = try MapBuilder.requiredRegions(area: .regions(["pt"]), in: try world(), cache: cache).map(\.id)
+        #expect(needed.contains("spain") && !needed.contains("north") && !needed.contains("south"))
+    }
+
+    @Test("A part that is held is used itself, not its parent")
+    func heldPartStays() throws {
+        let (cache, root) = try held(["spain", "north", "pt"])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let needed = try MapBuilder.requiredRegions(area: .regions(["pt"]), in: try world(), cache: cache).map(\.id)
+        #expect(needed.contains("north") && !needed.contains("spain"))
+    }
+
+    @Test("A selected region that is not held, with parts that are, is not downloaded: the parts are used")
+    func selectedNotHeldPartsHeld() throws {
+        let (cache, root) = try held(["south", "north"])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let needed = try MapBuilder.requiredRegions(area: .regions(["spain"]), in: try world(), cache: cache).map(\.id)
+        #expect(needed.contains("south") && needed.contains("north") && !needed.contains("spain"))
+    }
+
+    @Test("A held ancestor much larger than the part is not a source for it")
+    func hugeAncestor() throws {
+        let index = try RegionIndex(regions: [
+            region("europe", west: -50, east: 50, south: 0, north: 80), region("a", parent: "europe", west: 0, east: 5),
+            region("b", parent: "europe", west: 5, east: 6, south: 40, north: 41),
+        ])
+        let (cache, root) = try held(["europe", "a"])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let needed = try MapBuilder.requiredRegions(area: .regions(["a"]), in: index, cache: cache).map(\.id)
+        #expect(needed.contains("b") && !needed.contains("europe"))
+    }
+
+    @Test("An aggregate outside the tree goes when the parts of the block hold all it holds there")
+    func aggregateRedundant() throws {
+        let index = try RegionIndex(regions: [
+            region("home", parent: "europe", west: 0, east: 5), region("next", parent: "europe", west: 5, east: 10),
+            region("europe", west: -50, east: 50, south: 0, north: 80), region("group", west: 0, east: 10),
+        ])
+        let needed = try MapBuilder.requiredRegions(area: .regions(["home"]), in: index).map(\.id)
+        #expect(!needed.contains("group"))
+    }
+}

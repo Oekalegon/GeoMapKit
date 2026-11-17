@@ -156,7 +156,8 @@ final class RegionPickerModel: Identifiable {
                 // (The lookup itself is not cancellable: a cancel is seen when it is done.) The selected regions come first, the
                 // neighbours after them, each by name. If no region covers anything the selection is planned as it is, and the build
                 // says that nothing covers the area.
-                let found = try await Task.detached { try MapBuilder.requiredRegions(area: .regions(ids), in: index) }.value
+                let held = cache
+                let found = try await Task.detached { try MapBuilder.requiredRegions(area: .regions(ids), in: index, cache: held) }.value
                 try Task.checkCancellation()
                 let chosen = Set(ids)
                 let byName: (SourceRegion, SourceRegion) -> Bool = { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
