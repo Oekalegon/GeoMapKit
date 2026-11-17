@@ -262,7 +262,7 @@ final class RegionPickerModel: Identifiable {
                     Task { @MainActor in self.record(id, received, size) }
                 }
                 // The last updates may still be on their way: every file is complete now.
-                for item in plan.items { self.progress[item.region.id] = (item.size ?? self.progress[item.region.id]?.received ?? 0, item.size) }
+                for item in plan.items where item.action != .useCached { self.progress[item.region.id] = (item.size ?? self.progress[item.region.id]?.received ?? 0, item.size) }
                 self.download = .done
                 // The files are held now: the plan is made again, so that it shows them as held.
                 self.plan = .none
