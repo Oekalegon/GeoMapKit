@@ -36,6 +36,17 @@ final class MapBuildHost {
         showsPicker = true
     }
 
+    /// Takes the build model away, so that the next one is made again (with another folder for the source files). Does nothing while a run
+    /// is going or its end is shown.
+    ///
+    /// - Returns: Whether the model was taken away.
+    @discardableResult
+    func resetModel() -> Bool {
+        guard !isBusy else { return false }
+        model = nil
+        return true
+    }
+
     /// The build model, made when first needed; `nil` (with ``problem`` set) if the folders cannot be used.
     func ensureModel() -> MapBuildModel? {
         if model == nil {

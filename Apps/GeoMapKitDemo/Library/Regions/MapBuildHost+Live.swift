@@ -3,18 +3,20 @@ import AppKit
 import Regions
 
 extension MapBuildHost {
-    /// The host of the app: the Geofabrik list and the source files go to the cache folder of the app, and the maps are built in `Maps`
+    /// The host of the app: the Geofabrik list and the source files go to the folder the user chose (see ``SourceFolder``) or else to the cache folder of the app, and the maps are built in `Maps`
     /// next to it and added to the library. A finished map is not opened by itself: the user is looking at another map, and the status
     /// bar offers to show it.
     static func live(library: MapLibrary) -> MapBuildHost {
         library.builtMapsRoot = (try? SourceCache.defaultDirectory())?.deletingLastPathComponent().appendingPathComponent("Maps", isDirectory: true)
         return MapBuildHost {
-            let directory = try SourceCache.defaultDirectory()
+            let ownFolder = try SourceCache.defaultDirectory()
+            // The files of the user's choice, if one was made and is still there; the maps are built in the container of the app.
+            let directory = SourceFolder().resolve() ?? ownFolder
             let downloader = URLSessionDownloader(userAgent: MapBuildTools.userAgent)
             let catalog = GeofabrikCatalog(directory: directory, downloader: downloader)
             let picker = RegionPickerModel(catalog: catalog, downloader: downloader, cache: SourceCache(directory: directory))
             return MapBuildModel(
-                picker: picker, catalog: catalog, mapsRoot: directory.deletingLastPathComponent().appendingPathComponent("Maps", isDirectory: true)
+                picker: picker, catalog: catalog, mapsRoot: ownFolder.deletingLastPathComponent().appendingPathComponent("Maps", isDirectory: true)
             ) { folder, name in try library.addBuilt(folder: folder, name: name) }
         }
     }

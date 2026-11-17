@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The downloaded source files of the app: what each takes, which maps were built from it, and deleting them (question 63).
 ///
@@ -14,6 +15,8 @@ struct SourceFilesScreen: View {
     @State private var model: SourceFilesModel
     @State private var pending: Pending?
     @State private var problem: String?
+    @State private var choosing = false
+    @State private var chosen = SourceFolder().isChosen
     @Environment(\.dismiss) private var dismiss
 
     /// What the user asked to delete and has to confirm.
@@ -55,6 +58,12 @@ struct SourceFilesScreen: View {
         .confirmationDialog(title, isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }), titleVisibility: .visible) {
             Button("Delete", role: .destructive) { confirm() }
         } message: { Text(message) }
+        .fileImporter(isPresented: $choosing, allowedContentTypes: [.folder]) { result in
+            switch result {
+            case .success(let url): useFolder(url)
+            case .failure(let error): problem = error.localizedDescription
+            }
+        }
         .alert("Downloaded files", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
             Button("OK") { problem = nil }
         } message: { Text(problem ?? "") }
@@ -100,6 +109,13 @@ struct SourceFilesScreen: View {
                 Button("Delete unused files…") { pending = .unused }
                     .disabled(isBusy || model.unused.isEmpty)
                     .help("Files that no map of this app was built from, files that cannot be used, and unfinished downloads")
+                Button("Choose folder…") { choosing = true }
+                    .disabled(isBusy)
+                    .help("Use another folder for the source files, such as ~/Library/Application Support/GeoMapKit/Sources, which the command-line tool also uses")
+                if chosen {
+                    Button("Own folder") { useFolder(nil) }.disabled(isBusy)
+                        .help("Go back to the folder of the app itself")
+                }
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
@@ -114,6 +130,21 @@ struct SourceFilesScreen: View {
             text += " Some maps do not record their source files (they were built before that), so a file listed as unused can be in use."
         }
         return text
+    }
+
+    // MARK: Folder
+
+    /// Uses another folder for the source files (or the app's own for `nil`): the build model is made again with it, so the sheet closes.
+    private func useFolder(_ url: URL?) {
+        guard !isBusy else { return }
+        do {
+            if let url { try SourceFolder().choose(url) } else { SourceFolder().reset() }
+            host.resetModel()
+            chosen = url != nil
+            dismiss()
+        } catch {
+            problem = error.localizedDescription
+        }
     }
 
     // MARK: Deleting
