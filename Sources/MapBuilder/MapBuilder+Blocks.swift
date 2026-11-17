@@ -280,8 +280,10 @@ extension MapBuilder {
     ///
     /// Each block asks the index for the smallest regions that cover it. The plan then settles the files for the whole area (question 63):
     /// a region of the selection (``BlockRequest/Area/regions(_:)``) is the source of every block inside it, instead of the regions below
-    /// it; a region that is not held, with an ancestor that is, is read from that ancestor's file; and an ancestor is left out of a block
-    /// when a region below it is in the plan, so a file and the files of its parts never come together.
+    /// it (unless that region is not held and a part of it is: then the parts are used); a region that is not held, with an ancestor that is
+    /// (and is not more than 50 times as large), is read from that ancestor's file; and a file is left out of a block when the regions
+    /// below it, or the others of the block, hold all it holds there, so a file and the files of its parts never come together. Where
+    /// only a sliver of a margin is covered by a continent file and not by the parts, that sliver is not read.
     ///
     /// - Parameters:
     ///   - area: The area.
@@ -289,6 +291,8 @@ extension MapBuilder {
     ///   - margin: The margin of the cut, in degrees.
     ///   - index: The region index.
     ///   - cache: The source cache, or `nil` when it is not known which files are held.
+    /// - Returns: The blocks, in order of the tiles.
+    /// - Throws: ``MapBuilderError`` for an area that is invalid, too large or names an unknown region.
     public static func plannedBlocks(
         area: BlockRequest.Area, blockZoom: Int, margin: Double, in index: RegionIndex, cache: SourceCache? = nil
     ) throws -> [BlockTask] {
@@ -303,6 +307,10 @@ extension MapBuilder {
         return settle(tasks, selected: selected, cache: cache, in: index)
     }
 
+    /// The largest an ancestor may be, against the part it stands in for, to be read instead of a part that is not held: a held
+    /// continent is no source for a county, since every block would be cut from a file of tens of gigabytes.
+    private static let maximumHeldAreaRatio = 50.0
+
     /// Settles the files of a plan (see ``plannedBlocks(area:blockZoom:margin:in:cache:)``).
     private static func settle(_ tasks: [BlockTask], selected: [String], cache: SourceCache?, in index: RegionIndex) -> [BlockTask] {
         var held: [String: Bool] = [:]
@@ -316,16 +324,25 @@ extension MapBuilder {
             held[id] = answer
             return answer
         }
-        // The file a region is read from: the selected region above it, else the nearest held ancestor when it is not held itself.
+        // The selected region that a region lies in, or is.
+        func top(of region: SourceRegion) -> String? {
+            selected.first { $0 == region.id || index.region(region.id, isBelow: $0) }
+        }
+        // A selected region is the source of what lies in it, unless it is not held and a part of it is: then the parts are used, as held,
+        // and the download of the whole is not asked for.
+        var useSelected = Set<String>()
+        for id in selected {
+            let parts = tasks.flatMap(\.regions).filter { $0.id != id && index.region($0.id, isBelow: id) }
+            if isHeld(id) || !parts.contains(where: { isHeld($0.id) }) { useSelected.insert(id) }
+        }
+        // The file a region is read from.
         func source(of region: SourceRegion) -> SourceRegion {
-            if let top = selected.first(where: { $0 == region.id || index.region(region.id, isBelow: $0) }), let found = index.region(withID: top) {
-                return found
-            }
+            if let top = top(of: region), useSelected.contains(top), let found = index.region(withID: top) { return found }
             guard cache != nil, !isHeld(region.id) else { return region }
             var parent = region.parentID
             var steps = 0
             while let id = parent, steps <= index.regions.count, let found = index.region(withID: id) {
-                if isHeld(id) { return found }
+                if isHeld(id), found.approximateArea <= region.approximateArea * maximumHeldAreaRatio { return found }
                 parent = found.parentID
                 steps += 1
             }
@@ -341,6 +358,25 @@ extension MapBuilder {
         for position in result.indices {
             let kept = result[position].regions.filter { region in !all.contains { $0 != region.id && index.region($0, isBelow: region.id) } }
             if !kept.isEmpty { result[position].regions = kept }
+        }
+        // A region that is not an ancestor in the tree (an aggregate such as Great Britain, or the Alps) goes when the others of the block
+        // hold every point of the block that it holds. The largest are looked at first, and the selected regions stay.
+        for position in result.indices where result[position].regions.count > 1 {
+            let box = result[position].cutBox
+            let side = 16
+            let points = (0..<side * side).map { n in
+                Coordinate(
+                    latitude: box.south + (box.north - box.south) * (Double(n / side) + 0.5) / Double(side),
+                    longitude: box.west + (box.east - box.west) * (Double(n % side) + 0.5) / Double(side))
+            }
+            var regions = result[position].regions
+            for region in regions.sorted(by: { $0.approximateArea > $1.approximateArea }) where regions.count > 1 && !selected.contains(region.id) {
+                let others = regions.filter { $0.id != region.id }
+                if points.allSatisfy({ point in !region.contains(point) || others.contains { $0.contains(point) } }) {
+                    regions = others
+                }
+            }
+            result[position].regions = regions
         }
         return result
     }

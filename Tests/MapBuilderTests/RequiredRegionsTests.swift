@@ -153,4 +153,34 @@ struct SettledRegionsTests {
         let needed = try MapBuilder.requiredRegions(area: .regions(["pt"]), in: try world(), cache: cache).map(\.id)
         #expect(needed.contains("north") && !needed.contains("spain"))
     }
+
+    @Test("A selected region that is not held, with parts that are, is not downloaded: the parts are used")
+    func selectedNotHeldPartsHeld() throws {
+        let (cache, root) = try held(["south", "north"])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let needed = try MapBuilder.requiredRegions(area: .regions(["spain"]), in: try world(), cache: cache).map(\.id)
+        #expect(needed.contains("south") && needed.contains("north") && !needed.contains("spain"))
+    }
+
+    @Test("A held ancestor much larger than the part is not a source for it")
+    func hugeAncestor() throws {
+        let index = try RegionIndex(regions: [
+            region("europe", west: -50, east: 50, south: 0, north: 80), region("a", parent: "europe", west: 0, east: 5),
+            region("b", parent: "europe", west: 5, east: 6, south: 40, north: 41),
+        ])
+        let (cache, root) = try held(["europe", "a"])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let needed = try MapBuilder.requiredRegions(area: .regions(["a"]), in: index, cache: cache).map(\.id)
+        #expect(needed.contains("b") && !needed.contains("europe"))
+    }
+
+    @Test("An aggregate outside the tree goes when the parts of the block hold all it holds there")
+    func aggregateRedundant() throws {
+        let index = try RegionIndex(regions: [
+            region("home", parent: "europe", west: 0, east: 5), region("next", parent: "europe", west: 5, east: 10),
+            region("europe", west: -50, east: 50, south: 0, north: 80), region("group", west: 0, east: 10),
+        ])
+        let needed = try MapBuilder.requiredRegions(area: .regions(["home"]), in: index).map(\.id)
+        #expect(!needed.contains("group"))
+    }
 }
