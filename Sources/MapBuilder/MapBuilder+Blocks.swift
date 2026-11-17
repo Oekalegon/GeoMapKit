@@ -45,7 +45,7 @@ extension MapBuilder {
         var tasks: [BlockTask] = []
         var outcomes: [Int: BlockOutcome] = [:]
         var needed: [String: SourceRegion] = [:]
-        for planned in try plannedBlocks(area: request.area, blockZoom: request.blockZoom, margin: request.margin, in: index) {
+        for planned in try plannedBlocks(area: request.area, blockZoom: request.blockZoom, margin: request.margin, in: index, cache: cache) {
             if planned.regions.isEmpty {
                 outcomes[planned.position] = BlockOutcome(x: planned.tile.x, y: planned.tile.y, status: .empty, regions: [])
             } else {
@@ -271,19 +271,78 @@ extension MapBuilder {
         /// The box that is cut for the block, in degrees: the tile plus the margin.
         public let cutBox: BoundingBox
         /// The regions whose source files the cut needs; empty when no region covers the block.
-        public let regions: [SourceRegion]
+        public internal(set) var regions: [SourceRegion]
         /// The share of the tile (not the cut) that the outlines of the regions cover; 0 when no source file has data there.
         public internal(set) var coveredShare: Double = 0
     }
 
     /// The blocks of an area with, for each, the box that is cut and the regions whose files it needs (none if no region covers it).
-    public static func plannedBlocks(area: BlockRequest.Area, blockZoom: Int, margin: Double, in index: RegionIndex) throws -> [BlockTask] {
-        try blockTiles(for: area, blockZoom: blockZoom, in: index).enumerated().map { position, tile in
+    ///
+    /// Each block asks the index for the smallest regions that cover it. The plan then settles the files for the whole area (question 63):
+    /// a region of the selection (``BlockRequest/Area/regions(_:)``) is the source of every block inside it, instead of the regions below
+    /// it; a region that is not held, with an ancestor that is, is read from that ancestor's file; and an ancestor is left out of a block
+    /// when a region below it is in the plan, so a file and the files of its parts never come together.
+    ///
+    /// - Parameters:
+    ///   - area: The area.
+    ///   - blockZoom: The zoom of the block grid.
+    ///   - margin: The margin of the cut, in degrees.
+    ///   - index: The region index.
+    ///   - cache: The source cache, or `nil` when it is not known which files are held.
+    public static func plannedBlocks(
+        area: BlockRequest.Area, blockZoom: Int, margin: Double, in index: RegionIndex, cache: SourceCache? = nil
+    ) throws -> [BlockTask] {
+        var selected: [String] = []
+        if case .regions(let ids) = area { selected = ids }
+        let tasks = try blockTiles(for: area, blockZoom: blockZoom, in: index).enumerated().map { position, tile in
             let box = cutBox(of: tile, margin: margin)
             // The tile alone decides whether the data there is known: the margin only reaches into the next block.
             let share = index.regions(covering: tileBox(tile), samplesPerSide: 16).coveredShare
             return BlockTask(position: position, tile: tile, cutBox: box, regions: index.regions(covering: box).regions, coveredShare: share)
         }
+        return settle(tasks, selected: selected, cache: cache, in: index)
+    }
+
+    /// Settles the files of a plan (see ``plannedBlocks(area:blockZoom:margin:in:cache:)``).
+    private static func settle(_ tasks: [BlockTask], selected: [String], cache: SourceCache?, in index: RegionIndex) -> [BlockTask] {
+        var held: [String: Bool] = [:]
+        func isHeld(_ id: String) -> Bool {
+            if let known = held[id] { return known }
+            var answer = false
+            switch cache?.status(ofRegionID: id).status {
+            case .current, .stale: answer = true
+            default: break
+            }
+            held[id] = answer
+            return answer
+        }
+        // The file a region is read from: the selected region above it, else the nearest held ancestor when it is not held itself.
+        func source(of region: SourceRegion) -> SourceRegion {
+            if let top = selected.first(where: { $0 == region.id || index.region(region.id, isBelow: $0) }), let found = index.region(withID: top) {
+                return found
+            }
+            guard cache != nil, !isHeld(region.id) else { return region }
+            var parent = region.parentID
+            var steps = 0
+            while let id = parent, steps <= index.regions.count, let found = index.region(withID: id) {
+                if isHeld(id) { return found }
+                parent = found.parentID
+                steps += 1
+            }
+            return region
+        }
+        var result = tasks
+        for position in result.indices {
+            var seen = Set<String>()
+            result[position].regions = result[position].regions.map(source(of:)).filter { seen.insert($0.id).inserted }
+        }
+        // An ancestor goes from the blocks that have a region below it in the plan: its file only repeats what the parts hold.
+        let all = Set(result.flatMap { $0.regions.map(\.id) })
+        for position in result.indices {
+            let kept = result[position].regions.filter { region in !all.contains { $0 != region.id && index.region($0, isBelow: region.id) } }
+            if !kept.isEmpty { result[position].regions = kept }
+        }
+        return result
     }
 
     /// The source regions whose files a build of an area reads: the regions of its blocks, neighbours across a border included
@@ -297,12 +356,14 @@ extension MapBuilder {
     ///   - blockZoom: The zoom of the block grid; the default is the one of ``BlockRequest``, so a request that does not say gets the same files.
     ///   - margin: The margin of the cut, in degrees; the default is the one of ``BlockRequest``.
     ///   - index: The region index.
+    ///   - cache: The source cache, so that a file that is held stands in for the regions below it that are not.
     /// - Returns: The regions, sorted by id; empty when no region covers the area.
     /// - Throws: ``MapBuilderError`` for an area that is invalid, too large or names an unknown region.
-    public static func requiredRegions(area: BlockRequest.Area, blockZoom: Int = BlockRequest.defaultBlockZoom, margin: Double = BlockRequest.defaultMargin, in index: RegionIndex
+    public static func requiredRegions(area: BlockRequest.Area, blockZoom: Int = BlockRequest.defaultBlockZoom, margin: Double = BlockRequest.defaultMargin, in index: RegionIndex,
+        cache: SourceCache? = nil
     ) throws -> [SourceRegion] {
         var found: [String: SourceRegion] = [:]
-        for task in try plannedBlocks(area: area, blockZoom: blockZoom, margin: margin, in: index) {
+        for task in try plannedBlocks(area: area, blockZoom: blockZoom, margin: margin, in: index, cache: cache) {
             for region in task.regions { found[region.id] = region }
         }
         return found.values.sorted { $0.id < $1.id }
