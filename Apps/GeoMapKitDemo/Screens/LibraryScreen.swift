@@ -152,19 +152,24 @@ struct LibraryScreen: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 480)
+        .frame(minWidth: 520, minHeight: 480)
         // A sheet on the Mac shows no toolbar, so the buttons are in the sheet itself.
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 0) {
             BuildStatusBar()
             HStack {
-                Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
-                Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
-                Button { startImport(.tracks) } label: { Label("Add a track…", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
+                Menu {
+                    Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
+                    Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
+                    Button { startImport(.tracks) } label: { Label("Add a track…", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
+                } label: { Label("Add", systemImage: "plus") }
+                    .fixedSize()
                 Button { builds.openPicker() } label: { Label("Get maps…", systemImage: "arrow.down.circle") }
+                    .fixedSize()
                     .disabled(builds.isBusy)
                     .help(builds.isBusy ? "A map is being built; the bar at the bottom shows it." : "Download regions and build a map")
                 Button { showsFiles = builds.ensureModel() != nil } label: { Label("Downloaded files…", systemImage: "externaldrive") }
+                    .fixedSize()
                     .help("See the files the maps were built from, and delete the ones you do not need")
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
