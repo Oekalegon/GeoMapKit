@@ -67,6 +67,27 @@ struct BuildStatusTests {
         return (host, folder)
     }
 
+    @Test("The host takes its model away for a new folder, and not while a run is shown")
+    func resetModel() async throws {
+        let (host, folder) = host()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        #expect(host.resetModel(), "nothing to take away is fine")
+        let first = try #require(host.ensureModel())
+        #expect(host.resetModel() && host.model == nil)
+        let second = try #require(host.ensureModel())
+        #expect(second !== first)
+        await second.picker.load()
+        second.picker.setSelected("europe/netherlands", true)
+        second.start()
+        await waitForDownloading(second)
+        #expect(!host.resetModel() && host.model === second, "a run is shown")
+        second.cancel()
+        await second.waitForRun()
+        #expect(!host.resetModel(), "the end of the run is still shown")
+        second.dismissResult()
+        #expect(host.resetModel())
+    }
+
     private func waitForDownloading(_ model: MapBuildModel) async {
         for _ in 0..<500 where model.stage != .downloading { try? await Task.sleep(for: .milliseconds(10)) }
     }

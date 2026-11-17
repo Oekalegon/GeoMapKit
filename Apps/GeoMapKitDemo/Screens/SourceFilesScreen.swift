@@ -16,7 +16,7 @@ struct SourceFilesScreen: View {
     @State private var pending: Pending?
     @State private var problem: String?
     @State private var choosing = false
-    @State private var chosen = SourceFolder().isChosen
+    @State private var folder = SourceFolder().state
     @Environment(\.dismiss) private var dismiss
 
     /// What the user asked to delete and has to confirm.
@@ -104,6 +104,7 @@ struct SourceFilesScreen: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Text(folderLine).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
             Text(summary).font(.footnote).foregroundStyle(.secondary)
             HStack {
                 Button("Delete unused files…") { pending = .unused }
@@ -112,8 +113,8 @@ struct SourceFilesScreen: View {
                 Button("Choose folder…") { choosing = true }
                     .disabled(isBusy)
                     .help("Use another folder for the source files, such as ~/Library/Application Support/GeoMapKit/Sources, which the command-line tool also uses")
-                if chosen {
-                    Button("Own folder") { useFolder(nil) }.disabled(isBusy)
+                if folder != .own {
+                    Button("Use the app's own folder") { useFolder(nil) }.disabled(isBusy)
                         .help("Go back to the folder of the app itself")
                 }
                 Spacer()
@@ -137,13 +138,25 @@ struct SourceFilesScreen: View {
     /// Uses another folder for the source files (or the app's own for `nil`): the build model is made again with it, so the sheet closes.
     private func useFolder(_ url: URL?) {
         guard !isBusy else { return }
+        // The model is taken away first: a run whose end is still shown keeps its folder, and the choice is not made.
+        guard host.resetModel() else {
+            problem = "Dismiss the result of the build first."
+            return
+        }
         do {
             if let url { try SourceFolder().choose(url) } else { SourceFolder().reset() }
-            host.resetModel()
-            chosen = url != nil
             dismiss()
         } catch {
             problem = error.localizedDescription
+        }
+    }
+
+    /// Where the files are: the folder of the choice, the folder of the app, or a choice that cannot be reached now.
+    private var folderLine: String {
+        switch folder {
+        case .own: "Folder: the app's own folder (not shared with the command-line tool)."
+        case .chosen(let url): "Folder: \(url.path) (your choice)."
+        case .unavailable: "The folder you chose is not available (is its disk connected?); the app uses its own folder meanwhile."
         }
     }
 

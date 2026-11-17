@@ -283,6 +283,22 @@ struct RegionPickerModelTests {
         #expect(model.step == .chooseRegions)
     }
 
+    @Test("The progress list has the files that were downloaded, not the held ones")
+    func progressListsDownloadsOnly() async {
+        let (model, _, folder) = make()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        await model.load()
+        model.setSelected("europe/belgium", true)
+        await model.askSizes()
+        model.startDownload()
+        await model.waitForDownload()
+        #expect(Set(model.progress.keys) == ["europe/belgium"])
+        await model.askSizes()
+        model.startDownload()
+        await model.waitForDownload()
+        #expect(model.progress.isEmpty, "everything is held: nothing is listed as downloaded")
+    }
+
     @Test("After a failed download, asking again clears the error")
     func askingClearsTheError() async {
         let (model, _, folder) = make(network: Network(failsDownload: true))
