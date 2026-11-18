@@ -207,4 +207,46 @@ struct SettledRegionsTests {
         let needed = try MapBuilder.requiredRegions(area: .box(box), in: index).map(\.id)
         #expect(needed.contains("a") && needed.contains("next"))
     }
+
+    @Test("Several selected regions count together: a neighbour stays where they hold most of the tile, and goes with one of them alone")
+    func severalSelected() throws {
+        // At the tile of 9.84 to 11.25 degrees "a" holds 26 %, "a" with "b" 83 %; "c" holds ground there that neither has.
+        let index = try RegionIndex(regions: [
+            region("a", west: 0, east: 10.2), region("b", west: 10.2, east: 11), region("c", west: 10.5, east: 12),
+        ])
+        #expect(!(try MapBuilder.requiredRegions(area: .regions(["a"]), in: index).map(\.id).contains("c")))
+        #expect(try MapBuilder.requiredRegions(area: .regions(["a", "b"]), in: index).map(\.id).contains("c"))
+    }
+
+    @Test("The parts of a selected region count as the selection, and the neighbours that are left out are listed on the block")
+    func partsAreOwn() throws {
+        let tasks = try MapBuilder.plannedBlocks(area: .regions(["spain"]), blockZoom: 8, margin: 0.1, in: try world())
+        let ids = Set(tasks.flatMap { $0.regions.map(\.id) })
+        #expect(ids.contains("spain") && !ids.contains("pt"), "pt holds ground only in the one tile that is mostly pt's")
+        #expect(tasks.contains { $0.leftOut.contains { $0.id == "pt" } })
+    }
+
+    @Test("A build reads the files that the plan names: it needs no neighbour that was left out, and says that it built without it")
+    func buildWithoutLeftOutNeighbour() async throws {
+        let home = region("home", west: 8, east: 10.5, south: 46, north: 49)
+        let next = region("sud", west: 10.5, east: 14, south: 46, north: 49)
+        let index = try RegionIndex(regions: [home, next])
+        #expect(try MapBuilder.requiredRegions(area: .regions(["home"]), in: index).map(\.id) == ["home"])
+
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-leftout-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cache = SourceCache(directory: root.appendingPathComponent("cache"))
+        struct Fixed: RegionCatalog {
+            let index: RegionIndex
+            func index() async throws -> RegionIndex { index }
+        }
+        let part = try cache.preparePart(regionID: "home", etag: "\"e\"", keepBytes: false)
+        try TinyPBF.make().write(to: part)
+        try cache.install(
+            regionID: "home", from: URL(string: "https://download.example.org/home.osm.pbf")!,
+            info: RemoteFileInfo(size: Int64(try TinyPBF.make().count), etag: "\"e\"", lastModified: "Mon"))
+        let request = BlockRequest(area: .regions(["home"]), output: root.appendingPathComponent("out"), cacheDirectory: cache.directory)
+        let report = try await MapBuilder.buildRegion(request, catalog: Fixed(index: index))
+        #expect(report.warnings.contains { $0.contains("without sud") })
+    }
 }

@@ -54,9 +54,14 @@ extension MapBuilder {
             }
         }
         guard !tasks.isEmpty else { throw MapBuilderError("No source region covers this area.") }
+        var leftOutCounts: [String: (name: String, blocks: Int)] = [:]
+        for task in tasks { for region in task.leftOut { leftOutCounts[region.id, default: (region.name, 0)].blocks += 1 } }
 
         // Every source file has to be in the cache already.
         var warnings: [String] = []
+        for (_, entry) in leftOutCounts.sorted(by: { $0.key < $1.key }) {
+            warnings.append("\(entry.blocks) border blocks are built without \(entry.name): they lie mostly outside the selection. Add \(entry.name) to fill them.")
+        }
         var records: [String: CachedSource] = [:]
         var missing: [String] = []
         for region in needed.values.sorted(by: { $0.id < $1.id }) {
@@ -272,6 +277,8 @@ extension MapBuilder {
         public let cutBox: BoundingBox
         /// The regions whose source files the cut needs; empty when no region covers the block.
         public internal(set) var regions: [SourceRegion]
+        /// The neighbours that the block would read but does not, because it lies mostly outside the selection or they reach only its margin.
+        public internal(set) var leftOut: [SourceRegion] = []
         /// The share of the tile (not the cut) that the outlines of the regions cover; 0 when no source file has data there.
         public internal(set) var coveredShare: Double = 0
     }
@@ -291,6 +298,11 @@ extension MapBuilder {
     ///   - margin: The margin of the cut, in degrees.
     ///   - index: The region index.
     ///   - cache: The source cache, or `nil` when it is not known which files are held.
+    ///
+    /// The neighbours that are left out are listed in ``BlockTask/leftOut``. For a box or tiles no neighbour is left out. A map that was
+    /// built before this rule has blocks that were read from a neighbour as well: they count as out of date on the next run and are built
+    /// again, without it.
+    ///
     /// - Returns: The blocks, in order of the tiles.
     /// - Throws: ``MapBuilderError`` for an area that is invalid, too large or names an unknown region.
     public static func plannedBlocks(
@@ -383,6 +395,7 @@ extension MapBuilder {
                 let inside = points.filter { point in outlines.contains { $0.contains(point) } }.count
                 let mostlyOwn = Double(inside) >= minimumOwnShare * Double(points.count)
                 let kept = foreign.filter { region in mostlyOwn && points.contains { region.contains($0) } }
+                result[position].leftOut = foreign.filter { region in !kept.contains { $0.id == region.id } }
                 result[position].regions = own + kept
             }
         }
@@ -408,8 +421,8 @@ extension MapBuilder {
         return result
     }
 
-    /// The source regions whose files a build of an area reads: the regions of its blocks, neighbours across a border included
-    /// (a block is cut with a margin, so a block at the border needs the file on the other side).
+    /// The source regions whose files a build of an area reads: the regions of its blocks, and the neighbours that hold ground of a block
+    /// that lies mostly in a selected region (see ``plannedBlocks(area:blockZoom:margin:in:cache:)``).
     ///
     /// This is the same answer the build uses, so downloading these files means ``buildRegion(_:catalog:downloader:userAgent:progress:onProgress:)``
     /// finds them in the cache.
