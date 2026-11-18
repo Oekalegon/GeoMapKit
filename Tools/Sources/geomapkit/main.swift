@@ -106,6 +106,15 @@ GeoMapKit tools
       Each job uses memory in proportion to the area it reads (not measured for
       the coarse levels: start with --jobs 2).
 
+  geomapkit merge-maps (--output <new folder> | --into <map folder>) <map folder> <map folder>...
+      Put the blocks of several maps in one map. --output makes a new map from
+      the folders (it must not exist yet); --into adds the folders to a map that
+      exists (its blocks and levels stay, and only what changes is written).
+      The maps must agree on the block format and profile. A tile that more than
+      one map has keeps the larger block, and the tiles are listed. Blocks are
+      copied, not changed (cloned on a Mac volume, so with almost no extra
+      space). Run fill-sea and then build-levels afterwards.
+
   geomapkit fill-sea <folder> [--cache DIR]
       Give the blocks of a set that no source outline touches their sea. Geofabrik extracts cover every piece of
       land, so such a block is open sea; it is filled where it touches a block that shows sea. This closes the holes in
@@ -253,6 +262,21 @@ do {
             fflush(stdout)
         })
         print(ReportFormatter.text(for: levelReport))
+    case "merge-maps":
+        let parsed = try CommandLineArguments(rest, knownOptions: ["output", "into"], knownFlags: [])
+        let target: URL
+        var inputs = parsed.positional.map { URL(fileURLWithPath: $0) }
+        switch (parsed.value(for: "output"), parsed.value(for: "into")) {
+        case (let output?, nil): target = URL(fileURLWithPath: output)
+        case (nil, let into?):
+            target = URL(fileURLWithPath: into)
+            inputs.insert(target, at: 0)
+        default: throw ToolError("merge-maps needs --output <new folder> or --into <map folder>, not both")
+        }
+        let mergeReport = try await MapBuilder.mergeMaps(MapMergeRequest(inputs: inputs, output: target)) { done, total in
+            if done % 50 == 0 || done == total { print("  \(done) of \(total) blocks written"); fflush(stdout) }
+        }
+        print(ReportFormatter.text(for: mergeReport))
     case "fill-sea":
         let parsed = try CommandLineArguments(rest, knownOptions: ["cache"])
         guard parsed.positional.count == 1 else { throw ToolError("fill-sea needs the folder of a set of blocks") }
