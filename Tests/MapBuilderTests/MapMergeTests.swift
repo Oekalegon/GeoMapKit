@@ -61,7 +61,7 @@ struct MapMergeTests {
         let overlap = try #require(report.overlaps.first)
         #expect(report.blocks == 1 && overlap.kept == "fr" && overlap.dropped == ["ch"] && overlap.keptBytes == 500 && overlap.droppedBytes == [100])
         #expect(try read(r.appendingPathComponent("out")).blocks.first?.bytes == 500)
-        #expect(report.warnings.contains { $0.contains("more than one map") })
+        #expect(report.warnings.contains { $0.contains("more than one map") } && report.nextSteps.contains { $0.contains("fill-sea") })
     }
 
     @Test("Adding to a map keeps its blocks and writes only the others; a larger block replaces a smaller, and the old manifest is kept")

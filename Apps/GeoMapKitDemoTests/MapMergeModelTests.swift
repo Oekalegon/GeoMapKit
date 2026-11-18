@@ -16,7 +16,7 @@ struct MapMergeModelTests {
     struct Failed: Error {}
 
     private func report(blocks: Int = 5) -> MapMergeReport {
-        MapMergeReport(blocks: blocks, written: 3, replaced: 0, overlaps: [], hasLevels: false, warnings: ["Run fill-sea on the merged map, then build-levels, to close the sea between the maps."])
+        MapMergeReport(blocks: blocks, written: 3, replaced: 0, overlaps: [], hasLevels: false, warnings: [], nextSteps: ["Run fill-sea on the merged map."])
     }
 
     private func tools(
@@ -28,7 +28,7 @@ struct MapMergeModelTests {
                 await calls.add("merge \(request.inputs.count) -> \(request.output.lastPathComponent)")
                 progress(1, 3)
                 try await merge()
-                return MapMergeReport(blocks: 5, written: 3, replaced: 0, overlaps: [], hasLevels: false, warnings: ["Run fill-sea on the merged map, then build-levels, to close the sea between the maps."])
+                return MapMergeReport(blocks: 5, written: 3, replaced: 0, overlaps: [], hasLevels: false, warnings: [], nextSteps: ["Run fill-sea on the merged map."])
             },
             fillSea: { _ in
                 await calls.add("sea")
@@ -127,6 +127,54 @@ struct MapMergeModelTests {
         func wait() async throws {
             while !isOpen { try Task.checkCancellation(); try await Task.sleep(for: .milliseconds(5)) }
         }
+    }
+
+    // MARK: Plan
+
+    private let root = URL(fileURLWithPath: "/tmp/geomapkit-plan-root")
+    private func folders(_ id: String) -> URL? { id == "bad" ? nil : URL(fileURLWithPath: "/maps/\(id)") }
+
+    @Test("A plan for a new map takes the folders of the maps and a folder in the root; the name is checked before anything runs")
+    func planNew() throws {
+        let plan = try MapMergeModel.plan(maps: [("a", "Alps"), ("b", "Benelux")], addTo: nil, name: " North ", root: root, folder: folders)
+        #expect(plan.inputs.map(\.name) == ["Alps", "Benelux"] && plan.output.name == "North" && plan.output.folder.deletingLastPathComponent().path == root.path)
+        #expect(throws: MapMergeModel.PlanError.self) { try MapMergeModel.plan(maps: [("a", "A"), ("b", "B")], addTo: nil, name: "a/b", root: root, folder: folders) }
+        #expect(throws: MapMergeModel.PlanError.self) { try MapMergeModel.plan(maps: [("a", "A"), ("b", "B")], addTo: nil, name: "  ", root: root, folder: folders) }
+        #expect(throws: MapMergeModel.PlanError.self) { try MapMergeModel.plan(maps: [("a", "A"), ("b", "B")], addTo: nil, name: "North", root: nil, folder: folders) }
+    }
+
+    @Test("Adding to a map puts it first, keeps its name and folder, and needs no name")
+    func planInto() throws {
+        let plan = try MapMergeModel.plan(maps: [("a", "A"), ("b", "B"), ("c", "C")], addTo: "c", name: "", root: nil, folder: folders)
+        #expect(plan.inputs.first?.name == "C" && plan.output == .init(folder: URL(fileURLWithPath: "/maps/c"), name: "C"))
+        #expect(Set(plan.inputs.map(\.name)) == ["A", "B", "C"])
+    }
+
+    @Test("Fewer than two maps, or a link that cannot be resolved, make no plan")
+    func planRefused() {
+        #expect(throws: MapMergeModel.PlanError.self) { try MapMergeModel.plan(maps: [("a", "A")], addTo: nil, name: "N", root: root, folder: folders) }
+        #expect(throws: MapMergeModel.PlanError.self) { try MapMergeModel.plan(maps: [("a", "A"), ("bad", "Bad")], addTo: nil, name: "N", root: root, folder: folders) }
+    }
+
+    @Test("The notes of the merge are still there after a cancel and Continue")
+    func notesSurviveContinue() async {
+        let calls = Calls()
+        let gate = Gate()
+        let seen = tools(calls, levels: { try await gate.wait() })
+        let withNote = MapMergeTools(
+            merge: { request, progress in
+                let base = try await seen.merge(request, progress)
+                return MapMergeReport(blocks: base.blocks, written: base.written, replaced: 0, overlaps: [], hasLevels: false, warnings: ["2 tiles were in more than one map."], nextSteps: [])
+            }, fillSea: seen.fillSea, buildLevels: seen.buildLevels)
+        let (model, _) = model(calls, tools: withNote)
+        model.start()
+        for _ in 0..<500 where model.stage != .buildingLevels { try? await Task.sleep(for: .milliseconds(10)) }
+        model.cancel()
+        await model.waitForRun()
+        await gate.open()
+        model.start()
+        await model.waitForRun()
+        #expect(model.notes == ["2 tiles were in more than one map."])
     }
 }
 #endif

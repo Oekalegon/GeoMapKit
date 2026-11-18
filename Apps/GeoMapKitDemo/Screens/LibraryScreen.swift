@@ -126,9 +126,6 @@ struct LibraryScreen: View {
                         Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
                         Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
                         Button { startImport(.tracks) } label: { Label("Add a track…", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
-                    Divider()
-                    Button { showsMerge = true } label: { Label("Merge maps…", systemImage: "square.on.square") }
-                        .disabled(builds.isBusy)
                     } label: { Label("Add", systemImage: "plus") }
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
@@ -166,6 +163,9 @@ struct LibraryScreen: View {
                     Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
                     Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
                     Button { startImport(.tracks) } label: { Label("Add a track…", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
+                    Divider()
+                    Button { showsMerge = builds.ensureModel() != nil } label: { Label("Merge maps…", systemImage: "square.on.square") }
+                        .disabled(builds.isBusy)
                 } label: { Label("Add", systemImage: "plus") }
                     .fixedSize()
                 Button { builds.openPicker() } label: { Label("Get maps…", systemImage: "arrow.down.circle") }
@@ -186,7 +186,7 @@ struct LibraryScreen: View {
             if let model = builds.model { RegionPickerScreen(build: model, onStarted: { dismiss() }) }
         }
         .sheet(isPresented: $showsMerge) {
-            if let directory = builds.ensureModel()?.picker.cacheDirectory { MergeMapsScreen(cacheDirectory: directory).environment(library) }
+            if let directory = builds.model?.picker.cacheDirectory { MergeMapsScreen(cacheDirectory: directory).environment(library) }
         }
         .sheet(isPresented: $showsFiles) {
             if let model = builds.model {

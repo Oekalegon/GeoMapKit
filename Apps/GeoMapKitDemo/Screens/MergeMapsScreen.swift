@@ -21,7 +21,7 @@ struct MergeMapsScreen: View {
     private var candidates: [MapItem] { library.maps.filter { $0.kind == .blocks } }
     private var chosen: [MapItem] { candidates.filter { selection.contains($0.id) } }
     private var canStart: Bool {
-        chosen.count >= 2 && (addTo != nil || !name.trimmingCharacters(in: .whitespaces).isEmpty)
+        chosen.count >= 2 && (addTo != nil || MapLibrary.isValidName(name))
     }
 
     var body: some View {
@@ -58,7 +58,15 @@ struct MergeMapsScreen: View {
                     Text("A new map").tag(String?.none)
                     ForEach(chosen) { Text("Add to \($0.name)").tag(String?.some($0.id)) }
                 }
-                if addTo == nil { TextField("Name", text: $name) }
+                if addTo == nil {
+                    TextField("Name", text: $name)
+                    if !MapLibrary.isValidName(name) {
+                        Text("A name must not be empty, start with a dot or contain a slash or a colon.").font(.footnote).foregroundStyle(.red)
+                    }
+                } else {
+                    Text("The map that is added to changes while this runs; if it is open, it shows the new blocks when the merge is done.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
             }
             Section {
                 Text("The blocks are copied as they are (on this Mac with almost no extra space). Where two maps have a block for the same tile, the larger one is kept, so a tile on a border can miss the other side. The sea between the maps is filled, and the levels are built for what changed; the second can take long for a large map.")
@@ -133,25 +141,17 @@ struct MergeMapsScreen: View {
     }
 
     private func begin() {
-        var inputs: [MapMergeModel.Input] = []
-        for map in chosen {
-            guard let folder = library.linkedFolder(of: map) else { problem = "The link of \(map.name) cannot be resolved."; return }
-            inputs.append(.init(name: map.name, folder: folder))
-        }
-        let output: MapMergeModel.Output
-        if let id = addTo, let target = chosen.first(where: { $0.id == id }), let folder = library.linkedFolder(of: target) {
-            // The map that is added to is the first of the maps.
-            if let at = inputs.firstIndex(where: { $0.folder == folder }) { inputs.swapAt(0, at) }
-            output = .init(folder: folder, name: target.name)
-        } else if let root = library.builtMapsRoot {
-            let wanted = name.trimmingCharacters(in: .whitespaces)
-            output = .init(folder: MapMergeModel.newFolder(named: wanted, in: root), name: wanted)
-        } else {
-            problem = "The folder for new maps is not known."
+        let plan: MapMergeModel.Plan
+        do {
+            plan = try MapMergeModel.plan(
+                maps: chosen.map { ($0.id, $0.name) }, addTo: addTo, name: name, root: library.builtMapsRoot,
+                folder: { id in library.maps.first { $0.id == id }.flatMap { library.linkedFolder(of: $0) } })
+        } catch {
+            problem = error.localizedDescription
             return
         }
         let library = library
-        let merge = MapMergeModel(inputs: inputs, output: output, tools: .live(cacheDirectory: cacheDirectory)) { folder, name in
+        let merge = MapMergeModel(inputs: plan.inputs, output: plan.output, tools: .live(cacheDirectory: cacheDirectory)) { folder, name in
             try library.addBuilt(folder: folder, name: name)
         }
         model = merge

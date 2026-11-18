@@ -158,6 +158,7 @@ public enum ReportFormatter {
             if report.overlaps.count > 20 { lines.append("  … and \(report.overlaps.count - 20) more") }
         }
         for warning in report.warnings { lines.append("Note: \(warning)") }
+        for step in report.nextSteps { lines.append("Next: \(step)") }
         return lines.joined(separator: "\n")
     }
 

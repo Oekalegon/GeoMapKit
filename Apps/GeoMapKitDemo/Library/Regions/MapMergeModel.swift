@@ -99,7 +99,8 @@ final class MapMergeModel: Identifiable {
     func start() {
         guard !isRunning else { return }
         if case .done = stage { return }
-        notes = []
+        // A run that goes on keeps the notes it has: the merge is not made again, so they would not come back.
+        if stage == .idle { notes = [] }
         stage = .merging
         task = Task { await run() }
     }
@@ -125,7 +126,7 @@ final class MapMergeModel: Identifiable {
                 let request = MapMergeRequest(inputs: inputs.map(\.folder), output: output.folder)
                 report = try await tools.merge(request) { done, total in Task { @MainActor in self.noteMerge(done, total) } }
                 mergeDone = true
-                notes += report?.warnings.filter { !$0.hasPrefix("Run fill-sea") } ?? []
+                notes += report?.warnings ?? []
             }
             try Task.checkCancellation()
 
@@ -169,6 +170,49 @@ final class MapMergeModel: Identifiable {
     private func noteLevels(_ progress: LevelProgress) {
         guard stage == .buildingLevels, progress.finished >= (levels?.finished ?? 0) else { return }
         levels = progress
+    }
+
+    // MARK: Plan
+
+    /// What a merge is asked to do, from the maps the user ticked.
+    struct Plan: Equatable {
+        let inputs: [Input]
+        let output: Output
+    }
+
+    /// Why the maps and the choice make no plan, as a sentence for the user.
+    struct PlanError: Error, Equatable, LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    /// Makes the plan: the inputs by the folders of the maps, with the map that is added to first, and the output.
+    ///
+    /// - Parameters:
+    ///   - maps: The ticked maps, by name and id, at least two.
+    ///   - addTo: The id of the map the others are added to, or `nil` for a new map.
+    ///   - name: The name of a new map.
+    ///   - root: The folder new maps go in, or `nil` when it is not known.
+    ///   - folder: The folder a map of the library links to, or `nil` when its link cannot be resolved.
+    /// - Throws: ``PlanError`` for fewer than two maps, a link that cannot be resolved, a name the library refuses or an unknown root.
+    static func plan(
+        maps: [(id: String, name: String)], addTo: String?, name: String, root: URL?, folder: (String) -> URL?
+    ) throws -> Plan {
+        guard maps.count >= 2 else { throw PlanError(message: "Tick at least two maps.") }
+        var inputs: [Input] = []
+        for map in maps {
+            guard let url = folder(map.id) else { throw PlanError(message: "The link of \(map.name) cannot be resolved.") }
+            inputs.append(Input(name: map.name, folder: url))
+        }
+        if let id = addTo, let target = maps.first(where: { $0.id == id }), let url = folder(id) {
+            // The map that is added to is the first of the maps.
+            if let at = inputs.firstIndex(where: { $0.folder == url }) { inputs.swapAt(0, at) }
+            return Plan(inputs: inputs, output: Output(folder: url, name: target.name))
+        }
+        let wanted = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard MapLibrary.isValidName(wanted) else { throw PlanError(message: "“\(wanted)” cannot be the name of a map: it must not be empty, start with a dot or contain a slash or a colon.") }
+        guard let root else { throw PlanError(message: "The folder for new maps is not known.") }
+        return Plan(inputs: inputs, output: Output(folder: newFolder(named: wanted, in: root), name: wanted))
     }
 
     // MARK: Folders
