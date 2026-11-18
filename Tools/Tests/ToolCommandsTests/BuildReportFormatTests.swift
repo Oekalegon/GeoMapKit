@@ -45,9 +45,9 @@ struct MergeReportFormatTests {
         let report = MapMergeReport(
             blocks: 10, written: 4, replaced: 1,
             overlaps: [.init(x: 130, y: 90, kept: "fr", keptBytes: 500_000, dropped: ["ch"], droppedBytes: [100_000])],
-            hasLevels: false, warnings: ["Run fill-sea."])
+            hasLevels: false, warnings: ["Two maps had a tile."], nextSteps: ["Run fill-sea."])
         let text = ReportFormatter.text(for: report)
         #expect(text.contains("10 blocks, 4 written (1 replaced") && text.contains("130/90: kept fr") && text.contains("left out ch"))
-        #expect(text.contains("Note: Run fill-sea.") && text.contains("levels: none"))
+        #expect(text.contains("Note: Two maps had a tile.") && text.contains("Next: Run fill-sea.") && text.contains("levels: none"))
     }
 }

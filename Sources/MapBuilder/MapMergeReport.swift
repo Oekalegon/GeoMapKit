@@ -28,6 +28,8 @@ public struct MapMergeReport: Sendable, Equatable {
     public let overlaps: [Overlap]
     /// Whether the merged map has levels (an added-to map keeps its own; a new one has none).
     public let hasLevels: Bool
-    /// Notes for the user, such as what to run next.
+    /// Things the user should know about the result, such as tiles that more than one map had.
     public let warnings: [String]
+    /// What to run next on the merged map (the sea, the levels).
+    public let nextSteps: [String]
 }

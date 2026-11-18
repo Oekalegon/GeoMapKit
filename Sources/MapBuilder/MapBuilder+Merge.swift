@@ -159,9 +159,10 @@ extension MapBuilder {
         if !overlaps.isEmpty {
             warnings.append("\(overlaps.count) tiles were in more than one map: the larger block was kept. A border tile can miss the other country's side until it is built again.")
         }
-        warnings.append("Run fill-sea on the merged map, then build-levels, to close the sea between the maps and build the levels of the tiles that changed.")
+        let nextSteps = ["Run fill-sea on the merged map, then build-levels, to close the sea between the maps and build the levels of the tiles that changed."]
         return MapMergeReport(
-            blocks: manifest.blocks.count, written: written, replaced: replaced, overlaps: overlaps, hasLevels: !manifest.levels.isEmpty, warnings: warnings)
+            blocks: manifest.blocks.count, written: written, replaced: replaced, overlaps: overlaps, hasLevels: !manifest.levels.isEmpty,
+            warnings: warnings, nextSteps: nextSteps)
     }
 
     /// What differs between two manifests that must agree to be merged, or `nil`.
