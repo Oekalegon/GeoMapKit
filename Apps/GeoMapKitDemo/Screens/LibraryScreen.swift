@@ -157,6 +157,7 @@ struct LibraryScreen: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 0) {
             BuildStatusBar()
+            // Keep this bar to about four items so the texts fit: new imports go in the Add menu.
             HStack {
                 Menu {
                     Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }

@@ -112,7 +112,7 @@ struct SourceFilesScreen: View {
                     .disabled(isBusy || model.unused.isEmpty)
                     .help("Files that no map of this app was built from, files that cannot be used, and unfinished downloads")
                 Spacer()
-                Menu("Folder") {
+                Menu("Source folder") {
                     Button("Choose folder…") { choosing = true }
                         .help("Use another folder for the source files, such as ~/Library/Application Support/GeoMapKit/Sources, which the command-line tool also uses")
                     if folder != .own {
