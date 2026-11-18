@@ -47,6 +47,7 @@ struct LibraryScreen: View {
     /// The map the user asked to delete with its files, and the size of them once it is known.
     @State private var deletingFiles: MapItem?
     @State private var showsFiles = false
+    @State private var showsMerge = false
     @State private var filesSize: Int64?
     #endif
 
@@ -125,6 +126,9 @@ struct LibraryScreen: View {
                         Button { startImport(.maps) } label: { Label("Add a map…", systemImage: "map") }
                         Button { startImport(.styles) } label: { Label("Add a style…", systemImage: "paintpalette") }
                         Button { startImport(.tracks) } label: { Label("Add a track…", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
+                    Divider()
+                    Button { showsMerge = true } label: { Label("Merge maps…", systemImage: "square.on.square") }
+                        .disabled(builds.isBusy)
                     } label: { Label("Add", systemImage: "plus") }
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
@@ -180,6 +184,9 @@ struct LibraryScreen: View {
         }
         .sheet(isPresented: Bindable(builds).showsPicker) {
             if let model = builds.model { RegionPickerScreen(build: model, onStarted: { dismiss() }) }
+        }
+        .sheet(isPresented: $showsMerge) {
+            if let directory = builds.ensureModel()?.picker.cacheDirectory { MergeMapsScreen(cacheDirectory: directory).environment(library) }
         }
         .sheet(isPresented: $showsFiles) {
             if let model = builds.model {
