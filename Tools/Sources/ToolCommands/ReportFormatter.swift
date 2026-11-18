@@ -146,6 +146,21 @@ public enum ReportFormatter {
         }
     }
 
+    /// The text for a finished `merge-maps` run.
+    public static func text(for report: MapMergeReport) -> String {
+        var lines = ["Merged map: \(report.blocks) blocks, \(report.written) written\(report.replaced > 0 ? " (\(report.replaced) replaced a smaller block)" : ""), levels: \(report.hasLevels ? "kept" : "none")"]
+        if !report.overlaps.isEmpty {
+            lines.append("Tiles that more than one map had: \(report.overlaps.count)")
+            for overlap in report.overlaps.prefix(20) {
+                let others = zip(overlap.dropped, overlap.droppedBytes).map { "\($0) \(Formatting.bytes($1))" }.joined(separator: ", ")
+                lines.append("  \(overlap.x)/\(overlap.y): kept \(overlap.kept) \(Formatting.bytes(overlap.keptBytes)); left out \(others)")
+            }
+            if report.overlaps.count > 20 { lines.append("  … and \(report.overlaps.count - 20) more") }
+        }
+        for warning in report.warnings { lines.append("Note: \(warning)") }
+        return lines.joined(separator: "\n")
+    }
+
     /// The text for a finished `build-levels` run.
     public static func text(for report: LevelRunReport) -> String {
         var built = 0, upToDate = 0, empty = 0

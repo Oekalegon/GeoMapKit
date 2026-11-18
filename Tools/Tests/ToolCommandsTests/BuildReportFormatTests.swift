@@ -37,3 +37,17 @@ struct BuildReportFormatTests {
         #expect(ReportFormatter.line(for: outcome).hasPrefix("level 8 block 140/75: built"))
     }
 }
+
+@Suite("merge-maps report")
+struct MergeReportFormatTests {
+    @Test("The text says how many blocks, the tiles that more than one map had, and what to run next")
+    func text() {
+        let report = MapMergeReport(
+            blocks: 10, written: 4, replaced: 1,
+            overlaps: [.init(x: 130, y: 90, kept: "fr", keptBytes: 500_000, dropped: ["ch"], droppedBytes: [100_000])],
+            hasLevels: false, warnings: ["Run fill-sea."])
+        let text = ReportFormatter.text(for: report)
+        #expect(text.contains("10 blocks, 4 written (1 replaced") && text.contains("130/90: kept fr") && text.contains("left out ch"))
+        #expect(text.contains("Note: Run fill-sea.") && text.contains("levels: none"))
+    }
+}
