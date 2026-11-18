@@ -113,7 +113,8 @@ GeoMapKit tools
       The maps must agree on the block format and profile. A tile that more than
       one map has keeps the larger block, and the tiles are listed. Blocks are
       copied, not changed (cloned on a Mac volume, so with almost no extra
-      space). Run fill-sea and then build-levels afterwards.
+      space). Run fill-sea and then build-levels afterwards. Do not merge into
+      a map while it is being built.
 
   geomapkit fill-sea <folder> [--cache DIR]
       Give the blocks of a set that no source outline touches their sea. Geofabrik extracts cover every piece of

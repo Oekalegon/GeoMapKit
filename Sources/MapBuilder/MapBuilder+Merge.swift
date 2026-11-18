@@ -7,7 +7,10 @@ extension MapBuilder {
     /// The maps must agree on the format of their blocks (the format and rule versions, the zooms, the bands and the profile); a block is
     /// not opened or changed, only copied (on a volume that clones files the copy takes no extra space). The levels are not merged:
     /// a new map has none, and a map that others are added to keeps its own, so ``buildLevels(_:progress:onProgress:)`` builds the levels
-    /// of the tiles that changed. After a merge the sea between the maps is filled by ``fillOpenSea(folder:cacheDirectory:downloader:userAgent:)``.
+    /// of the tiles that changed. After a merge the sea between the maps is filled by ``fillOpenSea(folder:cacheDirectory:catalog:downloader:userAgent:)``.
+    ///
+    /// Do not merge into a map while it is being built: the build writes its own manifest and would drop the merged blocks. A merge that
+    /// stops leaves either the map as it was (the manifest is written last) or the merged map; files that the manifest does not list may be left.
     ///
     /// - Parameters:
     ///   - request: The maps and the output.
@@ -79,6 +82,15 @@ extension MapBuilder {
 
         // Write: new files first (the manifest that is there does not list them), the manifest last.
         let blocksFolder = output.appendingPathComponent("blocks", isDirectory: true)
+        let outputExisted = fileManager.fileExists(atPath: output.path)
+        var finished = false
+        // A merge into a new folder that stops leaves nothing behind.
+        defer {
+            if !finished && inPlace == nil {
+                try? fileManager.removeItem(at: blocksFolder)
+                if !outputExisted { try? fileManager.removeItem(at: output) }
+            }
+        }
         do { try fileManager.createDirectory(at: blocksFolder, withIntermediateDirectories: true) } catch {
             throw MapBuilderError("Cannot create \(blocksFolder.path): \(error.localizedDescription)")
         }
@@ -90,28 +102,31 @@ extension MapBuilder {
         var temporaries: [URL] = []
         defer { for url in temporaries { try? fileManager.removeItem(at: url) } }
         var pending: [(temporary: URL, target: URL)] = []
+        var superseded: [String] = []
         for entry in toWrite {
             try Task.checkCancellation()
             var block = entry.winner.block
-            let name = "blocks/\(first.blockZoom)-\(block.x)-\(block.y).gmk"
+            // A block that replaces another gets a name of its own: the manifest is what switches to it, so the old one is whole until then.
+            let replacing = merged[entry.key]
+            let suffix = replacing == nil ? "" : "-\(UUID().uuidString.prefix(8).lowercased())"
+            let name = "blocks/\(first.blockZoom)-\(block.x)-\(block.y)\(suffix).gmk"
             let target = output.appendingPathComponent(name)
             let temporary = blocksFolder.appendingPathComponent(".merge-\(UUID().uuidString)")
             do { try fileManager.copyItem(at: inputs[entry.winner.map].appendingPathComponent(block.file), to: temporary) } catch {
                 throw MapBuilderError("Cannot copy the block \(block.x)/\(block.y) of \(inputs[entry.winner.map].lastPathComponent): \(error.localizedDescription)")
             }
             temporaries.append(temporary)
-            if merged[entry.key] != nil { replaced += 1 }
+            if let replacing { replaced += 1; superseded.append(replacing.file) }
             block.file = name
             merged[entry.key] = block
             pending.append((temporary, target))
             written += 1
             progress(written, toWrite.count)
         }
-        // Put the copies in place: new tiles first, which the manifest that is there does not list, and then the tiles that replace a block of
-        // the map, so an interrupted merge leaves the old manifest with files that are mostly its own.
-        for item in pending where !fileManager.fileExists(atPath: item.target.path) { try fileManager.moveItem(at: item.temporary, to: item.target) }
-        for item in pending where fileManager.fileExists(atPath: item.temporary.path) {
-            _ = try fileManager.replaceItemAt(item.target, withItemAt: item.temporary)
+        for item in pending {
+            // A file that is there and not listed is left from a merge that stopped.
+            try? fileManager.removeItem(at: item.target)
+            try fileManager.moveItem(at: item.temporary, to: item.target)
         }
         temporaries = []
 
@@ -130,6 +145,9 @@ extension MapBuilder {
             try? fileManager.copyItem(at: manifestURL, to: backup)
         }
         try Self.write(manifest, to: manifestURL)
+        finished = true
+        // The blocks that were replaced are no longer listed: their files go.
+        for file in superseded { try? fileManager.removeItem(at: output.appendingPathComponent(file)) }
 
         let overlaps = winners.filter { !$0.others.isEmpty }.map { entry in
             MapMergeReport.Overlap(

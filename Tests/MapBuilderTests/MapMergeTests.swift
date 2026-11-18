@@ -81,6 +81,74 @@ struct MapMergeTests {
         #expect(FileManager.default.fileExists(atPath: base.appendingPathComponent("manifest.before-merge.json").path))
         let old = try StoreManifest(json: Data(contentsOf: base.appendingPathComponent("manifest.before-merge.json")))
         #expect(old.blocks.count == 2)
+        // The block that was replaced has a file of its own name, and the file it replaced is gone: the manifest is what switches.
+        let replacedBlock = try #require(merged.blocks.first { $0.x == 130 })
+        #expect(replacedBlock.file != "blocks/8-130-90.gmk" && FileManager.default.fileExists(atPath: base.appendingPathComponent(replacedBlock.file).path))
+        #expect(!FileManager.default.fileExists(atPath: base.appendingPathComponent("blocks/8-130-90.gmk").path))
+    }
+
+    @Test("The merged files hold the bytes of the blocks that were kept, whatever the order of the maps")
+    func contents() async throws {
+        let r = root()
+        defer { try? FileManager.default.removeItem(at: r) }
+        let a = try map(r, "a", blocks: [(10, 5, 64), (11, 5, 32)])
+        let b = try map(r, "b", blocks: [(11, 5, 96), (12, 5, 16)])
+        // The map that is added to is the second one in the list.
+        _ = try await MapBuilder.mergeMaps(MapMergeRequest(inputs: [b, a], output: a))
+        let merged = try read(a)
+        for block in merged.blocks {
+            let expected = Data(repeating: UInt8(block.x & 0xff), count: Int(block.bytes))
+            #expect(try Data(contentsOf: a.appendingPathComponent(block.file)) == expected, "block \(block.x)")
+        }
+        #expect(merged.blocks.map(\.bytes) == [64, 96, 16])
+    }
+
+    @Test("With three maps, a tie goes to the map that is added to, and then to the earlier one")
+    func ties() async throws {
+        let r = root()
+        defer { try? FileManager.default.removeItem(at: r) }
+        let a = try map(r, "a", blocks: [(1, 1, 50)])
+        let b = try map(r, "b", blocks: [(1, 1, 50)])
+        let c = try map(r, "c", blocks: [(1, 1, 50)])
+        let first = try await MapBuilder.mergeMaps(MapMergeRequest(inputs: [a, b, c], output: r.appendingPathComponent("out")))
+        #expect(first.overlaps.first?.kept == "a" && first.overlaps.first?.dropped == ["b", "c"])
+        let inPlace = try await MapBuilder.mergeMaps(MapMergeRequest(inputs: [a, b, c], output: c))
+        #expect(inPlace.overlaps.first?.kept == "c" && inPlace.written == 0 && inPlace.replaced == 0)
+    }
+
+    @Test("The levels of a map that is added to stay, and a new map has none")
+    func levels() async throws {
+        let r = root()
+        defer { try? FileManager.default.removeItem(at: r) }
+        let a = try map(r, "a", blocks: [(1, 1, 50)])
+        var manifest = try read(a)
+        manifest.levels = [StoreManifest.Level(topZoom: 8, blockZoom: 6, classes: [1], blocks: [
+            StoreManifest.LevelBlock(x: 0, y: 0, file: "levels/8-0-0.gmk", bytes: 10, builtAt: Date(timeIntervalSince1970: 1_800_000_000),
+                derivedFrom: [StoreManifest.LevelBlock.Origin(x: 1, y: 1, bytes: 50)])])]
+        try manifest.jsonData().write(to: a.appendingPathComponent("manifest.json"))
+        let b = try map(r, "b", blocks: [(2, 1, 60)])
+        let fresh = try await MapBuilder.mergeMaps(MapMergeRequest(inputs: [a, b], output: r.appendingPathComponent("new")))
+        let freshLevels = try read(r.appendingPathComponent("new")).levels
+        #expect(!fresh.hasLevels && freshLevels.isEmpty)
+        let added = try await MapBuilder.mergeMaps(MapMergeRequest(inputs: [a, b], output: a))
+        let keptLevels = try read(a).levels
+        #expect(added.hasLevels && keptLevels.first?.blocks.count == 1)
+    }
+
+    @Test("A merge that stops in the middle leaves no folder, and the maps are as they were")
+    func failedCopy() async throws {
+        let r = root()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: r.appendingPathComponent("b/blocks/8-2-1.gmk").path)
+            try? FileManager.default.removeItem(at: r)
+        }
+        let a = try map(r, "a", blocks: [(1, 1, 10)])
+        let b = try map(r, "b", blocks: [(2, 1, 10)])
+        // The block has its size, so the check before the copy passes; the copy cannot read it.
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: b.appendingPathComponent("blocks/8-2-1.gmk").path)
+        let out = r.appendingPathComponent("out")
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.mergeMaps(MapMergeRequest(inputs: [a, b], output: out)) }
+        #expect(!FileManager.default.fileExists(atPath: out.path))
     }
 
     @Test("Maps that do not agree on the format are refused, with the difference named")
