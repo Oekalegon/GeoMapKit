@@ -141,18 +141,18 @@ struct MergeMapsScreen: View {
     }
 
     private func begin() {
+        let store = library
         let plan: MapMergeModel.Plan
         do {
             plan = try MapMergeModel.plan(
-                maps: chosen.map { ($0.id, $0.name) }, addTo: addTo, name: name, root: library.builtMapsRoot,
-                folder: { id in library.maps.first { $0.id == id }.flatMap { library.linkedFolder(of: $0) } })
+                maps: chosen.map { ($0.id, $0.name) }, addTo: addTo, name: name, root: store.builtMapsRoot,
+                folder: { id in store.maps.first { $0.id == id }.flatMap { store.linkedFolder(of: $0) } })
         } catch {
             problem = error.localizedDescription
             return
         }
-        let library = library
         let merge = MapMergeModel(inputs: plan.inputs, output: plan.output, tools: .live(cacheDirectory: cacheDirectory)) { folder, name in
-            try library.addBuilt(folder: folder, name: name)
+            try store.addBuilt(folder: folder, name: name)
         }
         model = merge
         merge.start()
