@@ -76,7 +76,7 @@ struct SourcesCommandTests {
         await network.put(tinyURL, try TinyPBF.make())
         await network.put(otherURL, Data(repeating: 0, count: 5_000))
         let cache = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-tools-\(UUID().uuidString)")
-        let regions = [region("tiny", tinyURL, west: 8, east: 10.5), region("other", otherURL, west: 11, east: 12)]
+        let regions = [region("tiny", tinyURL, west: 8, east: 11), region("other", otherURL, west: 11, east: 12)]
         return Setup(catalog: FixedCatalog(regions: regions), network: network, cache: cache)
     }
 

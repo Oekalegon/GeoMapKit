@@ -281,7 +281,7 @@ extension MapBuilder {
     /// Each block asks the index for the smallest regions that cover it. The plan then settles the files for the whole area (question 63):
     /// a region of the selection (``BlockRequest/Area/regions(_:)``) is the source of every block inside it, instead of the regions below
     /// it (unless that region is not held and a part of it is: then the parts are used); a region that is not held, with an ancestor that is
-    /// (and is not more than 50 times as large), is read from that ancestor's file; and a file is left out of a block when the regions
+    /// (and is not more than 50 times as large), is read from that ancestor's file; a neighbour is left out of a block that lies mostly (under 75 % of its tile) outside the selected regions, or that it reaches only with the margin of the cut; and a file is left out of a block when the regions
     /// below it, or the others of the block, hold all it holds there, so a file and the files of its parts never come together. Where
     /// only a sliver of a margin is covered by a continent file and not by the parts, that sliver is not read.
     ///
@@ -310,6 +310,9 @@ extension MapBuilder {
     /// The largest an ancestor may be, against the part it stands in for, to be read instead of a part that is not held: a held
     /// continent is no source for a county, since every block would be cut from a file of tens of gigabytes.
     private static let maximumHeldAreaRatio = 50.0
+
+    /// The share of a block's tile that must lie inside the selected regions for the neighbours that hold ground of the tile to be read.
+    private static let minimumOwnShare = 0.75
 
     /// Settles the files of a plan (see ``plannedBlocks(area:blockZoom:margin:in:cache:)``).
     private static func settle(_ tasks: [BlockTask], selected: [String], cache: SourceCache?, in index: RegionIndex) -> [BlockTask] {
@@ -358,6 +361,30 @@ extension MapBuilder {
         for position in result.indices {
             let kept = result[position].regions.filter { region in !all.contains { $0 != region.id && index.region($0, isBelow: region.id) } }
             if !kept.isEmpty { result[position].regions = kept }
+        }
+        // Neighbours of a block that lies mostly outside the selection are left out (question 63, the Channel margin): the outlines of the
+        // regions reach into the sea, so a block in the Channel has a few points in France and most in Britain's outline, and would
+        // bring Britain's file in for a sea and a coast of another country. A neighbour stays when most of the tile is in the selection
+        // and the neighbour holds a point of the tile itself; one that only reaches into the margin of the cut goes. Only blocks that
+        // keep a source of the selection are changed, so no block is left without data.
+        if !selected.isEmpty {
+            let outlines = selected.compactMap { index.region(withID: $0) }
+            for position in result.indices {
+                let own = result[position].regions.filter { top(of: $0) != nil }
+                let foreign = result[position].regions.filter { top(of: $0) == nil }
+                guard !own.isEmpty, !foreign.isEmpty else { continue }
+                let tile = tileBox(result[position].tile)
+                let side = 8
+                let points = (0..<side * side).map { n in
+                    Coordinate(
+                        latitude: tile.south + (tile.north - tile.south) * (Double(n / side) + 0.5) / Double(side),
+                        longitude: tile.west + (tile.east - tile.west) * (Double(n % side) + 0.5) / Double(side))
+                }
+                let inside = points.filter { point in outlines.contains { $0.contains(point) } }.count
+                let mostlyOwn = Double(inside) >= minimumOwnShare * Double(points.count)
+                let kept = foreign.filter { region in mostlyOwn && points.contains { region.contains($0) } }
+                result[position].regions = own + kept
+            }
         }
         // A region that is not an ancestor in the tree (an aggregate such as Great Britain, or the Alps) goes when the others of the block
         // hold every point of the block that it holds. The largest are looked at first, and the selected regions stay.

@@ -20,7 +20,7 @@ struct RequiredRegionsTests {
     @Test("A region on a border brings in the neighbour its blocks are cut from; a region far away is not needed")
     func neighbourAtBorder() throws {
         let index = try RegionIndex(regions: [
-            region("a", west: 0, east: 5), region("b", west: 5, east: 10), region("far", west: 30, east: 35),
+            region("a", west: 0, east: 5.4), region("b", west: 5.4, east: 10), region("far", west: 30, east: 35),
         ])
         let needed = try MapBuilder.requiredRegions(area: .regions(["a"]), in: index).map(\.id)
         #expect(needed == ["a", "b"])
@@ -45,8 +45,8 @@ struct RequiredRegionsTests {
             outline: [RegionPolygon(outer: [
                 Coordinate(latitude: 0, longitude: 100), Coordinate(latitude: 0, longitude: 101),
                 Coordinate(latitude: 1, longitude: 101), Coordinate(latitude: 1, longitude: 100)])])
-        let home = region("home", west: 8, east: 10.5, south: 46, north: 49)
-        let next = region("sud", parent: "land", west: 10.5, east: 14, south: 46, north: 49)
+        let home = region("home", west: 8, east: 11, south: 46, north: 49)
+        let next = region("sud", parent: "land", west: 11, east: 14, south: 46, north: 49)
         let index = try RegionIndex(regions: [parent, home, next])
         let needed = try MapBuilder.requiredRegions(area: .regions(["home"]), in: index)
         #expect(needed.map(\.id) == ["home", "sud"])
@@ -82,7 +82,7 @@ struct RequiredRegionsTests {
     @Test("A neighbour of two selected regions appears once")
     func sharedNeighbour() throws {
         let index = try RegionIndex(regions: [
-            region("a", west: 0, east: 5), region("b", west: 10, east: 15), region("mid", west: 5, east: 10),
+            region("a", west: 0, east: 5.4), region("b", west: 10, east: 15), region("mid", west: 5.4, east: 10),
         ])
         let needed = try MapBuilder.requiredRegions(area: .regions(["a", "b"]), in: index).map(\.id)
         #expect(needed == ["a", "b", "mid"])
@@ -165,8 +165,8 @@ struct SettledRegionsTests {
     @Test("A held ancestor much larger than the part is not a source for it")
     func hugeAncestor() throws {
         let index = try RegionIndex(regions: [
-            region("europe", west: -50, east: 50, south: 0, north: 80), region("a", parent: "europe", west: 0, east: 5),
-            region("b", parent: "europe", west: 5, east: 6, south: 40, north: 41),
+            region("europe", west: -50, east: 50, south: 0, north: 80), region("a", parent: "europe", west: 0, east: 5.4),
+            region("b", parent: "europe", west: 5.4, east: 6.4, south: 40, north: 41),
         ])
         let (cache, root) = try held(["europe", "a"])
         defer { try? FileManager.default.removeItem(at: root) }
@@ -182,5 +182,29 @@ struct SettledRegionsTests {
         ])
         let needed = try MapBuilder.requiredRegions(area: .regions(["home"]), in: index).map(\.id)
         #expect(!needed.contains("group"))
+    }
+
+    @Test("A neighbour that only reaches the margin of the cut is not read; one that holds ground of the tile stays")
+    func marginOnlyNeighbour() throws {
+        // The tiles of zoom 8 end at 5.625 degrees of longitude: "a" ends there, so "next" is in the margin of the cut only.
+        let index = try RegionIndex(regions: [region("a", west: 0, east: 5.625), region("next", west: 5.625, east: 10)])
+        #expect(try MapBuilder.requiredRegions(area: .regions(["a"]), in: index).map(\.id) == ["a"])
+        let shared = try RegionIndex(regions: [region("a", west: 0, east: 5.4), region("next", west: 5.4, east: 10)])
+        #expect(try MapBuilder.requiredRegions(area: .regions(["a"]), in: shared).map(\.id).contains("next"))
+    }
+
+    @Test("A block that lies mostly outside the selection brings in no neighbour: the Channel does not need Britain")
+    func mostlyForeignBlock() throws {
+        // "home" covers 3 of the 5.6 degrees of the tile at 4.2 to 5.6: under 75 %, so the neighbour that holds the rest is not read.
+        let index = try RegionIndex(regions: [region("home", west: 0, east: 4.9), region("next", west: 4.9, east: 10)])
+        #expect(try MapBuilder.requiredRegions(area: .regions(["home"]), in: index).map(\.id) == ["home"])
+    }
+
+    @Test("Without a selected region (a box or tiles) the neighbours are as before")
+    func boxKeepsNeighbours() throws {
+        let index = try RegionIndex(regions: [region("a", west: 0, east: 4.9), region("next", west: 4.9, east: 10)])
+        let box = BoundingBox(south: 41, west: 4.3, north: 42, east: 5.5)
+        let needed = try MapBuilder.requiredRegions(area: .box(box), in: index).map(\.id)
+        #expect(needed.contains("a") && needed.contains("next"))
     }
 }
