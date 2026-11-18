@@ -141,8 +141,8 @@ final class RegionPickerModel: Identifiable {
 
     // MARK: Plan
 
-    /// Makes the plan for the selection: the files of the selected regions and of the neighbours the build reads across their borders
-    /// (the blocks at a border are cut with a margin), so the user is never asked to pick neighbours. Asks the server for the size of
+    /// Makes the plan for the selection: the files of the selected regions and of the neighbours that hold ground of a block that lies
+    /// mostly in them (not those that only reach the margin of a cut), so the user is never asked to pick neighbours. Asks the server for the size of
     /// each file that is not held and downloads nothing.
     func makePlan() async {
         let regions = effectiveRegions

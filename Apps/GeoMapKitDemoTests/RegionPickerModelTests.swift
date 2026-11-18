@@ -320,7 +320,7 @@ private struct BorderCatalog: RegionCatalog {
         try RegionIndex(regions: [
             fakeRegion("europe", "Europe", parent: nil, west: 100),
             fakeRegion("europe/home", "Home", parent: "europe", west: 3),
-            fakeRegion("europe/next", "Next", parent: "europe", west: 7),
+            fakeRegion("europe/next", "Next", parent: "europe", west: 6.5),
             fakeRegion("europe/italy", "Italy", parent: "europe", west: -20),
             fakeRegion("europe/italy/sud", "Sud", parent: "europe/italy", west: -1),
             fakeRegion("europe/far", "Far", parent: "europe", west: 60),

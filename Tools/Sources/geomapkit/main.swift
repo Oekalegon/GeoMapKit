@@ -62,7 +62,8 @@ GeoMapKit tools
 
   geomapkit sources --region id[,id...] [--block-zoom 8] [--margin 0.1] [--cache DIR]
       The same for the blocks of regions (what build-region needs): the files
-      of the regions and of the neighbours that the blocks reach into.
+      of the regions and of the neighbours that hold ground of a block that lies
+      mostly in them.
 
   geomapkit fetch (area as above | --region id[,id...]) [--cache DIR] [--yes]
       Show the same plan and, only with --yes, download the files that are
