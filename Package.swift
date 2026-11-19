@@ -62,6 +62,7 @@ let package = Package(
         .target(name: "TrackOverlays", dependencies: ["GeoCore", "MapRender", "MapStyle", "Tracks"]),
 
         // Matching recorded tracks to the lines of a map (v2): the line network of a map area and, later, the matcher. Runs on the phone and the Mac.
+        // `Tracks` is for the matcher (step b2); the line network does not use it yet.
         .target(name: "TrackMatching", dependencies: ["GeoCore", "FeatureStore", "Tracks"]),
 
         // Builds small PBF files for tests (test-only; no product).

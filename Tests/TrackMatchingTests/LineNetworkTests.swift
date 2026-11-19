@@ -98,6 +98,32 @@ struct LineNetworkTests {
         }
     }
 
+    @Test("A long diagonal edge does not fill its whole box in the index")
+    func longEdgeIndex() {
+        let network = LineNetwork(features: [way(1, [point(0, 0), point(400, 400)])])  // 800 x 800 buckets in the box
+        #expect(network.indexEntryCount < 20_000, "the index has \(network.indexEntryCount) entries")
+        // Every point along it finds it, also between two steps and close to the radius.
+        for step in stride(from: 0, through: 400, by: 7) {
+            let along = Coordinate(latitude: 60.0 + Double(step) * 0.001, longitude: 10.0 + Double(step) * 0.001)
+            let beside = Coordinate(latitude: along.latitude + 40 / 111_195, longitude: along.longitude)
+            #expect(network.edges(near: beside, within: 45).count == 1, "step \(step)")
+        }
+    }
+
+    @Test("South of the equator and west of Greenwich the buckets are right too")
+    func southWest() {
+        func spot(_ east: Int, _ north: Int) -> PackedPoint {
+            PackedPoint(longitude: -700_000_000 + Int32(east) * 10_000, latitude: -330_000_000 + Int32(north) * 10_000)  // 33 S, 70 W
+        }
+        let network = LineNetwork(features: [way(1, [spot(0, 0), spot(10, 0)]), way(2, [spot(0, -1), spot(10, -1)])])
+        let here = Coordinate(latitude: -33.0 - 0.0002, longitude: -70.0 + 0.005)
+        // 22 m from the first line and 89 m from the second.
+        let near = network.edges(near: here, within: 40)
+        #expect(near.count == 1 && network.edges[near[0].edge].wayID == 1 && abs(near[0].distance - 22.2) < 0.5)
+        let both = network.edges(near: here, within: 100)
+        #expect(both.count == 2 && network.edges[both[1].edge].wayID == 2 && abs(both[1].distance - 88.9) < 1)
+    }
+
     @Test("An invalid position finds nothing")
     func invalidPosition() {
         let network = LineNetwork(features: [way(1, [point(0, 0), point(1, 0)])])

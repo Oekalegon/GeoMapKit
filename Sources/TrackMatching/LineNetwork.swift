@@ -6,8 +6,15 @@ import GeoCore
 ///
 /// The feature store keeps ways as lines clipped to cells, with no node identity. A network is made from them by taking every vertex of
 /// a line as a node and every step from one vertex to the next as an edge. Two lines meet where they have a vertex at the same position
-/// (OpenStreetMap ways share their nodes, and a line that crosses a cell border has the same vertex on the border in both cells), so
-/// junctions and the joins between cells appear without any further information. It is the ground a track is matched to.
+/// (OpenStreetMap ways share their nodes, and a line that crosses a cell border nearly always has the same vertex on the border in both
+/// cells), so junctions and the joins between cells appear without any further information. It is the ground a track is matched to.
+///
+/// **Joins are exact, so a few are missing.** On the real map of Eidsvoll (186,103 nodes) about one cell border in a hundred leaves a
+/// way as two pieces whose ends lie a metre apart. A matcher must therefore allow a short hop (a metre or two) between two dead ends
+/// instead of taking the network as complete.
+///
+/// **Edges have no direction.** A one-way road is the same both ways, and the classes (see ``travelClasses``) include pavements, which
+/// lie a few metres from the road they follow; a matcher for one sport narrows them. A box that crosses the antimeridian is refused.
 ///
 /// The network is built for a map area on the phone or the Mac, not for the Watch: it holds every vertex of the area in memory.
 /// Distances are in metres, on the sphere of ``Coordinate/earthRadius``.
@@ -26,7 +33,8 @@ public struct LineNetwork: Sendable {
         public let classID: UInt8
     }
 
-    /// The feature classes a runner or rider can use: paths, tracks, roads, service roads and pavements.
+    /// The feature classes a runner or rider can use: paths, tracks, roads, service roads and pavements. A matcher for one sport takes
+    /// the ones that sport uses (a rider has no use for pavements).
     public static let travelClasses: Set<UInt8> = [
         FeatureClass.path.rawValue, FeatureClass.track.rawValue, FeatureClass.roadMajor.rawValue, FeatureClass.roadMinor.rawValue,
         FeatureClass.roadService.rawValue, FeatureClass.pavement.rawValue,
@@ -60,8 +68,14 @@ public struct LineNetwork: Sendable {
 
     /// The index: edges by the bucket of a grid that they touch.
     private var buckets: [Bucket: [Int]] = [:]
-    private var bucketSize = 0.0005
+    private static let bucketSize = 0.0005
     private var longitudeScale = 1.0
+
+    /// The edge that touches more buckets than this is put in the index by walking along it, and not by filling its box.
+    private static let boxFillLimit = 1_024
+
+    /// How many entries the index holds (for tests: a long edge must not fill its whole box).
+    var indexEntryCount: Int { buckets.values.reduce(0) { $0 + $1.count } }
 
     /// Makes a network from the line features of one or more cells.
     ///
@@ -72,42 +86,17 @@ public struct LineNetwork: Sendable {
     ///   - features: The features, from any band (the detail band has the whole geometry).
     ///   - classes: The classes to keep; by default ``travelClasses``.
     public init(features: [StoredFeature], classes: Set<UInt8> = LineNetwork.travelClasses) {
-        var nodes: [Vertex: Int] = [:]
-        var seen = Set<EdgeKey>()
-        func node(_ point: PackedPoint) -> Int {
-            let vertex = Vertex(longitude: point.longitude, latitude: point.latitude)
-            if let found = nodes[vertex] { return found }
-            let index = coordinates.count
-            nodes[vertex] = index
-            coordinates.append(Coordinate(latitude: Double(point.latitude) / 1e7, longitude: Double(point.longitude) / 1e7))
-            incident.append([])
-            return index
-        }
-        for feature in features where feature.kind == .line && classes.contains(feature.classID) {
-            for part in feature.parts where part.points.count >= 2 {
-                var previous = node(part.points[0])
-                for point in part.points.dropFirst() {
-                    let next = node(point)
-                    defer { previous = next }
-                    guard next != previous, seen.insert(EdgeKey(low: min(previous, next), high: max(previous, next), way: feature.objectID)).inserted
-                    else { continue }
-                    let edge = Edge(
-                        from: previous, to: next, length: coordinates[previous].distance(to: coordinates[next]), wayID: feature.objectID,
-                        classID: feature.classID)
-                    incident[previous].append(edges.count)
-                    incident[next].append(edges.count)
-                    edges.append(edge)
-                }
-            }
-        }
-        buildIndex()
+        var builder = Builder(classes: classes)
+        builder.add(features)
+        self = builder.finish()
     }
 
     /// Makes a network from the cells of a map that cover a box.
     ///
     /// - Parameters:
-    ///   - source: The map: a store file or a set of blocks. The detail band is read.
-    ///   - box: The area. The cells that meet it are read whole, so the network reaches a little beyond the box.
+    ///   - source: The map: a store file or a set of blocks. The detail band is read, one cell at a time.
+    ///   - box: The area. The cells that meet it are read whole, so the network reaches a little beyond the box. A box that crosses the
+    ///     antimeridian (west of east) is not valid.
     ///   - classes: The classes to keep; by default ``travelClasses``.
     /// - Throws: ``LineNetworkError`` for a box that is not valid or covers more than ``maximumCells`` cells; the errors of the source.
     public init(source: any CellSource, box: BoundingBox, classes: Set<UInt8> = LineNetwork.travelClasses) throws {
@@ -119,15 +108,69 @@ public struct LineNetwork: Sendable {
         let rows = southWest.y - northEast.y + 1
         guard columns >= 1, rows >= 1 else { throw LineNetworkError.invalidBox }
         guard columns * rows <= Self.maximumCells else { throw LineNetworkError.tooManyCells(columns * rows, limit: Self.maximumCells) }
-        var features: [StoredFeature] = []
+        var builder = Builder(classes: classes)
         for x in southWest.x...northEast.x {
             for y in northEast.y...southWest.y {
                 guard let cell = TileID(zoom: source.storageZoom, x: x, y: y), let file = try source.file(containing: cell) else { continue }
-                features += try file.features(in: cell, band: .detail, classes: classes)
+                builder.add(try file.features(in: cell, band: .detail, classes: classes))
             }
         }
-        self.init(features: features, classes: classes)
+        self = builder.finish()
     }
+
+    /// Collects the nodes and edges, a cell at a time.
+    private struct Builder {
+        let classes: Set<UInt8>
+        var nodes: [Vertex: Int] = [:]
+        var seen = Set<EdgeKey>()
+        var coordinates: [Coordinate] = []
+        var edges: [Edge] = []
+        var incident: [[Int]] = []
+
+        init(classes: Set<UInt8>) { self.classes = classes }
+
+        mutating func node(_ point: PackedPoint) -> Int {
+            let vertex = Vertex(longitude: point.longitude, latitude: point.latitude)
+            if let found = nodes[vertex] { return found }
+            let index = coordinates.count
+            nodes[vertex] = index
+            coordinates.append(Coordinate(latitude: Double(point.latitude) / 1e7, longitude: Double(point.longitude) / 1e7))
+            incident.append([])
+            return index
+        }
+
+        mutating func add(_ features: [StoredFeature]) {
+            for feature in features where feature.kind == .line && classes.contains(feature.classID) {
+                for part in feature.parts where part.points.count >= 2 {
+                    var previous = node(part.points[0])
+                    for point in part.points.dropFirst() {
+                        let next = node(point)
+                        defer { previous = next }
+                        guard next != previous,
+                            seen.insert(EdgeKey(low: min(previous, next), high: max(previous, next), way: feature.objectID)).inserted
+                        else { continue }
+                        incident[previous].append(edges.count)
+                        incident[next].append(edges.count)
+                        edges.append(
+                            Edge(
+                                from: previous, to: next, length: coordinates[previous].distance(to: coordinates[next]), wayID: feature.objectID,
+                                classID: feature.classID))
+                    }
+                }
+            }
+        }
+
+        func finish() -> LineNetwork {
+            var network = LineNetwork()
+            network.coordinates = coordinates
+            network.edges = edges
+            network.incident = incident
+            network.buildIndex()
+            return network
+        }
+    }
+
+    private init() {}
 
     // MARK: Index
 
@@ -139,12 +182,26 @@ public struct LineNetwork: Sendable {
             let a = coordinates[edge.from], b = coordinates[edge.to]
             let x0 = bucketX(min(a.longitude, b.longitude)), x1 = bucketX(max(a.longitude, b.longitude))
             let y0 = bucketY(min(a.latitude, b.latitude)), y1 = bucketY(max(a.latitude, b.latitude))
-            for x in x0...x1 { for y in y0...y1 { buckets[Bucket(x: x, y: y), default: []].append(index) } }
+            if (x1 - x0 + 1) * (y1 - y0 + 1) <= Self.boxFillLimit {
+                for x in x0...x1 { for y in y0...y1 { buckets[Bucket(x: x, y: y), default: []].append(index) } }
+            } else {
+                // A long edge: the buckets along it, and their neighbours, so that a point near the edge finds it from any side. This is
+                // a few entries for each bucket the edge crosses, not the whole box, which for a long diagonal would be millions.
+                let steps = max(x1 - x0, y1 - y0) * 4 + 1
+                var seen = Set<Bucket>()
+                for step in 0...steps {
+                    let t = Double(step) / Double(steps)
+                    let x = bucketX(a.longitude + (b.longitude - a.longitude) * t), y = bucketY(a.latitude + (b.latitude - a.latitude) * t)
+                    for dx in -1...1 { for dy in -1...1 where seen.insert(Bucket(x: x + dx, y: y + dy)).inserted {
+                        buckets[Bucket(x: x + dx, y: y + dy), default: []].append(index)
+                    } }
+                }
+            }
         }
     }
 
-    private func bucketX(_ longitude: Double) -> Int { Int((longitude * longitudeScale / bucketSize).rounded(.down)) }
-    private func bucketY(_ latitude: Double) -> Int { Int((latitude / bucketSize).rounded(.down)) }
+    private func bucketX(_ longitude: Double) -> Int { Int((longitude * longitudeScale / Self.bucketSize).rounded(.down)) }
+    private func bucketY(_ latitude: Double) -> Int { Int((latitude / Self.bucketSize).rounded(.down)) }
 
     // MARK: Query
 
