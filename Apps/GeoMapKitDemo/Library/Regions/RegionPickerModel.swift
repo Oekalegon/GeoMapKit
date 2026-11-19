@@ -50,6 +50,9 @@ final class RegionPickerModel: Identifiable {
     /// The ids of the regions the user selected.
     private(set) var selection: Set<String> = []
 
+    /// The neighbour files the user chose not to read (see ``setNeighbourSkipped(_:_:)``).
+    private(set) var skippedNeighbours: Set<String> = []
+
     /// Set while a build runs: the selection then stays as it is.
     var selectionLocked = false
 
@@ -107,7 +110,7 @@ final class RegionPickerModel: Identifiable {
     /// selection is left as it is, because the screen would no longer show what is being downloaded.
     func setSelected(_ id: String, _ on: Bool) {
         guard download != .downloading, !selectionLocked else { return }
-        if on { selection.insert(id) } else { selection.remove(id) }
+        if on { selection.insert(id); skippedNeighbours.remove(id) } else { selection.remove(id) }
         planTask?.cancel()
         plan = .none
         download = .idle
@@ -118,6 +121,7 @@ final class RegionPickerModel: Identifiable {
         guard download != .downloading, !selectionLocked else { return }
         planTask?.cancel()
         selection = []
+        skippedNeighbours = []
         plan = .none
         download = .idle
         progress = [:]
@@ -157,7 +161,8 @@ final class RegionPickerModel: Identifiable {
                 // neighbours after them, each by name. If no region covers anything the selection is planned as it is, and the build
                 // says that nothing covers the area.
                 let held = cache
-                let found = try await Task.detached { try MapBuilder.requiredRegions(area: .regions(ids), in: index, cache: held) }.value
+                let skipped = skippedNeighbours
+                let found = try await Task.detached { try MapBuilder.requiredRegions(area: .regions(ids), in: index, cache: held, skipping: skipped) }.value
                 try Task.checkCancellation()
                 let chosen = Set(ids)
                 let byName: (SourceRegion, SourceRegion) -> Bool = { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -173,6 +178,15 @@ final class RegionPickerModel: Identifiable {
         }
         planTask = task
         await task.value
+    }
+
+    /// Leaves a neighbour file out of the build, or reads it again, and makes the plan again. A neighbour is a file that is in the plan only
+    /// because the build reads it across a border; the border blocks are then built without it, and the build says so. A selected region
+    /// cannot be left out. Does nothing while a download or a build runs.
+    func setNeighbourSkipped(_ id: String, _ skipped: Bool) async {
+        guard download != .downloading, !selectionLocked, !selection.contains(id) else { return }
+        if skipped { skippedNeighbours.insert(id) } else { skippedNeighbours.remove(id) }
+        await makePlan()
     }
 
     /// Whether a region of the plan is there only because the build reads it across a border: it was not selected.

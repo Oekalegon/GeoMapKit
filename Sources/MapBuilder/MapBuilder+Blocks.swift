@@ -45,7 +45,7 @@ extension MapBuilder {
         var tasks: [BlockTask] = []
         var outcomes: [Int: BlockOutcome] = [:]
         var needed: [String: SourceRegion] = [:]
-        for planned in try plannedBlocks(area: request.area, blockZoom: request.blockZoom, margin: request.margin, in: index, cache: cache) {
+        for planned in try plannedBlocks(area: request.area, blockZoom: request.blockZoom, margin: request.margin, in: index, cache: cache, skipping: request.skippedNeighbours) {
             if planned.regions.isEmpty {
                 outcomes[planned.position] = BlockOutcome(x: planned.tile.x, y: planned.tile.y, status: .empty, regions: [])
             } else {
@@ -298,6 +298,8 @@ extension MapBuilder {
     ///   - margin: The margin of the cut, in degrees.
     ///   - index: The region index.
     ///   - cache: The source cache, or `nil` when it is not known which files are held.
+    ///   - skipping: Ids of neighbour regions the user does not want read, for example a large file that only touches the margin of a few blocks.
+    ///     They are left out like the other neighbours, but only from blocks that keep a source of the selection, and a selected region is never skipped.
     ///
     /// The neighbours that are left out are listed in ``BlockTask/leftOut``. For a box or tiles no neighbour is left out. A map that was
     /// built before this rule has blocks that were read from a neighbour as well: they count as out of date on the next run and are built
@@ -306,7 +308,8 @@ extension MapBuilder {
     /// - Returns: The blocks, in order of the tiles.
     /// - Throws: ``MapBuilderError`` for an area that is invalid, too large or names an unknown region.
     public static func plannedBlocks(
-        area: BlockRequest.Area, blockZoom: Int, margin: Double, in index: RegionIndex, cache: SourceCache? = nil
+        area: BlockRequest.Area, blockZoom: Int, margin: Double, in index: RegionIndex, cache: SourceCache? = nil,
+        skipping: Set<String> = []
     ) throws -> [BlockTask] {
         var selected: [String] = []
         if case .regions(let ids) = area { selected = ids }
@@ -316,7 +319,7 @@ extension MapBuilder {
             let share = index.regions(covering: tileBox(tile), samplesPerSide: 16).coveredShare
             return BlockTask(position: position, tile: tile, cutBox: box, regions: index.regions(covering: box).regions, coveredShare: share)
         }
-        return settle(tasks, selected: selected, cache: cache, in: index)
+        return settle(tasks, selected: selected, skipping: skipping, cache: cache, in: index)
     }
 
     /// The largest an ancestor may be, against the part it stands in for, to be read instead of a part that is not held: a held
@@ -326,8 +329,10 @@ extension MapBuilder {
     /// The share of a block's tile that must lie inside the selected regions for the neighbours that hold ground of the tile to be read.
     private static let minimumOwnShare = 0.75
 
-    /// Settles the files of a plan (see ``plannedBlocks(area:blockZoom:margin:in:cache:)``).
-    private static func settle(_ tasks: [BlockTask], selected: [String], cache: SourceCache?, in index: RegionIndex) -> [BlockTask] {
+    /// Settles the files of a plan (see ``plannedBlocks(area:blockZoom:margin:in:cache:skipping:)``).
+    private static func settle(
+        _ tasks: [BlockTask], selected: [String], skipping: Set<String>, cache: SourceCache?, in index: RegionIndex
+    ) -> [BlockTask] {
         var held: [String: Bool] = [:]
         func isHeld(_ id: String) -> Bool {
             if let known = held[id] { return known }
@@ -394,7 +399,7 @@ extension MapBuilder {
                 }
                 let inside = points.filter { point in outlines.contains { $0.contains(point) } }.count
                 let mostlyOwn = Double(inside) >= minimumOwnShare * Double(points.count)
-                let kept = foreign.filter { region in mostlyOwn && points.contains { region.contains($0) } }
+                let kept = foreign.filter { region in !skipping.contains(region.id) && mostlyOwn && points.contains { region.contains($0) } }
                 result[position].leftOut = foreign.filter { region in !kept.contains { $0.id == region.id } }
                 result[position].regions = own + kept
             }
@@ -422,7 +427,7 @@ extension MapBuilder {
     }
 
     /// The source regions whose files a build of an area reads: the regions of its blocks, and the neighbours that hold ground of a block
-    /// that lies mostly in a selected region (see ``plannedBlocks(area:blockZoom:margin:in:cache:)``).
+    /// that lies mostly in a selected region (see ``plannedBlocks(area:blockZoom:margin:in:cache:skipping:)``).
     ///
     /// This is the same answer the build uses, so downloading these files means ``buildRegion(_:catalog:downloader:userAgent:progress:onProgress:)``
     /// finds them in the cache.
@@ -433,13 +438,14 @@ extension MapBuilder {
     ///   - margin: The margin of the cut, in degrees; the default is the one of ``BlockRequest``.
     ///   - index: The region index.
     ///   - cache: The source cache, so that a file that is held stands in for the regions below it that are not.
+    ///   - skipping: Ids of neighbour regions that are not to be read (see ``plannedBlocks(area:blockZoom:margin:in:cache:skipping:)``).
     /// - Returns: The regions, sorted by id; empty when no region covers the area.
     /// - Throws: ``MapBuilderError`` for an area that is invalid, too large or names an unknown region.
     public static func requiredRegions(area: BlockRequest.Area, blockZoom: Int = BlockRequest.defaultBlockZoom, margin: Double = BlockRequest.defaultMargin, in index: RegionIndex,
-        cache: SourceCache? = nil
+        cache: SourceCache? = nil, skipping: Set<String> = []
     ) throws -> [SourceRegion] {
         var found: [String: SourceRegion] = [:]
-        for task in try plannedBlocks(area: area, blockZoom: blockZoom, margin: margin, in: index, cache: cache) {
+        for task in try plannedBlocks(area: area, blockZoom: blockZoom, margin: margin, in: index, cache: cache, skipping: skipping) {
             for region in task.regions { found[region.id] = region }
         }
         return found.values.sorted { $0.id < $1.id }

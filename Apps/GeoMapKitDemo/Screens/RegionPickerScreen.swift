@@ -133,7 +133,20 @@ struct RegionPickerScreen: View {
         case .ready(let plan):
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(plan.items, id: \.region.id) { item in
-                    Text("\(model.displayName(of: item.region))\(model.isNeighbour(item.region) ? " (neighbour, needed at the border)" : ""): \(describe(item))").font(.footnote)
+                    HStack {
+                        Text("\(model.displayName(of: item.region))\(model.isNeighbour(item.region) ? " (neighbour, needed at the border)" : ""): \(describe(item))").font(.footnote)
+                        if model.isNeighbour(item.region) {
+                            Button("Leave out") { Task { await model.setNeighbourSkipped(item.region.id, true) } }
+                                .controlSize(.small)
+                                .help("Builds the border blocks without this file: they miss what it holds. Use it for a large file that only touches the edge.")
+                        }
+                    }
+                }
+                ForEach(model.skippedNeighbours.sorted(), id: \.self) { id in
+                    HStack {
+                        Text("\(model.displayName(ofRegionID: id)): left out; the border blocks are built without it").font(.footnote).foregroundStyle(.secondary)
+                        Button("Add again") { Task { await model.setNeighbourSkipped(id, false) } }.controlSize(.small)
+                    }
                 }
                 if !plan.needsDownload { Text("Everything is held already; the map is built from the files you have.").font(.footnote) }
                 if plan.hasUnknownSizes { Text("The server gave no size for some files.").font(.footnote).foregroundStyle(.secondary) }

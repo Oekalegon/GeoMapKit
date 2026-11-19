@@ -26,6 +26,15 @@ struct RequiredRegionsTests {
         #expect(needed == ["a", "b"])
     }
 
+    @Test("A neighbour the user skips is not planned, but a selected region cannot be skipped")
+    func skippedNeighbour() throws {
+        let index = try RegionIndex(regions: [region("a", west: 0, east: 5.4), region("b", west: 5.4, east: 10)])
+        #expect(try MapBuilder.requiredRegions(area: .regions(["a"]), in: index, skipping: ["b"]).map(\.id) == ["a"])
+        #expect(try MapBuilder.requiredRegions(area: .regions(["a"]), in: index, skipping: ["a"]).map(\.id) == ["a", "b"])
+        let tasks = try MapBuilder.plannedBlocks(area: .regions(["a"]), blockZoom: 8, margin: 0.1, in: index, skipping: ["b"])
+        #expect(tasks.contains { $0.leftOut.contains { $0.id == "b" } })
+    }
+
     @Test("A region with no neighbour needs only itself")
     func alone() throws {
         let index = try RegionIndex(regions: [region("a", west: 0, east: 5), region("far", west: 30, east: 35)])
