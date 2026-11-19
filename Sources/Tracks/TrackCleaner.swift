@@ -6,8 +6,11 @@ import GeoCore
 ///
 /// A recording that is paused and resumed somewhere else (a car ride between two hikes), or a bad fix, makes a straight line across the
 /// map that a matcher would take for a run. A runner who stands still leaves tens of points within the wander of the fix, which would
-/// count as tens of passes over one place. This type cuts the first and merges the second, and says what it did (``CleanedTrack``). It
-/// does not smooth, snap, thin or change a position except by taking the mean of a stop.
+/// count as tens of passes over one place. This type cuts the first and merges the second, and says what it did (``CleanedTrack``).
+///
+/// Only a cluster of points that lasts at least ``TrackCleaningRules/minimumStop`` is a stop and is merged. Points that are close for a
+/// shorter time (a run recorded once a second, a slow climb) all stay, so the cleaner never thins a moving track. It does not smooth or
+/// snap, and changes no position except by taking the mean of a stop.
 public enum TrackCleaner {
     /// Cleans the points of one track.
     ///
@@ -29,10 +32,15 @@ public enum TrackCleaner {
         func flushCluster() {
             guard let finished = cluster else { return }
             cluster = nil
-            let seconds = finished.seconds
-            if seconds >= rules.minimumStop && finished.count > 1 { stops.append(TrackStop(pointIndex: output.count, seconds: seconds)) }
-            merged += finished.count - 1
-            output.append(finished.point)
+            if finished.count > 1, finished.seconds >= rules.minimumStop {
+                // Standing still: the fixes are one point.
+                stops.append(TrackStop(pointIndex: output.count, seconds: finished.seconds))
+                merged += finished.count - 1
+                output.append(finished.point)
+            } else {
+                // Points that are close for a moment are a run at a high sample rate, or a slow step: every point stays.
+                output.append(contentsOf: finished.points)
+            }
         }
         func closeSegment() {
             flushCluster()
@@ -81,11 +89,13 @@ public enum TrackCleaner {
         private var latitudeSum: Double
         private var longitudeSum: Double
         private let first: TrackPoint
+        private(set) var points: [TrackPoint]
         private var lastTime: Date?
 
         init(_ point: TrackPoint) {
             anchor = point.coordinate
             first = point
+            points = [point]
             latitudeSum = point.coordinate.latitude
             longitudeSum = point.coordinate.longitude
             lastTime = point.time
@@ -93,12 +103,13 @@ public enum TrackCleaner {
 
         mutating func add(_ point: TrackPoint) {
             count += 1
+            points.append(point)
             latitudeSum += point.coordinate.latitude
             longitudeSum += point.coordinate.longitude
             if let time = point.time { lastTime = time }
         }
 
-        /// The time from the first point to the last, or 0 when there are no times.
+        /// The time from the first point to the last, or 0 when there are no times (then nothing shows that the runner stood still).
         var seconds: Double {
             guard let start = first.time, let end = lastTime else { return 0 }
             return max(end.timeIntervalSince(start), 0)

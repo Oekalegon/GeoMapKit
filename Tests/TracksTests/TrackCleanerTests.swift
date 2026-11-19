@@ -13,7 +13,7 @@ struct TrackCleanerTests {
         TrackPoint(latitude: 0, longitude: index * 0.0001, time: seconds.map { start.addingTimeInterval($0) })
     }
 
-    /// `count` points, one every 5 s, 11.1 m apart (2.2 m/s), the first at step `from` and second `at`.
+    /// `count` points, one every 5 s, 11.1 m apart (2.2 m/s); the first is at step `from` (of 11.1 m) and at `seconds` after the start.
     private func run(_ count: Int, from first: Int = 0, at seconds: Double = 0) -> [TrackPoint] {
         (0..<count).map { point(Double(first + $0), at: seconds + Double($0) * 5) }
     }
@@ -51,14 +51,67 @@ struct TrackCleanerTests {
         #expect(abs(segment.points[10].coordinate.longitude - 0.00100) < 0.00002)
     }
 
-    @Test("Points that are close for a moment are merged but are not a stop")
+    @Test("Points that are close for a moment are not a stop: they all stay")
     func shortStop() throws {
         var points = run(5)
         // A fix 1 m from the last point, 2 s later: the same place for 2 s, which is no stop.
         points.append(TrackPoint(latitude: 0, longitude: 0.0004 + 0.00001, time: start.addingTimeInterval(20 + 2)))
         points += run(5, from: 5, at: 25)
         let result = TrackCleaner.clean(points)
-        #expect(result.mergedPoints == 1 && result.segments[0].stops.isEmpty)
+        #expect(result.mergedPoints == 0 && result.segments[0].stops.isEmpty && result.segments[0].points.count == 11)
+    }
+
+    @Test("A run recorded once a second keeps every point, and so does a slow climb")
+    func denseRecording() {
+        // 3 m/s at 1 Hz: two points within 4 m of each other all the way. Nothing is merged and nothing is a stop.
+        let fast = (0..<600).map { TrackPoint(latitude: 0, longitude: Double($0) * 3 / 111_195, time: start.addingTimeInterval(Double($0))) }
+        let result = TrackCleaner.clean(fast)
+        #expect(result.segments.count == 1 && result.segments[0].points == fast && result.mergedPoints == 0 && result.segments[0].stops.isEmpty)
+        // 0.3 m/s at 1 Hz (a snowshoe climb): 13 s inside 4 m. Each cluster of 14 points lasts over 10 s, so those are stops.
+        let slow = (0..<60).map { TrackPoint(latitude: 0, longitude: Double($0) * 0.3 / 111_195, time: start.addingTimeInterval(Double($0))) }
+        #expect(TrackCleaner.clean(slow).segments.first?.stops.isEmpty == false, "below walking pace the points are taken as standing still")
+    }
+
+    @Test("Without times nothing shows that the runner stood still, so no point is merged")
+    func untimedStop() {
+        let points = (0..<20).map { TrackPoint(latitude: 0, longitude: Double($0) * 0.00001) }  // 1.1 m apart
+        let result = TrackCleaner.clean(points)
+        #expect(result.mergedPoints == 0 && result.segments.first?.points.count == 20)
+    }
+
+    @Test("A time that goes back is a cut when the step is long, and no time at all when it is short")
+    func timeGoesBack() {
+        var points = run(5)
+        points.append(point(40, at: 15))  // 400 m on, 5 s before the previous point
+        points += run(5, from: 41, at: 20)
+        let result = TrackCleaner.clean(points)
+        #expect(result.breaks.count >= 1)
+        let wander = [point(0, at: 10), point(0.1, at: 9), point(0.2, at: 12)]
+        #expect(TrackCleaner.clean(wander).breaks.isEmpty)
+    }
+
+    @Test("A stop at the start or the end of a stretch, and two stops with their indexes")
+    func stopsAtEnds() throws {
+        func still(_ count: Int, from seconds: Double, at index: Double) -> [TrackPoint] {
+            (0..<count).map { TrackPoint(latitude: 0, longitude: index * 0.0001, time: start.addingTimeInterval(seconds + Double($0))) }
+        }
+        let points = still(15, from: 0, at: 0) + run(5, from: 1, at: 20) + still(15, from: 50, at: 6)
+        let segment = try #require(TrackCleaner.clean(points).segments.first)
+        #expect(segment.stops.map(\.pointIndex) == [0, 6] && segment.stops.allSatisfy { $0.seconds == 14 })
+        #expect(segment.points.count == 7)
+    }
+
+    @Test("The limits are 'more than': just under is no cut, just over is")
+    func thresholds() {
+        let rules = TrackCleaningRules(maximumGap: 120, gapDistance: 100)
+        let metre = 1 / 111_195.0
+        func pair(metres: Double, seconds: Double) -> [TrackPoint] {
+            [TrackPoint(latitude: 0, longitude: 0, time: start), TrackPoint(latitude: 0, longitude: metres * metre, time: start.addingTimeInterval(seconds))]
+        }
+        #expect(TrackCleaner.clean(pair(metres: 99.5, seconds: 500), rules: rules).breaks.isEmpty, "a move under 100 m is the same place")
+        #expect(TrackCleaner.clean(pair(metres: 100.5, seconds: 500), rules: rules).breaks.count == 1)
+        #expect(TrackCleaner.clean(pair(metres: 500, seconds: 119.5), rules: rules).breaks.isEmpty, "a gap under 120 s is none (4 m/s)")
+        #expect(TrackCleaner.clean(pair(metres: 500, seconds: 120.5), rules: rules).breaks.count == 1)
     }
 
     @Test("A pause in the same place is a stop, not a cut")
@@ -80,7 +133,7 @@ struct TrackCleanerTests {
         let cut = try #require(result.breaks.first)
         #expect(result.breaks.count == 1 && cut.afterIndex == 9)
         guard case .gap(let seconds, let metres) = cut.reason else { Issue.record("not a gap: \(cut.reason)"); return }
-        #expect(abs(seconds - 2_400 + 0) < 5 && metres > 20_000)
+        #expect(abs(seconds - 2_400) < 5 && metres > 20_000)
     }
 
     @Test("A step faster than any runner is cut: one bad fix between two good stretches leaves two stretches")
