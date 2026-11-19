@@ -185,6 +185,8 @@ final class RegionPickerModel: Identifiable {
     /// cannot be left out. Does nothing while a download or a build runs.
     func setNeighbourSkipped(_ id: String, _ skipped: Bool) async {
         guard download != .downloading, !selectionLocked, !selection.contains(id) else { return }
+        // Only a file of the plan can be left out, and a file that was left out can be added again.
+        if skipped, case .ready(let plan) = plan, !plan.items.contains(where: { $0.region.id == id }) { return }
         if skipped { skippedNeighbours.insert(id) } else { skippedNeighbours.remove(id) }
         await makePlan()
     }

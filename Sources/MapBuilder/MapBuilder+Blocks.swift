@@ -45,7 +45,8 @@ extension MapBuilder {
         var tasks: [BlockTask] = []
         var outcomes: [Int: BlockOutcome] = [:]
         var needed: [String: SourceRegion] = [:]
-        for planned in try plannedBlocks(area: request.area, blockZoom: request.blockZoom, margin: request.margin, in: index, cache: cache, skipping: request.skippedNeighbours) {
+        for planned in try plannedBlocks(area: request.area, blockZoom: request.blockZoom, margin: request.margin, in: index, cache: cache,
+            skipping: request.skippedNeighbours) {
             if planned.regions.isEmpty {
                 outcomes[planned.position] = BlockOutcome(x: planned.tile.x, y: planned.tile.y, status: .empty, regions: [])
             } else {
@@ -299,7 +300,7 @@ extension MapBuilder {
     ///   - index: The region index.
     ///   - cache: The source cache, or `nil` when it is not known which files are held.
     ///   - skipping: Ids of neighbour regions the user does not want read, for example a large file that only touches the margin of a few blocks.
-    ///     They are left out like the other neighbours, but only from blocks that keep a source of the selection, and a selected region is never skipped.
+    ///     They are left out like the other neighbours, but only from blocks that keep a source of the selection, and a selected region is never skipped. A block that has no source of the selection keeps all its files.
     ///
     /// The neighbours that are left out are listed in ``BlockTask/leftOut``. For a box or tiles no neighbour is left out. A map that was
     /// built before this rule has blocks that were read from a neighbour as well: they count as out of date on the next run and are built
