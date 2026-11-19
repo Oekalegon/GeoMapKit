@@ -126,7 +126,7 @@ struct TrackMatcherTests {
         let network = LineNetwork(features: [way(1, zigzag), way(2, [(-20, 2), (30, 2)])])
         let fix = coordinate(5, 0)
         let rules = MatchingRules(maximumCandidates: 3)
-        let found = TrackMatcher.candidates(near: fix, in: network, rules: rules)
+        let found = TrackMatcher.candidateLines(near: fix, in: network, rules: rules)
         #expect(found.count == 3)
         #expect(Set(found.map { network.edges[$0.edge].wayID }) == [1, 2], "the straight way is a candidate")
         #expect(found.map(\.distance) == found.map(\.distance).sorted())

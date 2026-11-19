@@ -46,7 +46,7 @@ public enum TrackMatcher {
         }
         if used[used.count - 1] != points.count - 1 { used.append(points.count - 1) }
 
-        let candidates: [[EdgeProjection]] = used.map { candidates(near: points[$0], in: network, rules: rules) }
+        let candidates: [[EdgeProjection]] = used.map { candidateLines(near: points[$0], in: network, rules: rules) }
         guard candidates.contains(where: { !$0.isEmpty }) else { return MatchedSegment(stretches: [raw(points, 0..<points.count, steps)]) }
 
         var router = NetworkRouter(network: network, hopDistance: rules.hopDistance)
@@ -66,7 +66,7 @@ public enum TrackMatcher {
     ///   - network: The lines.
     ///   - rules: The reach, the classes and the number of candidates.
     /// - Returns: The candidates, nearest first.
-    static func candidates(near coordinate: Coordinate, in network: LineNetwork, rules: MatchingRules) -> [EdgeProjection] {
+    static func candidateLines(near coordinate: Coordinate, in network: LineNetwork, rules: MatchingRules) -> [EdgeProjection] {
         let near = network.edges(near: coordinate, within: rules.reach).filter { rules.classes.contains(network.edges[$0.edge].classID) }
         var chosen: [EdgeProjection] = []
         var ways = Set<Int64>()
