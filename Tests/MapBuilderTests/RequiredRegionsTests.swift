@@ -26,6 +26,15 @@ struct RequiredRegionsTests {
         #expect(needed == ["a", "b"])
     }
 
+    @Test("A neighbour the user skips is not planned, but a selected region cannot be skipped")
+    func skippedNeighbour() throws {
+        let index = try RegionIndex(regions: [region("a", west: 0, east: 5.4), region("b", west: 5.4, east: 10)])
+        #expect(try MapBuilder.requiredRegions(area: .regions(["a"]), in: index, skipping: ["b"]).map(\.id) == ["a"])
+        #expect(try MapBuilder.requiredRegions(area: .regions(["a"]), in: index, skipping: ["a"]).map(\.id) == ["a", "b"])
+        let tasks = try MapBuilder.plannedBlocks(area: .regions(["a"]), blockZoom: 8, margin: 0.1, in: index, skipping: ["b"])
+        #expect(tasks.contains { $0.leftOut.contains { $0.id == "b" } })
+    }
+
     @Test("A region with no neighbour needs only itself")
     func alone() throws {
         let index = try RegionIndex(regions: [region("a", west: 0, east: 5), region("far", west: 30, east: 35)])
@@ -248,5 +257,34 @@ struct SettledRegionsTests {
         let request = BlockRequest(area: .regions(["home"]), output: root.appendingPathComponent("out"), cacheDirectory: cache.directory)
         let report = try await MapBuilder.buildRegion(request, catalog: Fixed(index: index))
         #expect(report.warnings.contains { $0.contains("without sud") })
+    }
+
+    @Test("A build with a skipped neighbour needs only the file of the selection, and says that it built without the neighbour")
+    func buildWithSkippedNeighbour() async throws {
+        // The tile of 9.84 to 11.25 degrees is 82 % in a, so b stays as a neighbour unless it is skipped.
+        let index = try RegionIndex(regions: [
+            region("a", west: 8, east: 11, south: 46, north: 49), region("b", west: 11, east: 14, south: 46, north: 49),
+        ])
+        #expect(try MapBuilder.requiredRegions(area: .regions(["a"]), in: index).map(\.id) == ["a", "b"])
+
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-skipped-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cache = SourceCache(directory: root.appendingPathComponent("cache"))
+        struct Fixed: RegionCatalog {
+            let index: RegionIndex
+            func index() async throws -> RegionIndex { index }
+        }
+        let part = try cache.preparePart(regionID: "a", etag: "\"e\"", keepBytes: false)
+        try TinyPBF.make().write(to: part)
+        try cache.install(
+            regionID: "a", from: URL(string: "https://download.example.org/a.osm.pbf")!,
+            info: RemoteFileInfo(size: Int64(try TinyPBF.make().count), etag: "\"e\"", lastModified: "Mon"))
+        // Without the skip the build needs b.
+        let plain = BlockRequest(area: .regions(["a"]), output: root.appendingPathComponent("plain"), cacheDirectory: cache.directory)
+        await #expect(throws: MapBuilderError.self) { try await MapBuilder.buildRegion(plain, catalog: Fixed(index: index)) }
+        let request = BlockRequest(
+            area: .regions(["a"]), output: root.appendingPathComponent("out"), cacheDirectory: cache.directory, skippedNeighbours: ["b"])
+        let report = try await MapBuilder.buildRegion(request, catalog: Fixed(index: index))
+        #expect(report.warnings.contains { $0.contains("without b") })
     }
 }
