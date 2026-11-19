@@ -25,6 +25,7 @@ let package = Package(
         .library(name: "MapBuilder", targets: ["MapBuilder"]),
         .library(name: "Tracks", targets: ["Tracks"]),
         .library(name: "TrackOverlays", targets: ["TrackOverlays"]),
+        .library(name: "TrackMatching", targets: ["TrackMatching"]),
     ],
     targets: [
         // Web Mercator maths, tile coordinates, geometry.
@@ -60,6 +61,9 @@ let package = Package(
         // Overlays that draw tracks and routes over the map (a `Route` as a line with start, end and waypoint markers).
         .target(name: "TrackOverlays", dependencies: ["GeoCore", "MapRender", "MapStyle", "Tracks"]),
 
+        // Matching recorded tracks to the lines of a map (v2): the line network of a map area and, later, the matcher. Runs on the phone and the Mac.
+        .target(name: "TrackMatching", dependencies: ["GeoCore", "FeatureStore", "Tracks"]),
+
         // Builds small PBF files for tests (test-only; no product).
         .target(name: "PBFTestSupport", path: "Tests/PBFTestSupport"),
 
@@ -73,6 +77,7 @@ let package = Package(
         .testTarget(name: "MapBuilderTests", dependencies: ["MapBuilder", "MapStyle", "FeatureStore", "FeatureStoreBuilder", "GeoCore", "OSMPBF", "Regions"]),
         .testTarget(name: "RegionsTests", dependencies: ["Regions", "GeoCore"]),
         .testTarget(name: "TracksTests", dependencies: ["Tracks", "GeoCore"]),
+        .testTarget(name: "TrackMatchingTests", dependencies: ["TrackMatching", "FeatureStore", "Tracks", "GeoCore"]),
         .testTarget(name: "TrackOverlaysTests", dependencies: ["TrackOverlays", "MapRender", "MapStyle", "Tracks", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
