@@ -27,7 +27,8 @@ public struct MatchedTrack: Sendable, Equatable {
     ///
     /// - Parameters:
     ///   - minimumConfidence: The least confidence, from 0 to 1; a first measure (see ``MatchedStretch/confidence``).
-    ///   - minimumLength: The least recorded length of a stretch, in metres.
+    ///   - minimumLength: The least recorded length of a stretch, in metres. Like the confidence, a first value that is checked against
+    ///     real tracks.
     public func countedStretches(minimumConfidence: Double = 0.5, minimumLength: Double = 100) -> [MatchedStretch] {
         segments.flatMap(\.stretches).filter { $0.isMatched && $0.confidence >= minimumConfidence && $0.length >= minimumLength }
     }

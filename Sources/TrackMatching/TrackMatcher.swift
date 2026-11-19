@@ -13,9 +13,9 @@ import Tracks
 /// The matcher uses only the network and the points. It runs on the phone or the Mac, not on the Watch: the network holds every vertex of
 /// the area in memory.
 ///
-/// A track that changes from one way to another where they share no vertex (a bridge over a road) is cut there, with a raw stretch of a
-/// fix or two between; one wobble can leave such a short raw stretch between two matched ones, and an app that counts stretches should
-/// ignore the very short ones.
+/// A track that changes from one way to another where they share no vertex (a bridge over a road) has a raw stretch of a fix or two there;
+/// one wobble can do the same. A raw stretch shorter than ``MatchingRules/minimumRawLength`` between two matched ones is taken into them,
+/// and ``MatchedStretch/edgeGaps`` says where the edges of such a stretch are not connected.
 public enum TrackMatcher {
     /// Matches every segment of a cleaned track.
     ///
@@ -159,6 +159,10 @@ public enum TrackMatcher {
 
     /// Takes a raw stretch that is shorter than the rules allow into the matched stretches on both sides of it.
     private static func absorbingShortRaw(_ stretches: [MatchedStretch], rules: MatchingRules, network: LineNetwork) -> [MatchedStretch] {
+        func connected(_ first: Int, _ second: Int) -> Bool {
+            let a = network.edges[first], b = network.edges[second]
+            return a.from == b.from || a.from == b.to || a.to == b.from || a.to == b.to
+        }
         var list = stretches
         var index = 1
         while index + 1 < list.count {
@@ -171,31 +175,43 @@ public enum TrackMatcher {
             var byClass = before.lengthByClass
             for (key, value) in after.lengthByClass { byClass[key, default: 0] += value }
             if let edge = before.edges.last { byClass[network.edges[edge].classID, default: 0] += between.length }
+            // The edges of both, with the place where they are not connected noted.
             var edges = before.edges
-            for edge in after.edges where edges.last != edge { edges.append(edge) }
-            let length = before.length + between.length + after.length
-            let weighted = before.confidence * before.length + after.confidence * after.length
+            var gaps = before.edgeGaps
+            var position: [Int] = []
+            for (number, edge) in after.edges.enumerated() {
+                if number == 0, let last = edges.last {
+                    if last == edge { position.append(edges.count - 1); continue }
+                    if !connected(last, edge) { gaps.append(edges.count - 1) }
+                }
+                edges.append(edge)
+                position.append(edges.count - 1)
+            }
+            gaps += after.edgeGaps.map { position[$0] }
+            let weight = before.length + after.length
             list.replaceSubrange(
                 (index - 1)...(index + 1),
                 with: [
                     MatchedStretch(
                         pointRange: before.pointRange.lowerBound..<after.pointRange.upperBound, isMatched: true,
-                        confidence: (before.length + after.length) > 0 ? weighted / (before.length + after.length) : min(before.confidence, after.confidence),
-                        coordinates: before.coordinates + between.coordinates + after.coordinates, edges: edges, length: length, lengthByClass: byClass)
+                        confidence: weight > 0
+                            ? (before.confidence * before.length + after.confidence * after.length) / weight
+                            : min(before.confidence, after.confidence),
+                        coordinates: before.coordinates + between.coordinates + after.coordinates, edges: edges,
+                        length: before.length + between.length + after.length, lengthByClass: byClass, edgeGaps: gaps)
                 ])
-            index = max(index - 1, 1)
+            // The stretch after the merged one is now at `index`, so the same place is looked at again: a chain collapses.
         }
         return list
     }
 
-    /// Lets each stretch run on to the first point of the next, so that the lines of the stretches meet and no gap is drawn between a
-    /// matched stretch and the raw points around it.
+    /// Gives each stretch the first point of the next as `joinsTo`, so that the lines of the stretches meet and no gap is drawn.
     private static func joined(_ stretches: [MatchedStretch]) -> [MatchedStretch] {
         stretches.enumerated().map { index, stretch in
-            guard index + 1 < stretches.count, let next = stretches[index + 1].coordinates.first, stretch.coordinates.last != next else { return stretch }
+            guard index + 1 < stretches.count, let next = stretches[index + 1].coordinates.first else { return stretch }
             return MatchedStretch(
-                pointRange: stretch.pointRange, isMatched: stretch.isMatched, confidence: stretch.confidence, coordinates: stretch.coordinates + [next],
-                edges: stretch.edges, length: stretch.length, lengthByClass: stretch.lengthByClass)
+                pointRange: stretch.pointRange, isMatched: stretch.isMatched, confidence: stretch.confidence, coordinates: stretch.coordinates,
+                edges: stretch.edges, length: stretch.length, lengthByClass: stretch.lengthByClass, edgeGaps: stretch.edgeGaps, joinsTo: next)
         }
     }
 
