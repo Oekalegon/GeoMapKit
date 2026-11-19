@@ -154,7 +154,49 @@ public enum TrackMatcher {
             }
             first = last + 1
         }
-        return result
+        return joined(absorbingShortRaw(result, rules: rules, network: network))
+    }
+
+    /// Takes a raw stretch that is shorter than the rules allow into the matched stretches on both sides of it.
+    private static func absorbingShortRaw(_ stretches: [MatchedStretch], rules: MatchingRules, network: LineNetwork) -> [MatchedStretch] {
+        var list = stretches
+        var index = 1
+        while index + 1 < list.count {
+            let before = list[index - 1], between = list[index], after = list[index + 1]
+            guard before.isMatched, !between.isMatched, after.isMatched, between.length < rules.minimumRawLength else {
+                index += 1
+                continue
+            }
+            // The short length counts for the class of the last line before it.
+            var byClass = before.lengthByClass
+            for (key, value) in after.lengthByClass { byClass[key, default: 0] += value }
+            if let edge = before.edges.last { byClass[network.edges[edge].classID, default: 0] += between.length }
+            var edges = before.edges
+            for edge in after.edges where edges.last != edge { edges.append(edge) }
+            let length = before.length + between.length + after.length
+            let weighted = before.confidence * before.length + after.confidence * after.length
+            list.replaceSubrange(
+                (index - 1)...(index + 1),
+                with: [
+                    MatchedStretch(
+                        pointRange: before.pointRange.lowerBound..<after.pointRange.upperBound, isMatched: true,
+                        confidence: (before.length + after.length) > 0 ? weighted / (before.length + after.length) : min(before.confidence, after.confidence),
+                        coordinates: before.coordinates + between.coordinates + after.coordinates, edges: edges, length: length, lengthByClass: byClass)
+                ])
+            index = max(index - 1, 1)
+        }
+        return list
+    }
+
+    /// Lets each stretch run on to the first point of the next, so that the lines of the stretches meet and no gap is drawn between a
+    /// matched stretch and the raw points around it.
+    private static func joined(_ stretches: [MatchedStretch]) -> [MatchedStretch] {
+        stretches.enumerated().map { index, stretch in
+            guard index + 1 < stretches.count, let next = stretches[index + 1].coordinates.first, stretch.coordinates.last != next else { return stretch }
+            return MatchedStretch(
+                pointRange: stretch.pointRange, isMatched: stretch.isMatched, confidence: stretch.confidence, coordinates: stretch.coordinates + [next],
+                edges: stretch.edges, length: stretch.length, lengthByClass: stretch.lengthByClass)
+        }
     }
 
     private static func matchedStretch(

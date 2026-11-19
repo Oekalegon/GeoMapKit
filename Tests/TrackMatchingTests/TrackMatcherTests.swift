@@ -81,7 +81,7 @@ struct TrackMatcherTests {
         let ways = result.stretches.filter(\.isMatched).map { network.edges[$0.edges[0]].wayID }
         #expect(ways == [1, 2])
         #expect(result.stretches[1].edges.isEmpty && result.stretches[1].confidence == 0)
-        #expect(result.stretches[1].coordinates.count == result.stretches[1].pointRange.count, "the raw line keeps its points")
+        #expect(result.stretches[1].coordinates.count == result.stretches[1].pointRange.count + 1, "the raw line keeps its points and runs on to the next stretch")
     }
 
     @Test("A turn at a junction follows both ways in order, through the junction")
@@ -104,19 +104,45 @@ struct TrackMatcherTests {
         let bridged = TrackMatcher.match(segment(points), on: network)
         #expect(bridged.stretches.count == 1 && bridged.stretches[0].isMatched)
         #expect(Set(bridged.stretches[0].edges.map { network.edges[$0].wayID }) == [1, 2])
-        let cut = TrackMatcher.match(segment(points), on: network, rules: MatchingRules(hopDistance: 0))
+        let cut = TrackMatcher.match(segment(points), on: network, rules: MatchingRules(hopDistance: 0, minimumRawLength: 0))
         #expect(bridged.stretches[0].edges == [0, 1])
         #expect(cut.stretches.map(\.isMatched) == [true, false, true], "without the bridge the track is cut at the gap, with the fix in it raw")
         #expect(cut.stretches[0].edges == [0] && cut.stretches[2].edges == [1])
     }
 
-    @Test("A track that changes from one way to another where they share no vertex (a bridge) is cut there")
+    @Test("Where two ways share no vertex (a bridge) the short raw stretch between them is taken into the matched ones, unless the rules keep it")
     func bridge() throws {
         let network = LineNetwork(features: [way(1, [(0, 0), (100, 0)]), way(2, [(50, -50), (50, 50)], .roadMinor)])
         let points = track((0, 0), (50, 0)) + track((50, 0), (50, 50)).dropFirst()
-        let result = TrackMatcher.match(segment(Array(points)), on: network)
-        let ways = result.stretches.filter(\.isMatched).map { network.edges[$0.edges[0]].wayID }
-        #expect(ways == [1, 2] && result.stretches.contains { !$0.isMatched }, "the two ways are not joined, so the track is not laid across")
+        let apart = TrackMatcher.match(segment(Array(points)), on: network, rules: MatchingRules(minimumRawLength: 0))
+        let ways = apart.stretches.filter(\.isMatched).map { network.edges[$0.edges[0]].wayID }
+        #expect(ways == [1, 2] && apart.stretches.contains { !$0.isMatched }, "the two ways are not joined, so the track is not laid across")
+        let merged = TrackMatcher.match(segment(Array(points)), on: network)
+        #expect(merged.stretches.count == 1 && merged.stretches[0].isMatched)
+        #expect(merged.stretches[0].pointRange == 0..<points.count)
+        #expect(Set(merged.stretches[0].edges.map { network.edges[$0].wayID }) == [1, 2])
+        // The lengths still add up: all of it counts for a class.
+        #expect(abs(merged.length - merged.stretches[0].lengthByClass.values.reduce(0, +)) < 1e-6)
+    }
+
+    @Test("The lines of the stretches meet: each runs on to the first point of the next")
+    func stretchesMeet() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (40, 0)]), way(2, [(160, 0), (200, 0)])])
+        let result = TrackMatcher.match(segment(track((0, 0), (200, 0))), on: network)
+        #expect(result.stretches.count == 3)
+        for (before, after) in zip(result.stretches, result.stretches.dropFirst()) {
+            #expect(before.coordinates.last == after.coordinates.first)
+        }
+    }
+
+    @Test("Only the matched stretches that are sure and long enough are counted")
+    func counted() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (40, 0)]), way(2, [(160, 0), (200, 0)])])
+        let result = TrackMatcher.match(CleanedTrack(segments: [segment(track((0, 0), (200, 0)))], breaks: [], mergedPoints: 0, droppedSegments: 0), on: network)
+        #expect(result.countedStretches().count == 2)
+        #expect(result.countedStretches(minimumLength: 1_000).isEmpty)
+        #expect(result.countedStretches(minimumConfidence: 1.1).isEmpty)
+        #expect(result.countedStretches(minimumConfidence: 0, minimumLength: 0).allSatisfy { $0.isMatched })
     }
 
     @Test("Many short edges of one way do not hide a parallel way: it is a candidate too")
@@ -204,5 +230,6 @@ struct TrackMatcherTests {
         let rules = MatchingRules(reach: -5, gpsSigma: 0, transitionBeta: 0, maximumDetour: 0, detourSlack: -1, maximumCandidates: 0, minimumSpacing: -1)
         #expect(rules.reach == 0 && rules.gpsSigma == 1 && rules.transitionBeta == 1 && rules.maximumDetour == 1)
         #expect(rules.detourSlack == 0 && rules.maximumCandidates == 1 && rules.minimumSpacing == 0)
+        #expect(MatchingRules(minimumRawLength: -3).minimumRawLength == 0 && MatchingRules(minimumRawLength: .nan).minimumRawLength == 0)
     }
 }

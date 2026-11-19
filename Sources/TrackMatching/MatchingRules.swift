@@ -31,6 +31,9 @@ public struct MatchingRules: Sendable, Equatable {
     /// The gap, in metres, that is bridged between two dead ends of the network (a way that is cut at a cell border and does not join).
     /// A dead end that stops short of the middle of another way is not bridged.
     public var hopDistance: Double
+    /// The length, in metres, below which a raw stretch between two matched stretches is taken into them: a wobble off the lines, or a
+    /// change between two ways that share no vertex (a bridge), is not a leg over open ground. The stretch then counts as matched.
+    public var minimumRawLength: Double
     /// The feature classes that count as lines; by default ``LineNetwork/travelClasses``.
     public var classes: Set<UInt8>
 
@@ -47,11 +50,12 @@ public struct MatchingRules: Sendable, Equatable {
     ///   - switchPenalty: The cost of leaving or rejoining the lines.
     ///   - minimumSpacing: The shortest step between fixes that are used, in metres.
     ///   - hopDistance: The gap between dead ends that is bridged, in metres.
+    ///   - minimumRawLength: The raw stretch between two matched ones that is taken into them if it is shorter, in metres.
     ///   - classes: The feature classes that count as lines.
     public init(
         reach: Double = 40, gpsSigma: Double = 10, transitionBeta: Double = 10, maximumDetour: Double = 3, detourSlack: Double = 60,
         maximumCandidates: Int = 6, offNetworkDistance: Double = 30, switchPenalty: Double = 4, minimumSpacing: Double = 10,
-        hopDistance: Double = 3, classes: Set<UInt8> = LineNetwork.travelClasses
+        hopDistance: Double = 3, minimumRawLength: Double = 30, classes: Set<UInt8> = LineNetwork.travelClasses
     ) {
         // A value that is not a number is taken as the smallest allowed.
         func atLeast(_ value: Double, _ minimum: Double) -> Double { value.isNaN ? minimum : max(value, minimum) }
@@ -65,11 +69,12 @@ public struct MatchingRules: Sendable, Equatable {
         self.switchPenalty = atLeast(switchPenalty, 0)
         self.minimumSpacing = atLeast(minimumSpacing, 0)
         self.hopDistance = atLeast(hopDistance, 0)
+        self.minimumRawLength = atLeast(minimumRawLength, 0)
         self.classes = classes
     }
 
     /// Reach 40 m, an error of 10 m, a route difference of 10 m for one unit, a route of up to 3 times the step and 60 m more, 6
-    /// candidates, off the lines at 30 m, a cost of 4 to leave or rejoin, fixes at least 10 m apart, a bridge of 3 m, and all travel
-    /// classes.
+    /// candidates, off the lines at 30 m, a cost of 4 to leave or rejoin, fixes at least 10 m apart, a bridge of 3 m, a raw stretch of under 30 m between
+    /// two matched ones taken into them, and all travel classes.
     public static let standard = MatchingRules()
 }
