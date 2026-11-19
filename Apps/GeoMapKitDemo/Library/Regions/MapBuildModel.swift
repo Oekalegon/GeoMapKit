@@ -225,7 +225,7 @@ final class MapBuildModel: Identifiable {
             stage = .buildingBlocks
             let request = BlockRequest(
                 area: .regions(regions.map(\.id)), output: folder, jobs: jobs, cacheDirectory: picker.cacheDirectory,
-                rebuild: mode != .normal)
+                rebuild: mode != .normal, skippedNeighbours: picker.skippedNeighbours)
             let report = try await tools.buildBlocks(request, catalog) { progress in
                 Task { @MainActor in self.noteBlocks(progress) }
             }

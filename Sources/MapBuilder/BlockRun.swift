@@ -36,6 +36,9 @@ public struct BlockRequest: Sendable {
     public var rebuild: Bool
     /// Whether the sea of open-sea blocks is added after the build (question 53); `false` leaves the holes, for a comparison.
     public var fillsOpenSea: Bool
+    /// Neighbour regions that are not read (ids), so a file that only reaches the margin of a few blocks is not needed. The border blocks
+    /// are built without them and the report says so. Selected regions are never skipped.
+    public var skippedNeighbours: Set<String> = []
     /// How often the progress of the blocks that are running is reported, as the parts of them that are done; the default is a quarter of a
     /// second and the shortest is 10 ms, so that a progress display moves without being drawn again at every step.
     public var progressInterval: Duration = .milliseconds(250)
@@ -69,8 +72,10 @@ public struct BlockRequest: Sendable {
     /// Creates a request.
     public init(
         area: Area, output: URL, blockZoom: Int = BlockRequest.defaultBlockZoom, jobs: Int = 1, margin: Double = BlockRequest.defaultMargin, profile: BuildProfile = .full,
-        cacheDirectory: URL? = nil, rebuild: Bool = false, fillsOpenSea: Bool = true
+        cacheDirectory: URL? = nil, rebuild: Bool = false, fillsOpenSea: Bool = true,
+        skippedNeighbours: Set<String> = []
     ) {
+        self.skippedNeighbours = skippedNeighbours
         self.rebuild = rebuild
         self.area = area
         self.output = output

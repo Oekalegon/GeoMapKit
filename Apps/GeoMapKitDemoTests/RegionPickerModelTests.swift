@@ -97,6 +97,29 @@ struct RegionPickerModelTests {
         #expect(model.displayName(of: sud) == "Sud (Italy)")
     }
 
+    @Test("A neighbour can be left out: the plan is made again without it, and a new selection forgets the choice")
+    func leaveOutNeighbour() async throws {
+        let border = BorderCatalog()
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("geomapkit-picker-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let model = RegionPickerModel(catalog: border, downloader: Network(), cache: SourceCache(directory: folder, availableCapacity: { _ in 100_000_000_000 }))
+        await model.load()
+        model.setSelected("europe/home", true)
+        await model.makePlan()
+        await model.setNeighbourSkipped("europe/next", true)
+        guard case .ready(let plan) = model.plan else { Issue.record("no plan: \(model.plan)"); return }
+        #expect(!plan.items.map(\.region.id).contains("europe/next"))
+        #expect(model.skippedNeighbours == ["europe/next"])
+        await model.setNeighbourSkipped("europe/home", true)
+        #expect(model.skippedNeighbours == ["europe/next"], "a selected region is not a neighbour")
+        await model.setNeighbourSkipped("europe/next", false)
+        guard case .ready(let again) = model.plan else { Issue.record("no plan"); return }
+        #expect(again.items.map(\.region.id).contains("europe/next"))
+        await model.setNeighbourSkipped("europe/next", true)
+        model.clearSelection()
+        #expect(model.skippedNeighbours.isEmpty)
+    }
+
     @Test("Without a selection there is nothing to check")
     func emptySelection() async {
         let (model, _, folder) = make()
