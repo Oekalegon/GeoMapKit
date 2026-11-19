@@ -1,6 +1,9 @@
 import GeoCore
 
 /// A part of a track that is either laid on the lines of the network or left as it was recorded.
+///
+/// A stretch can be very short: one wobble away from the lines, or a change between two ways that share no vertex, leaves a raw stretch of
+/// a fix or two between two matched ones. An app that counts stretches should ignore those below a length it chooses.
 public struct MatchedStretch: Sendable, Equatable {
     /// The points of the track segment that this stretch covers, as indexes into its points. The stretches of a segment follow each
     /// other and cover all its points.

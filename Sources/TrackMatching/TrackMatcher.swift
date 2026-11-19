@@ -10,7 +10,12 @@ import Tracks
 /// across it, and a fix that has no line in reach does not stop the match. The best sequence of states is found with the Viterbi
 /// algorithm.
 ///
-/// The matcher uses only the network and the points. It runs on the phone or the Mac.
+/// The matcher uses only the network and the points. It runs on the phone or the Mac, not on the Watch: the network holds every vertex of
+/// the area in memory.
+///
+/// A track that changes from one way to another where they share no vertex (a bridge over a road) is cut there, with a raw stretch of a
+/// fix or two between; one wobble can leave such a short raw stretch between two matched ones, and an app that counts stretches should
+/// ignore the very short ones.
 public enum TrackMatcher {
     /// Matches every segment of a cleaned track.
     ///
@@ -41,11 +46,7 @@ public enum TrackMatcher {
         }
         if used[used.count - 1] != points.count - 1 { used.append(points.count - 1) }
 
-        let candidates: [[EdgeProjection]] = used.map { index in
-            Array(
-                network.edges(near: points[index], within: rules.reach)
-                    .filter { rules.classes.contains(network.edges[$0.edge].classID) }.prefix(rules.maximumCandidates))
-        }
+        let candidates: [[EdgeProjection]] = used.map { candidates(near: points[$0], in: network, rules: rules) }
         guard candidates.contains(where: { !$0.isEmpty }) else { return MatchedSegment(stretches: [raw(points, 0..<points.count, steps)]) }
 
         var router = NetworkRouter(network: network, hopDistance: rules.hopDistance)
@@ -53,6 +54,29 @@ public enum TrackMatcher {
         return MatchedSegment(
             stretches: stretches(
                 points: points, steps: steps, used: used, candidates: candidates, states: states, router: &router, rules: rules, network: network))
+    }
+
+    // MARK: Candidates
+
+    /// The lines that a fix may be on: the nearest edge of each way first, so that a way of many short edges does not use all the places
+    /// and hide a parallel road or path, then the other nearest edges, up to the most the rules allow.
+    ///
+    /// - Parameters:
+    ///   - coordinate: The fix.
+    ///   - network: The lines.
+    ///   - rules: The reach, the classes and the number of candidates.
+    /// - Returns: The candidates, nearest first.
+    static func candidates(near coordinate: Coordinate, in network: LineNetwork, rules: MatchingRules) -> [EdgeProjection] {
+        let near = network.edges(near: coordinate, within: rules.reach).filter { rules.classes.contains(network.edges[$0.edge].classID) }
+        var chosen: [EdgeProjection] = []
+        var ways = Set<Int64>()
+        for projection in near where chosen.count < rules.maximumCandidates && ways.insert(network.edges[projection.edge].wayID).inserted {
+            chosen.append(projection)
+        }
+        for projection in near where chosen.count < rules.maximumCandidates && !chosen.contains(where: { $0.edge == projection.edge }) {
+            chosen.append(projection)
+        }
+        return chosen.sorted { $0.distance < $1.distance }
     }
 
     // MARK: Viterbi

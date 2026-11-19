@@ -68,8 +68,7 @@ struct TrackMatcherTests {
         let result = TrackMatcher.match(segment(points), on: network)
         let matched = result.stretches.filter(\.isMatched)
         let ways = Set(matched.flatMap(\.edges).map { network.edges[$0].wayID })
-        #expect(ways.count == 1, "the match uses one way, not both: \(ways)")
-        #expect(result.stretches.allSatisfy { $0.isMatched } || matched.map(\.length).reduce(0, +) > 400)
+        #expect(result.stretches.count == 1 && matched.count == 1 && ways.count == 1, "one stretch on one way, not both: \(ways)")
     }
 
     @Test("A track that leaves the lines for open ground is left raw there, and matched before and after")
@@ -106,7 +105,31 @@ struct TrackMatcherTests {
         #expect(bridged.stretches.count == 1 && bridged.stretches[0].isMatched)
         #expect(Set(bridged.stretches[0].edges.map { network.edges[$0].wayID }) == [1, 2])
         let cut = TrackMatcher.match(segment(points), on: network, rules: MatchingRules(hopDistance: 0))
-        #expect(cut.stretches.count > 1 || cut.stretches[0].edges.count < bridged.stretches[0].edges.count || !cut.stretches[0].isMatched)
+        #expect(bridged.stretches[0].edges == [0, 1])
+        #expect(cut.stretches.map(\.isMatched) == [true, false, true], "without the bridge the track is cut at the gap, with the fix in it raw")
+        #expect(cut.stretches[0].edges == [0] && cut.stretches[2].edges == [1])
+    }
+
+    @Test("A track that changes from one way to another where they share no vertex (a bridge) is cut there")
+    func bridge() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (100, 0)]), way(2, [(50, -50), (50, 50)], .roadMinor)])
+        let points = track((0, 0), (50, 0)) + track((50, 0), (50, 50)).dropFirst()
+        let result = TrackMatcher.match(segment(Array(points)), on: network)
+        let ways = result.stretches.filter(\.isMatched).map { network.edges[$0.edges[0]].wayID }
+        #expect(ways == [1, 2] && result.stretches.contains { !$0.isMatched }, "the two ways are not joined, so the track is not laid across")
+    }
+
+    @Test("Many short edges of one way do not hide a parallel way: it is a candidate too")
+    func candidatesByWay() throws {
+        // A way that zigzags in 10 short edges, all within reach of the fix, and a straight way 22 m to the north.
+        let zigzag = (0...10).map { (Double($0), $0 % 2 == 0 ? 0.0 : 0.02) }
+        let network = LineNetwork(features: [way(1, zigzag), way(2, [(-20, 2), (30, 2)])])
+        let fix = coordinate(5, 0)
+        let rules = MatchingRules(maximumCandidates: 3)
+        let found = TrackMatcher.candidates(near: fix, in: network, rules: rules)
+        #expect(found.count == 3)
+        #expect(Set(found.map { network.edges[$0.edge].wayID }) == [1, 2], "the straight way is a candidate")
+        #expect(found.map(\.distance) == found.map(\.distance).sorted())
     }
 
     @Test("There is no network: the whole segment is one raw stretch with its length")
@@ -164,8 +187,20 @@ struct TrackMatcherTests {
         #expect(abs(result.length - (result.lengthByClass.values.reduce(0, +) + result.unmatchedLength)) < 1)
     }
 
+    @Test("A segment of one point is one raw stretch with no length")
+    func onePoint() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (100, 0)])])
+        let result = TrackMatcher.match(segment([TrackPoint(coordinate: coordinate(5, 0))]), on: network)
+        let stretch = try #require(result.stretches.first)
+        #expect(result.stretches.count == 1 && !stretch.isMatched && stretch.pointRange == 0..<1 && stretch.length == 0)
+        let nan = TrackMatcher.match(segment([TrackPoint(latitude: .nan, longitude: 10), TrackPoint(latitude: 60, longitude: 10.001)]), on: network)
+        #expect(nan.stretches.map(\.isMatched) == [false, true], "a fix that is not a number has no candidates and stays raw")
+    }
+
     @Test("The rules are kept in range")
     func rules() {
+        let nan = MatchingRules(reach: .nan, gpsSigma: .nan, transitionBeta: .nan, switchPenalty: .nan)
+        #expect(nan.reach == 0 && nan.gpsSigma == 1 && nan.transitionBeta == 1 && nan.switchPenalty == 0)
         let rules = MatchingRules(reach: -5, gpsSigma: 0, transitionBeta: 0, maximumDetour: 0, detourSlack: -1, maximumCandidates: 0, minimumSpacing: -1)
         #expect(rules.reach == 0 && rules.gpsSigma == 1 && rules.transitionBeta == 1 && rules.maximumDetour == 1)
         #expect(rules.detourSlack == 0 && rules.maximumCandidates == 1 && rules.minimumSpacing == 0)

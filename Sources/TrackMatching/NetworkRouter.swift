@@ -4,13 +4,16 @@ import GeoCore
 ///
 /// A position is a point on an edge (an ``EdgeProjection``). A route leaves it by either end of the edge, follows the edges, and reaches
 /// the other position by either end of its edge. Dead ends that lie within the hop distance of each other are joined, so a way that is cut
-/// at a cell border and does not join exactly can still be followed. Searches are limited in distance and so stay small.
+/// at a cell border and does not join exactly can still be followed. Only a dead end is joined to a dead end: one that stops short of
+/// the middle of another way is not. Searches are limited in distance and so stay small.
 struct NetworkRouter {
     /// The result of a search from one position: the distance to each node reached, and how it was reached.
     struct Search {
         var distance: [Int: Double] = [:]
         /// The node before and the edge used to come to a node; the edge is -1 for a hop between two dead ends.
         var previous: [Int: (node: Int, edge: Int)] = [:]
+        /// The most metres a route may have, to the end of the target's edge and along it to the target.
+        var limit = Double.infinity
     }
 
     /// A route between two positions.
@@ -50,6 +53,7 @@ struct NetworkRouter {
     /// Searches the network from a position, as far as `limit` metres.
     mutating func search(from start: EdgeProjection, limit: Double) -> Search {
         var search = Search()
+        search.limit = limit
         var queue = MinQueue()
         let edge = network.edges[start.edge]
         for (node, metres) in [(edge.from, start.fraction * edge.length), (edge.to, (1 - start.fraction) * edge.length)] where metres <= limit {
@@ -111,7 +115,8 @@ struct NetworkRouter {
         if let reached = search.distance[edge.to], reached + (1 - target.fraction) * edge.length < (result?.distance ?? .infinity) {
             result = (reached + (1 - target.fraction) * edge.length, edge.to)
         }
-        return result
+        guard let found = result, found.distance <= search.limit else { return nil }
+        return found
     }
 }
 

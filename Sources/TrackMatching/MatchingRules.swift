@@ -29,11 +29,12 @@ public struct MatchingRules: Sendable, Equatable {
     /// a track recorded once a second is not matched point by point.
     public var minimumSpacing: Double
     /// The gap, in metres, that is bridged between two dead ends of the network (a way that is cut at a cell border and does not join).
+    /// A dead end that stops short of the middle of another way is not bridged.
     public var hopDistance: Double
     /// The feature classes that count as lines; by default ``LineNetwork/travelClasses``.
     public var classes: Set<UInt8>
 
-    /// Creates rules; negative values are made 0, and at least one candidate is kept.
+    /// Creates rules; negative values and values that are not numbers are made the smallest allowed, and at least one candidate is kept.
     ///
     /// - Parameters:
     ///   - reach: The distance within which a line is a candidate, in metres.
@@ -52,16 +53,18 @@ public struct MatchingRules: Sendable, Equatable {
         maximumCandidates: Int = 6, offNetworkDistance: Double = 30, switchPenalty: Double = 4, minimumSpacing: Double = 10,
         hopDistance: Double = 3, classes: Set<UInt8> = LineNetwork.travelClasses
     ) {
-        self.reach = max(reach, 0)
-        self.gpsSigma = max(gpsSigma, 1)
-        self.transitionBeta = max(transitionBeta, 1)
-        self.maximumDetour = max(maximumDetour, 1)
-        self.detourSlack = max(detourSlack, 0)
+        // A value that is not a number is taken as the smallest allowed.
+        func atLeast(_ value: Double, _ minimum: Double) -> Double { value.isNaN ? minimum : max(value, minimum) }
+        self.reach = atLeast(reach, 0)
+        self.gpsSigma = atLeast(gpsSigma, 1)
+        self.transitionBeta = atLeast(transitionBeta, 1)
+        self.maximumDetour = atLeast(maximumDetour, 1)
+        self.detourSlack = atLeast(detourSlack, 0)
         self.maximumCandidates = max(maximumCandidates, 1)
-        self.offNetworkDistance = max(offNetworkDistance, 0)
-        self.switchPenalty = max(switchPenalty, 0)
-        self.minimumSpacing = max(minimumSpacing, 0)
-        self.hopDistance = max(hopDistance, 0)
+        self.offNetworkDistance = atLeast(offNetworkDistance, 0)
+        self.switchPenalty = atLeast(switchPenalty, 0)
+        self.minimumSpacing = atLeast(minimumSpacing, 0)
+        self.hopDistance = atLeast(hopDistance, 0)
         self.classes = classes
     }
 
