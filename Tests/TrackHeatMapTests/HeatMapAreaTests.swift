@@ -209,3 +209,78 @@ struct HeatMapAreaTests {
         #expect(pole.north <= 85 && pole.south >= -85)
     }
 }
+
+@Suite("Heat map emptiness")
+struct HeatMapEmptinessTests {
+    private let nearPath = BoundingBox(south: 59.995, west: 9.995, north: 60.005, east: 10.015)
+    private let nearOtherPath = BoundingBox(south: 60.045, west: 9.995, north: 60.055, east: 10.015)
+    private let nowhere = BoundingBox(south: 59.91, west: 10.06, north: 59.92, east: 10.08)
+
+    /// A map with two paths in different cells: way 7 near 60.0° N and way 8 near 60.05° N.
+    private func map() throws -> FeatureStoreFile {
+        var writer = FeatureStoreWriter(
+            boundingBox: BoundingBox(south: 59.9, west: 9.9, north: 60.1, east: 10.1), attribution: "© OpenStreetMap contributors, ODbL")
+        for (way, latitude) in [(Int64(7), 600_000_000), (Int64(8), 600_500_000)] {
+            let cell = try #require(TileID.containing(Coordinate(latitude: Double(latitude) / 1e7, longitude: 10.005), zoom: 13))
+            try writer.add(
+                StoredFeature(
+                    classID: FeatureClass.path.rawValue, kind: .line, objectType: .way, objectID: way,
+                    parts: [GeometryPart(points: [PackedPoint(longitude: 100_000_000, latitude: Int32(latitude)), PackedPoint(longitude: 100_100_000, latitude: Int32(latitude))])]),
+                band: .detail, cell: cell)
+        }
+        return try FeatureStoreFile(data: try writer.data())
+    }
+
+    private func store(counting: Bool) async throws -> TrackStore {
+        let store = try TrackStore(url: nil)
+        guard counting else { return store }
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let samples = (0...20).map { TrackLeg.Sample(metre: Double($0) * 10, time: start.addingTimeInterval(Double($0) * 4)) }
+        let leg = try #require(TrackLeg(wayID: 7, classID: FeatureClass.path.rawValue, direction: .forward, samples: samples, confidence: 0.9))
+        try await store.add(StoredActivity(appID: "a", started: start, category: "run", mapID: "m"), legs: [leg])
+        return store
+    }
+
+    @Test("Each reason for an empty frame is told apart, and a frame with buckets has none")
+    func reasons() async throws {
+        let empty = try await store(counting: false)
+        let counted = try await store(counting: true)
+        let total = try await counted.countedBucketCount()
+        #expect(total == 20)
+
+        let nothing = try await HeatMapArea.make(store: empty, source: try map(), box: nearPath).frame()
+        #expect(nothing.emptiness(databaseCountedPieces: 0) == .databaseHasNoCounts)
+
+        let outside = try await HeatMapArea.make(store: counted, source: try map(), box: nowhere).frame()
+        #expect(outside.waysInArea == 0 && outside.emptiness(databaseCountedPieces: total) == .noWaysInArea)
+
+        // The counts are on way 7; the area is around way 8.
+        let elsewhere = try await HeatMapArea.make(store: counted, source: try map(), box: nearOtherPath).frame()
+        #expect(elsewhere.waysInArea == 1 && !elsewhere.isFiltered && elsewhere.emptiness(databaseCountedPieces: total) == .countsElsewhere)
+
+        let area = try await HeatMapArea.make(store: counted, source: try map(), box: nearPath)
+        let ski = try await area.frame(categories: ["ski"])
+        #expect(ski.isFiltered && ski.emptiness(databaseCountedPieces: total) == .nothingInFilter)
+        let full = try await area.frame()
+        #expect(full.bucketCount == 20 && full.emptiness(databaseCountedPieces: total) == nil)
+    }
+
+    @Test("An empty month of a time-lapse is a filtered frame, not a sign that the counts are elsewhere")
+    func emptyMonth() async throws {
+        let store = try TrackStore(url: nil)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let samples = (0...20).map { TrackLeg.Sample(metre: Double($0) * 10, time: start.addingTimeInterval(Double($0) * 4)) }
+        let leg = try #require(TrackLeg(wayID: 7, classID: FeatureClass.path.rawValue, direction: .forward, samples: samples, confidence: 0.9))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        for month in [1, 3] {
+            let when = calendar.date(from: DateComponents(year: 2024, month: month, day: 15))!
+            try await store.add(StoredActivity(appID: "m\(month)", started: when, category: "run", mapID: "m"), legs: [leg])
+        }
+        let area = try await HeatMapArea.make(store: store, source: try map(), box: nearPath)
+        let lapse = try #require(try await area.timeLapse())
+        let february = await lapse.frame(at: 1, span: .last(months: 1))
+        #expect(february.bucketCount == 0 && february.isFiltered)
+        #expect(february.emptiness(databaseCountedPieces: 20) == .nothingInFilter)
+    }
+}

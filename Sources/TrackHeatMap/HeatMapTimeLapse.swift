@@ -75,7 +75,8 @@ public actor HeatMapTimeLapse {
         move(to: first...last)
         let buckets = total.map { HeatMapBucket(wayID: $0.key.way, bucket: $0.key.bucket, count: $0.value) }
         return HeatMapArea.frame(
-            buckets: buckets, ways: ways, wayCount: wayCount, months: range.lowerBound.adding(months: first)...range.lowerBound.adding(months: last), scale: scale)
+            buckets: buckets, ways: ways, wayCount: wayCount, months: range.lowerBound.adding(months: first)...range.lowerBound.adding(months: last),
+            filtered: true, scale: scale)
     }
 
     /// Changes the running total from the months it holds to the months wanted, adding and taking away only the difference.

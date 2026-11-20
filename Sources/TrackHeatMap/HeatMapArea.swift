@@ -61,7 +61,8 @@ public final class HeatMapArea: Sendable {
         let counts = try await store.counts(ways: wayIDs, categories: categories, months: months)
         let buckets = counts.map { HeatMapBucket(wayID: $0.wayID, bucket: $0.bucket, count: measure == .passes ? $0.passes : $0.activities) }
         let stored = try await store.activityMonths(categories: categories)
-        return Self.frame(buckets: buckets, ways: ways, wayCount: wayIDs.count, months: months ?? stored, scale: scale)
+        return Self.frame(
+            buckets: buckets, ways: ways, wayCount: wayIDs.count, months: months ?? stored, filtered: categories != nil || months != nil, scale: scale)
     }
 
     /// A time-lapse of the counts of some categories, month by month.
@@ -97,9 +98,10 @@ public final class HeatMapArea: Sendable {
             north: min(corners.map(\.latitude).max() ?? 0, 85), east: min(corners.map(\.longitude).max() ?? 0, 180))
     }
 
-    static func frame(buckets: [HeatMapBucket], ways: HeatMapWays, wayCount: Int, months: ClosedRange<TrackMonth>?, scale: HeatMapScale) -> HeatMapFrame {
+    static func frame(buckets: [HeatMapBucket], ways: HeatMapWays, wayCount: Int, months: ClosedRange<TrackMonth>?, filtered: Bool, scale: HeatMapScale
+    ) -> HeatMapFrame {
         HeatMapFrame(
             overlay: HeatMapOverlay(buckets: buckets, ways: ways, scale: scale), months: months,
-            bucketCount: buckets.filter { $0.count > 0 }.count, maximumCount: buckets.map(\.count).max() ?? 0, waysInArea: wayCount)
+            bucketCount: buckets.filter { $0.count > 0 }.count, maximumCount: buckets.map(\.count).max() ?? 0, waysInArea: wayCount, isFiltered: filtered)
     }
 }

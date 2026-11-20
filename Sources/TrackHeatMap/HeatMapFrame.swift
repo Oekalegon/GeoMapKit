@@ -11,7 +11,9 @@ public struct HeatMapFrame: Sendable {
     public let bucketCount: Int
     /// The highest count of a bucket, 0 for an empty frame.
     public let maximumCount: Int
-    /// The number of ways of the map in the area. When it is 0 the area has no lines (it is outside the map, or a place with no paths);
-    /// when it is not 0 and the frame is empty, the counts of the store are somewhere else.
+    /// The number of ways of the map in the area; 0 means the area has no lines (outside the map, or a place with no paths).
     public let waysInArea: Int
+    /// Whether the frame counts only some categories or months. A frame of a time-lapse always does (it shows a month or a window of
+    /// months), so an empty one need not mean that the counts are elsewhere: see ``emptiness(databaseCountedPieces:)``.
+    public let isFiltered: Bool
 }

@@ -330,6 +330,9 @@ public actor TrackStore {
     }
 
     /// The number of buckets (10 m pieces of ways) that have a count in the store, over all months and categories.
+    ///
+    /// It reads the whole table of counts (a piece counts once, however many months and categories used it). Measured in a debug build:
+    /// 10 ms for 376,000 pieces, so a few tens of milliseconds for a long history; it does not belong in a per-frame path.
     public func countedBucketCount() throws -> Int {
         var count = 0
         try database.run("SELECT COUNT(*) FROM (SELECT DISTINCT way, bucket FROM count)") { count = Int($0.integer(0)) }

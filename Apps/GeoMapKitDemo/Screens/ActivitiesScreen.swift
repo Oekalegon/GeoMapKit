@@ -109,7 +109,7 @@ struct ActivitiesScreen: View {
                 Text("\(frame.bucketCount) pieces of 10 m, most used \(frame.maximumCount)\(frame.months.map { " (" + label($0) + ")" } ?? "")")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            if let frame = heatMap.frame, frame.bucketCount == 0 { emptyExplanation(frame) }
+            if let frame = heatMap.frame { emptyExplanation(frame) }
             if heatMap.isOutOfDate { Text("The database changed since this was made: press Show or Time-lapse again.").font(.footnote).foregroundStyle(.orange) }
             if let problem = heatMap.problem { Text(problem).font(.footnote).foregroundStyle(.red) }
         } header: { Text("Heat map") } footer: {
@@ -117,18 +117,22 @@ struct ActivitiesScreen: View {
         }
     }
 
-    /// Says why a heat map is empty, from what is known: the ways of the area and the counts of the whole database.
-    private func emptyExplanation(_ frame: HeatMapFrame) -> some View {
+    /// Says why a heat map is empty; the reason is the package's (`HeatMapFrame.emptiness`), this only puts it in words.
+    @ViewBuilder private func emptyExplanation(_ frame: HeatMapFrame) -> some View {
         let total = activities.totals.countedPieces
-        let text: String
-        if total == 0 {
-            text = "The database has no counted pieces at all: the tracks were stored without legs along ways (they did not follow paths of the selected map, or they are of a category that is not matched). Import again with the map that covers them."
-        } else if frame.waysInArea == 0 {
-            text = "The map has no paths in this area, so nothing can be drawn here. The database has \(total) counted pieces elsewhere."
-        } else {
-            text = "Nothing was counted on the \(frame.waysInArea) ways of this area, but the database has \(total) counted pieces elsewhere (the part you look at may be where the track left the paths: that is kept as off-track lines, \(activities.totals.offTrackLines) of them, and is not drawn yet). Try the area of the track."
+        if let reason = frame.emptiness(databaseCountedPieces: total) {
+            let text: String = switch reason {
+            case .databaseHasNoCounts:
+                "The database has \(activities.totals.activities) activities but no counted pieces of ways. Usual reasons: the tracks did not follow paths of the selected map, they are of a category that is not matched (orienteering), or an import did not finish. The report under Import says what happened."
+            case .noWaysInArea:
+                "The map has no paths in this area, so nothing can be drawn here. The database has \(total) counted pieces elsewhere."
+            case .nothingInFilter:
+                "Nothing was counted in these months or categories. The database has \(total) counted pieces in all."
+            case .countsElsewhere:
+                "Nothing was counted on the \(frame.waysInArea) ways of this area; the database has \(total) counted pieces elsewhere. The place you look at may be where the track left the paths: that part is kept as off-track lines (\(activities.totals.offTrackLines) in the database) and is not drawn yet. Try the area of the track."
+            }
+            Text(text).font(.footnote).foregroundStyle(.orange)
         }
-        return Text(text).font(.footnote).foregroundStyle(.orange)
     }
 
     private func timeLapseControls(_ lapse: HeatMapTimeLapse) -> some View {
