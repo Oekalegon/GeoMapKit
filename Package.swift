@@ -27,6 +27,7 @@ let package = Package(
         .library(name: "TrackOverlays", targets: ["TrackOverlays"]),
         .library(name: "TrackMatching", targets: ["TrackMatching"]),
         .library(name: "TrackStorage", targets: ["TrackStorage"]),
+        .library(name: "TrackImport", targets: ["TrackImport"]),
     ],
     targets: [
         // Web Mercator maths, tile coordinates, geometry.
@@ -67,6 +68,8 @@ let package = Package(
         .target(name: "TrackMatching", dependencies: ["GeoCore", "FeatureStore", "Tracks"]),
         // The segment database. TrackMatching is for TrackLeg, the unit that is stored.
         .target(name: "TrackStorage", dependencies: ["GeoCore", "Tracks", "TrackMatching"]),
+        // From an app's activities to the store: category suggestions, bulk selection, clean, match, legs, add.
+        .target(name: "TrackImport", dependencies: ["GeoCore", "Tracks", "TrackMatching", "TrackStorage"]),
 
         // Builds small PBF files for tests (test-only; no product).
         .target(name: "PBFTestSupport", path: "Tests/PBFTestSupport"),
@@ -82,6 +85,7 @@ let package = Package(
         .testTarget(name: "RegionsTests", dependencies: ["Regions", "GeoCore"]),
         .testTarget(name: "TracksTests", dependencies: ["Tracks", "GeoCore"]),
         .testTarget(name: "TrackMatchingTests", dependencies: ["TrackMatching", "FeatureStore", "FeatureStoreBuilder", "Tracks", "GeoCore"]),
+        .testTarget(name: "TrackImportTests", dependencies: ["TrackImport", "TrackStorage", "TrackMatching", "FeatureStore", "FeatureStoreBuilder", "Tracks", "GeoCore"]),
         .testTarget(name: "TrackStorageTests", dependencies: ["TrackStorage", "TrackMatching", "Tracks", "GeoCore"]),
         .testTarget(name: "TrackOverlaysTests", dependencies: ["TrackOverlays", "TrackMatching", "FeatureStore", "MapRender", "MapStyle", "Tracks", "GeoCore"]),
     ],

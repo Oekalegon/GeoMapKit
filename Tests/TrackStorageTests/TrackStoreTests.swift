@@ -251,11 +251,50 @@ struct TrackStoreTests {
         let june = Date(timeIntervalSince1970: 1_717_200_000)
         try await store.add(activity("trail", category: "trail", at: start), legs: [], offTrack: [try offTrack(0, 300)])
         try await store.add(activity("road", category: "road", at: june), legs: [], offTrack: [try offTrack(0, 300, north: 3), try offTrack(0, 200, north: 200)])
-        #expect(try await store.traces().count == 2)
+        // One trace for the trail run, two for the road run: the categories are made apart, so the road run's line over the same ground is its own.
+        #expect(try await store.traces().count == 3)
         #expect(try await store.traces(categories: ["trail"]).map(\.passes) == [1])
         #expect(try await store.traces(categories: ["road"]).map(\.activities) == [1, 1])
         #expect(try await store.traces(categories: []).isEmpty)
         #expect(try await store.traces(months: TrackMonth(start)...TrackMonth(start)).count == 1)
+    }
+
+    @Test("The traces of each category are made apart: a line never joins a trace of another category")
+    func tracesPerCategory() async throws {
+        let store = try TrackStore(url: nil)
+        try await store.add(activity("a", category: "trail"), legs: [], offTrack: [try offTrack(0, 300)])
+        try await store.add(activity("b", category: "orienteering", at: start.addingTimeInterval(86_400)), legs: [], offTrack: [try offTrack(0, 300, north: 3)])
+        let all = try await store.traces()
+        #expect(all.count == 2 && all.allSatisfy { $0.activities == 1 && $0.passes == 1 })
+        #expect(Set(all.map(\.id)).count == 2)
+        // The same two lines in one category are one trace.
+        let one = try TrackStore(url: nil)
+        try await one.add(activity("a", category: "trail"), legs: [], offTrack: [try offTrack(0, 300)])
+        try await one.add(activity("b", category: "trail", at: start.addingTimeInterval(86_400)), legs: [], offTrack: [try offTrack(0, 300, north: 3)])
+        #expect(try await one.traces().count == 1)
+    }
+
+    @Test("A database of version 2 is made current when it is opened: its traces, made from all categories together, are made again")
+    func versionThree() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("trackstore-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("tracks.sqlite")
+        do {
+            let store = try TrackStore(url: url)
+            try await store.add(activity("a", category: "trail"), legs: [], offTrack: [try offTrack(0, 300)])
+            try await store.add(activity("b", category: "orienteering", at: start.addingTimeInterval(86_400)), legs: [], offTrack: [try offTrack(0, 300, north: 3)])
+            #expect(try await store.traces().count == 2)
+        }
+        // Back to version 2, with the traces as it made them: one trace for both categories, and not stale.
+        let database = try SQLiteDatabase(path: url.path)
+        try database.execute("DELETE FROM trace_pass")
+        try database.execute("DELETE FROM trace")
+        try database.execute("INSERT INTO trace(id, line, length) VALUES (1, x'', 300)")
+        try database.execute("UPDATE meta SET value = '0' WHERE key = 'traces_stale'")
+        try database.execute("PRAGMA user_version = 2")
+        let reopened = try TrackStore(url: url)
+        #expect(try await reopened.traces().count == 2)
     }
 
     @Test("Removing or replacing an activity makes the traces again the next time they are asked for")
