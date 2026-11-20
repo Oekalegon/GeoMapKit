@@ -11,11 +11,12 @@ import Tracks
 struct TraceBuilderTests {
     /// A line along 60 N from east `from` to east `to`, `north` metres to the north, with a point every 10 m (1 degree of longitude is
     /// 55.6 km there).
-    private func line(_ from: Double, _ to: Double, north: Double = 0, backwards: Bool = false) -> [Coordinate] {
+    private func line(_ from: Double, _ to: Double, north: Double = 0, backwards: Bool = false, latitude: Double = 60) -> [Coordinate] {
         let count = Int(abs(to - from) / 10)
+        let metresPerDegreeOfLongitude = 111_195 * cos(latitude * .pi / 180)
         let points = (0...count).map { index in
             Coordinate(
-                latitude: 60 + north / 111_195, longitude: 10 + (from + (to - from) * Double(index) / Double(count)) / 55_597)
+                latitude: latitude + north / 111_195, longitude: 10 + (from + (to - from) * Double(index) / Double(count)) / metresPerDegreeOfLongitude)
         }
         return backwards ? points.reversed() : points
     }
@@ -89,6 +90,74 @@ struct TraceBuilderTests {
         #expect(rules.joinDistance == 1 && rules.minimumJoinLength == 0 && rules.spacing == 1)
     }
 
+    @Test("A branch starts on the trace it leaves, and ends on the one it meets, so there is no gap of a sample")
+    func branchesAreConnected() throws {
+        var builder = TraceBuilder()
+        builder.add(line(0, 400), source: 1)
+        // Along the trace for 100 m, then north-east away from it.
+        let along = line(100, 200)
+        let away = (1...12).map { Coordinate(latitude: along.last!.latitude + Double($0) * 10 / 111_195, longitude: along.last!.longitude + Double($0) * 10 / 55_597) }
+        builder.add(along + away, source: 2)
+        #expect(builder.traces.count == 2)
+        let branch = builder.traces[1]
+        let first = try #require(branch.coordinates.first)
+        // The trace is along 60 N: the branch starts on it (within a few centimetres of its latitude).
+        #expect(abs(first.latitude - 60) * 111_195 < 1.5, "the branch starts \(abs(first.latitude - 60) * 111_195) m from the trace")
+    }
+
+    @Test("The join length is a limit: 60 m along a trace joins it, 40 m does not")
+    func joinLimit() {
+        func traces(along to: Double) -> Int {
+            var builder = TraceBuilder()
+            builder.add(line(0, 300), source: 1)
+            builder.add(line(100, to), source: 2)
+            return builder.traces.count
+        }
+        #expect(traces(along: 160) == 1, "60 m joins")
+        #expect(traces(along: 140) == 2, "40 m is too short")
+    }
+
+    @Test("A stretch that runs along a trace twice joins it twice: two passes, one activity")
+    func twoSections() {
+        var builder = TraceBuilder()
+        builder.add(line(0, 300), source: 1)
+        // Along the trace 0 to 100, 100 m north, 50 m east, 100 m back south onto the trace, then on along it to 250.
+        var path = line(0, 100)
+        let north = (1...10).map { Coordinate(latitude: 60 + Double($0) * 10 / 111_195, longitude: 10 + 100 / 55_597.0) }
+        let east = (1...5).map { Coordinate(latitude: 60 + 100 / 111_195.0, longitude: 10 + (100 + Double($0) * 10) / 55_597) }
+        let south = (1...10).map { Coordinate(latitude: 60 + Double(10 - $0) * 10 / 111_195, longitude: 10 + 150 / 55_597.0) }
+        path += north + east + south + line(150, 250).dropFirst()
+        builder.add(path, source: 2)
+        #expect(builder.traces[0].sources == [1, 2, 2], "\(builder.traces.map(\.sources))")
+    }
+
+    @Test("A vertex that an earlier stretch moved is found where it is now")
+    func movedVertices() {
+        var builder = TraceBuilder()
+        builder.add(line(0, 300), source: 1)
+        builder.add(line(0, 300, north: 10), source: 2)  // the trace is now about 5 m north
+        builder.add(line(0, 300, north: 15), source: 3)  // 15 m from where it was, 10 m from where it is
+        #expect(builder.traces.count == 1 && builder.traces[0].sources == [1, 2, 3])
+    }
+
+    @Test("A stretch that crosses a trace at a right angle does not join it: it is near for 24 m only")
+    func crossing() {
+        var builder = TraceBuilder()
+        builder.add(line(0, 300), source: 1)
+        let across = (-20...20).map { Coordinate(latitude: 60 + Double($0) * 10 / 111_195, longitude: 10 + 150 / 55_597.0) }
+        builder.add(across, source: 2)
+        #expect(builder.traces.count == 2)
+    }
+
+    @Test("Traces far from the first line, at another latitude, are found as well as the ones beside it")
+    func otherLatitudes() {
+        var builder = TraceBuilder()
+        builder.add(line(0, 300, latitude: 40), source: 1)
+        builder.add(line(0, 300, latitude: 78), source: 2)
+        builder.add(line(0, 300, north: 8, latitude: 78), source: 3)
+        #expect(builder.traces.count == 2 && builder.traces[1].sources == [2, 3], "\(builder.traces.map(\.sources))")
+    }
+
     @Test("The order of the stretches matters, and the same order gives the same traces")
     func repeatable() {
         func build() -> [TrackTrace] {
@@ -140,6 +209,10 @@ struct OffTrackLinesTests {
         #expect(lines.count >= 1, "stretches \(matched.stretches.map { ($0.isMatched, $0.length) })")
         let line = try #require(lines.first)
         #expect(line.length >= 30 && line.elapsed > 0 && line.coordinates.count >= 3)
+        // It starts where the matched stretch before ended (on the first path) and ends where the next begins (on the second).
+        let first = try #require(line.coordinates.first), last = try #require(line.coordinates.last)
+        #expect(abs(first.latitude - 60) < 1e-4 && first.longitude < 10.0051, "starts on the first path: \(first)")
+        #expect(abs(last.latitude - 60.006) < 1e-4 && last.longitude > 10.0049, "ends on the second path: \(last)")
         #expect(OffTrackLines.lines(of: matched, points: track, minimumLength: 10_000).isEmpty)
     }
 

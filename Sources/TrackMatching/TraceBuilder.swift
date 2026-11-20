@@ -9,6 +9,9 @@ import GeoCore
 /// trace, or near one for too short a distance) starts **new traces**. A trace is walked either way, so a stretch that comes back along
 /// it joins it as well. A stretch is compared with the traces that existed before it, never with the ones it makes itself.
 ///
+/// Lines across the antimeridian are not supported (the cells and the distances assume that longitudes do not wrap), like the rest of
+/// the matching.
+///
 /// The result depends on the order in which the stretches are added (the first line of a trace is its first shape), so a store adds
 /// them in the order of the activities' start times. The builder is a value, and everything in it is derived: it can be made again
 /// from the stretches.
@@ -107,11 +110,21 @@ public struct TraceBuilder: Sendable {
             var end = start + 1
             while end < samples.count, !joined[end] { end += 1 }
             if end - start >= 2, made.count < 1_000 {
-                let part = samples[start..<end]
+                // A trace that leaves or meets another one starts or ends on it: the point of the other trace nearest to the last
+                // joined sample is the first or last vertex, so a branch is not 5 m away from the trace it comes off.
+                var latitudes = samples[start..<end].map(\.latitude), longitudes = samples[start..<end].map(\.longitude)
+                if start > 0, let before = matches[start - 1] {
+                    latitudes.insert(before.latitude, at: 0)
+                    longitudes.insert(before.longitude, at: 0)
+                }
+                if end < samples.count, let after = matches[end] {
+                    latitudes.append(after.latitude)
+                    longitudes.append(after.longitude)
+                }
                 made.append(
                     Trace(
-                        id: source * 1_000 + Int64(made.count), latitudes: part.map(\.latitude), longitudes: part.map(\.longitude),
-                        weights: [Double](repeating: 1, count: part.count), sources: [source]))
+                        id: source * 1_000 + Int64(made.count), latitudes: latitudes, longitudes: longitudes,
+                        weights: [Double](repeating: 1, count: latitudes.count), sources: [source]))
             }
             start = end
         }
@@ -189,33 +202,47 @@ public struct TraceBuilder: Sendable {
     private func nearest(to point: Coordinate) -> Match? {
         guard !grid.isEmpty else { return nil }
         let centre = cell(latitude: point.latitude, longitude: point.longitude)
-        // A cell is at least about 15 m across at the latitudes of Europe; the reach is the join distance and a segment.
-        let reach = max(1, Int(((rules.joinDistance + rules.spacing) / 15).rounded(.up)))
         let metresPerDegree = Coordinate.earthRadius * .pi / 180
         let cosine = max(cos(point.latitude * .pi / 180), 0.01)
+        // The reach in cells, from the size of a cell here: 0.0002 degrees of latitude, and as many scaled degrees of longitude, which
+        // are narrower in metres where the cosine is smaller than at the first line. A line far from the first one has the same reach
+        // in metres as one beside it.
+        let cellHeight = Self.cellDegrees * metresPerDegree
+        let cellWidth = Self.cellDegrees / (longitudeScale ?? 1) * metresPerDegree * cosine
+        let wanted = rules.joinDistance + rules.spacing
+        let reachY = max(1, Int((wanted / cellHeight).rounded(.up)))
+        let reachX = min(max(1, Int((wanted / cellWidth).rounded(.up))), 200)
         var best: Match?
-        var checked = Set<VertexReference>()
-        for x in (centre.x - reach)...(centre.x + reach) {
-            for y in (centre.y - reach)...(centre.y + reach) {
+        func consider(_ trace: Trace, traceIndex: Int, segment: Int) {
+            guard segment >= 0, segment + 1 < trace.latitudes.count else { return }
+            // The segment on a flat map in metres, with the point at the origin.
+            let ax = (trace.longitudes[segment] - point.longitude) * metresPerDegree * cosine
+            let ay = (trace.latitudes[segment] - point.latitude) * metresPerDegree
+            let bx = (trace.longitudes[segment + 1] - point.longitude) * metresPerDegree * cosine
+            let by = (trace.latitudes[segment + 1] - point.latitude) * metresPerDegree
+            let dx = bx - ax, dy = by - ay
+            let squared = dx * dx + dy * dy
+            let fraction = squared > 0 ? max(0, min(1, -(ax * dx + ay * dy) / squared)) : 0
+            let distance = hypot(ax + fraction * dx, ay + fraction * dy)
+            guard distance <= rules.joinDistance, distance < (best?.distance ?? .infinity) else { return }
+            best = Match(
+                trace: traceIndex, segment: segment, fraction: fraction, distance: distance,
+                latitude: trace.latitudes[segment] + (trace.latitudes[segment + 1] - trace.latitudes[segment]) * fraction,
+                longitude: trace.longitudes[segment] + (trace.longitudes[segment + 1] - trace.longitudes[segment]) * fraction)
+        }
+        let xs = (centre.x - reachX)...(centre.x + reachX), ys = (centre.y - reachY)...(centre.y + reachY)
+        for x in xs {
+            for y in ys {
                 for vertex in grid[Cell(x: x, y: y)] ?? [] {
                     let trace = traceList[vertex.trace]
-                    for segment in [vertex.index - 1, vertex.index] where segment >= 0 && segment + 1 < trace.latitudes.count {
-                        let key = VertexReference(trace: vertex.trace, index: segment)
-                        guard checked.insert(key).inserted else { continue }
-                        // The segment on a flat map in metres, with the point at the origin.
-                        let ax = (trace.longitudes[segment] - point.longitude) * metresPerDegree * cosine
-                        let ay = (trace.latitudes[segment] - point.latitude) * metresPerDegree
-                        let bx = (trace.longitudes[segment + 1] - point.longitude) * metresPerDegree * cosine
-                        let by = (trace.latitudes[segment + 1] - point.latitude) * metresPerDegree
-                        let dx = bx - ax, dy = by - ay
-                        let squared = dx * dx + dy * dy
-                        let fraction = squared > 0 ? max(0, min(1, -(ax * dx + ay * dy) / squared)) : 0
-                        let distance = hypot(ax + fraction * dx, ay + fraction * dy)
-                        guard distance <= rules.joinDistance, distance < (best?.distance ?? .infinity) else { continue }
-                        best = Match(
-                            trace: vertex.trace, segment: segment, fraction: fraction, distance: distance,
-                            latitude: trace.latitudes[segment] + (trace.latitudes[segment + 1] - trace.latitudes[segment]) * fraction,
-                            longitude: trace.longitudes[segment] + (trace.longitudes[segment + 1] - trace.longitudes[segment]) * fraction)
+                    // The segment after a vertex always; the one before it only when the vertex before is outside the cells looked at
+                    // (otherwise that vertex has it), so no segment is looked at twice.
+                    consider(trace, traceIndex: vertex.trace, segment: vertex.index)
+                    if vertex.index > 0 {
+                        let before = cell(latitude: trace.latitudes[vertex.index - 1], longitude: trace.longitudes[vertex.index - 1])
+                        if !xs.contains(before.x) || !ys.contains(before.y) {
+                            consider(trace, traceIndex: vertex.trace, segment: vertex.index - 1)
+                        }
                     }
                 }
             }

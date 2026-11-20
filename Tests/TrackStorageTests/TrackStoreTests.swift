@@ -308,6 +308,71 @@ struct TrackStoreTests {
         await #expect(throws: TrackStoreError.damaged("the trace 1000")) { try await store.traces() }
     }
 
+    @Test("A file that was made up to version 1 and not finished is finished when it is opened")
+    func halfMade() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("trackstore-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("tracks.sqlite")
+        do { _ = try TrackStore(url: url) }
+        // Back to what a start that was cut short between the two steps leaves: the tables of version 1 and the number 1.
+        let database = try SQLiteDatabase(path: url.path)
+        for table in ["trace_pass", "trace", "offtrack", "meta"] { try database.execute("DROP TABLE \(table)") }
+        try database.execute("PRAGMA user_version = 1")
+        let store = try TrackStore(url: url)
+        try await store.add(activity("a"), legs: [try leg(1, 0, 50)], offTrack: [try offTrack(0, 300)])
+        #expect(try await store.traces().count == 1)
+    }
+
+    @Test("The rules of the traces are kept in the file, and a store opened with other rules makes the traces again")
+    func rulesAreKept() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("trackstore-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("tracks.sqlite")
+        do {
+            let store = try TrackStore(url: url)
+            try await store.add(activity("a"), legs: [], offTrack: [try offTrack(0, 300)])
+            try await store.add(activity("b", at: start.addingTimeInterval(10)), legs: [], offTrack: [try offTrack(0, 300, north: 20)])
+            #expect(try await store.traces().count == 2, "20 m apart is beyond the 12 m of the standard rules")
+        }
+        let wide = try TrackStore(url: url, traceRules: TraceRules(joinDistance: 30))
+        #expect(wide.traceRules.joinDistance == 30)
+        #expect(try await wide.traces().count == 1, "with 30 m the second line joins")
+        try await wide.add(activity("c", at: start.addingTimeInterval(20)), legs: [], offTrack: [try offTrack(0, 300, north: 5)])
+        #expect(try await wide.traces().count == 1, "the new line is put together with the rules of the store, not the standard ones")
+    }
+
+    @Test("Removing an activity removes its off-track lines, and the ids of the traces of the others stay the same")
+    func cascadeAndIds() async throws {
+        let store = try TrackStore(url: nil)
+        try await store.add(activity("a"), legs: [], offTrack: [try offTrack(0, 300)])
+        try await store.add(activity("b", at: start.addingTimeInterval(10)), legs: [], offTrack: [try offTrack(0, 200, north: 300)])
+        try await store.add(activity("c", at: start.addingTimeInterval(20)), legs: [], offTrack: [try offTrack(0, 200, north: 600)])
+        let before = try await store.traces().map(\.id)
+        #expect(before.count == 3)
+        try await store.remove(appID: "c")
+        let lines = try await store.offTrackLineCount()
+        #expect(lines == 2)
+        #expect(try await store.traces().map(\.id) == Array(before.prefix(2)))
+        // A line added later does not get the id of one that was removed.
+        try await store.add(activity("d", at: start.addingTimeInterval(30)), legs: [], offTrack: [try offTrack(0, 200, north: 900)])
+        #expect(try await store.traces().map(\.id).last != before.last)
+    }
+
+    @Test("Making the traces again from thousands of lines takes seconds at most, also in a debug build")
+    func rebuildCost() async throws {
+        let store = try TrackStore(url: nil)
+        for index in 0..<1_000 {
+            // Five lines of 500 m each for every activity, across 1,000 places in rows so that some lines run along others.
+            let lines = try (0..<5).map { try offTrack(0, 500, north: Double((index % 40) * 30 + $0 * 400 + (index / 40) * 3)) }
+            try await store.add(activity("a\(index)", at: start.addingTimeInterval(Double(index))), legs: [], offTrack: lines)
+        }
+        let clock = ContinuousClock()
+        let time = try await clock.measure { _ = try await store.traces() }
+        #expect(time < .seconds(30), "making the traces of 5,000 lines took \(time)")
+    }
+
     @Test("A line keeps its points to a centimetre when it is stored")
     func lineBlob() throws {
         let line = [Coordinate(latitude: 59.9139123, longitude: 10.7522456), Coordinate(latitude: -33.8688, longitude: -151.2093)]
