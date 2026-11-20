@@ -51,6 +51,10 @@ targets:
         product: Tracks
       - package: GeoMapKit
         product: TrackOverlays
+      - package: GeoMapKit
+        product: TrackImport
+      - package: GeoMapKit
+        product: TrackStorage
       - target: GeoMapKitDemoWatch
         platformFilter: iOS
     settings:
@@ -144,6 +148,10 @@ targets:
         product: Tracks
       - package: GeoMapKit
         product: TrackOverlays
+      - package: GeoMapKit
+        product: TrackImport
+      - package: GeoMapKit
+        product: TrackStorage
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
