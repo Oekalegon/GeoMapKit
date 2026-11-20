@@ -259,6 +259,24 @@ struct TrackStoreTests {
         #expect(try await store.traces(months: TrackMonth(start)...TrackMonth(start)).count == 1)
     }
 
+    @Test("The activities are counted for each category, and a replaced activity moves to its new category")
+    func categories() async throws {
+        let store = try TrackStore(url: nil)
+        #expect(try await store.activityCategories().isEmpty)
+        try await store.add(activity("a", category: "trail"), legs: [])
+        try await store.add(activity("b", category: "trail"), legs: [])
+        try await store.add(activity("c", category: "road"), legs: [])
+        #expect(try await store.activityCategories() == ["trail": 2, "road": 1])
+        try await store.add(activity("a", category: "road"), legs: [])
+        #expect(try await store.activityCategories() == ["trail": 1, "road": 2])
+    }
+
+    @Test("The errors say in words what is wrong")
+    func errorText() {
+        #expect(TrackStoreError.newerVersion(found: 9, supported: 3).errorDescription?.contains("9") == true)
+        #expect(TrackStoreError.damaged("the trace 4").errorDescription?.contains("trace 4") == true)
+    }
+
     @Test("The traces of each category are made apart: a line never joins a trace of another category")
     func tracesPerCategory() async throws {
         let store = try TrackStore(url: nil)

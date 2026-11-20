@@ -19,6 +19,18 @@ public struct ActivitySelection: Sendable, Equatable {
         self.startsIn = startsIn
     }
 
+    /// A selection of whole days: from the start of the first day to the end of the last, in a calendar (the days of the user, not UTC).
+    ///
+    /// - Parameters:
+    ///   - days: The first and the last day; the time of day of each is ignored.
+    ///   - startsIn: The box that the start must be in, or `nil` for anywhere.
+    ///   - calendar: The calendar and time zone that say where a day begins.
+    public init(days: ClosedRange<Date>, startsIn: BoundingBox? = nil, calendar: Calendar = .current) {
+        let first = calendar.startOfDay(for: days.lowerBound)
+        let afterLast = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: days.upperBound)) ?? days.upperBound
+        self.init(dates: first...max(first, afterLast.addingTimeInterval(-0.001)), startsIn: startsIn)
+    }
+
     /// Whether an activity that started at a time and a position is picked.
     ///
     /// - Parameter position: Where it started; `nil` when that is not known, which no box picks.

@@ -58,8 +58,12 @@ final class ActivityLibrary {
     /// - Parameters:
     ///   - files: The files (the copies in the library of tracks).
     ///   - map: The map that the activities were recorded on.
-    ///   - change: A category for the activities a selection picks (bulk tagging).
-    func start(files: [URL], map: OpenedMap, change: CategoryChange? = nil) {
+    func start(files: [URL], map: OpenedMap) { run(files: files, map: map, retag: nil) }
+
+    /// Sets a category for the activities in the store that a selection picks; files that are not in the store are not imported.
+    func retag(files: [URL], map: OpenedMap, change: CategoryChange) { run(files: files, map: map, retag: change) }
+
+    private func run(files: [URL], map: OpenedMap, retag change: CategoryChange?) {
         guard task == nil, let store else { return }
         problem = nil
         report = nil
@@ -67,9 +71,12 @@ final class ActivityLibrary {
         let batch = ActivityBatchImporter(networks: ActivityNetworks(source: map.source), store: store, mapID: map.id, jobs: 2)
         let requests = files.map { ImportRequest.gpx(at: $0) }
         task = Task {
-            let result = await batch.run(requests, change: change) { progress in
-                Task { @MainActor in self.progress = progress }
+            let notify: @Sendable (ImportProgress) -> Void = { progress in
+                // A message that arrives after the run has ended is dropped.
+                Task { @MainActor in if self.task != nil { self.progress = progress } }
             }
+            let result: ImportReport
+            if let change { result = await batch.retag(requests, change: change, progress: notify) } else { result = await batch.run(requests, progress: notify) }
             report = result
             progress = nil
             task = nil

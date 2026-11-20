@@ -33,7 +33,8 @@ public struct ImportRequest: Sendable {
     /// A GPX file: each of its tracks that is an activity (points with times, in order) is one; the rest are problems that are reported.
     ///
     /// The tags of an activity are the ones ``GPXTrack/activity(id:tags:rules:)`` makes (`gpx.name`, `gpx.type`), and `gpx.file`, the
-    /// name of the file.
+    /// name of the file. **These tags are stored with the activity** (the name of a track and of a file can be personal; an export must
+    /// leave them out or let the app filter them).
     ///
     /// - Parameters:
     ///   - url: The file. The app is responsible for access to it (a copy in its own folder, or security-scoped access held).
@@ -50,6 +51,7 @@ public struct ImportRequest: Sendable {
                     loaded.problems.append("\(track.name ?? "a track"): \(error.localizedDescription)")
                 }
             }
+            for route in file.routes where !route.points.isEmpty { loaded.problems.append("\(route.name ?? "a route"): a planned route has no times.") }
             return loaded
         }
     }

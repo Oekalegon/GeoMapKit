@@ -78,7 +78,9 @@ struct ActivityBatchImporterTests {
         let store = try TrackStore(url: nil)
         let report = await (try importer(store)).run(try requests(directory))
         #expect(report.added == 1)
-        #expect(Set(report.failures.map(\.source)) == ["bad.gpx", "route.gpx"] && report.failures.allSatisfy { $0.activityID == nil })
+        // A file that cannot be read is a failure; a track with no times is not an activity, which is not an error.
+        #expect(report.failures.map(\.source) == ["bad.gpx"] && report.failures.allSatisfy { $0.activityID == nil })
+        #expect(report.notActivities.map(\.source) == ["route.gpx"])
     }
 
     @Test("A run that is cancelled starts nothing more, says so, and leaves the store as it was")
@@ -114,6 +116,77 @@ struct ActivityBatchImporterTests {
         let two = try await provider.network(for: BoundingBox(south: 60.001, west: 10.002, north: 60.002, east: 10.004))
         #expect(one.edges.count == 1 && two.edges.count == 1)
         await #expect(throws: (any Error).self) { _ = try await provider.network(for: BoundingBox(south: 40, west: -20, north: 70, east: 30)) }
+    }
+
+    @Test("A run that is cancelled while a source is being handled says so, also when every request was started")
+    func cancelledInTheMiddle() async throws {
+        let store = try TrackStore(url: nil)
+        let batch = try importer(store)
+        let one = try ActivityTrack(id: "x", points: [TrackPoint(coordinate: Coordinate(latitude: 60, longitude: 10), time: ImportFixtures.start), TrackPoint(coordinate: Coordinate(latitude: 60, longitude: 10.001), time: ImportFixtures.start.addingTimeInterval(60))], tags: [:])
+        let request = ImportRequest(source: "two") {
+            // The task of the request is cancelled after it has been read, with its activities still to do.
+            withUnsafeCurrentTask { $0?.cancel() }
+            return ImportRequest.Loaded(activities: [one, one])
+        }
+        let report = await batch.run([request])
+        #expect(report.cancelled && report.handled == 0)
+    }
+
+    @Test("Retagging changes the activities that are in the store and picked, and adds nothing that is not there")
+    func retag() async throws {
+        let directory = try ImportFixtures.folder(["a.gpx": ImportFixtures.gpx(name: "Run one"), "b.gpx": ImportFixtures.gpx(name: "Run two", first: 100_000)])
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try TrackStore(url: nil)
+        let batch = try importer(store)
+        let all = try requests(directory)
+        _ = await batch.run([all[0]])
+        let change = CategoryChange(selection: ActivitySelection(), category: "orienteering")
+        let report = await batch.retag(all, change: change)
+        #expect(report.replaced == 1 && report.added == 0 && report.skipped == 1)
+        let categories = try await store.activityCategories()
+        #expect(categories == ["orienteering": 1])
+    }
+
+    @Test("A change by the place of the start picks the activities that started in the box")
+    func changeByPlace() async throws {
+        let directory = try ImportFixtures.folder(["a.gpx": ImportFixtures.gpx(name: "Run")])
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try TrackStore(url: nil)
+        let batch = try importer(store)
+        _ = await batch.run(try requests(directory))
+        let near = BoundingBox(south: 59.99, west: 9.99, north: 60.01, east: 10.01)
+        let far = BoundingBox(south: 50, west: 0, north: 51, east: 1)
+        let missed = await batch.retag(try requests(directory), change: CategoryChange(selection: ActivitySelection(startsIn: far), category: "x"))
+        #expect(missed.replaced == 0 && missed.skipped == 1)
+        let hit = await batch.retag(try requests(directory), change: CategoryChange(selection: ActivitySelection(startsIn: near), category: "x"))
+        #expect(hit.replaced == 1)
+    }
+
+    @Test("The same activity in two files of one run is handled once, also with two jobs")
+    func duplicates() async throws {
+        let text = ImportFixtures.gpx(name: "Run")
+        let directory = try ImportFixtures.folder(["a.gpx": text, "b.gpx": text, "c.gpx": text])
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try TrackStore(url: nil)
+        let report = await (try importer(store)).run(try requests(directory))
+        #expect(report.added == 1 && report.skipped == 2 && report.replaced == 0)
+        let count = try await store.activityCount()
+        #expect(count == 1)
+    }
+
+    @Test("A GPX file gives an activity for each track with times, the tags of the file, and a problem for a route")
+    func gpxRequest() throws {
+        let one = ImportFixtures.gpx(name: "First")
+        let second = ImportFixtures.gpx(name: "Second", first: 100_000)
+        func body(_ text: String) -> String { text.components(separatedBy: "<trk>")[1].components(separatedBy: "</trk>")[0] }
+        let route = "<rte><name>Plan</name><rtept lat=\"60\" lon=\"10\"/><rtept lat=\"60\" lon=\"10.001\"/></rte>"
+        let file = "<?xml version=\"1.0\"?><gpx version=\"1.1\" creator=\"t\" xmlns=\"http://www.topografix.com/GPX/1/1\"><trk><type>running</type>\(body(one))</trk><trk>\(body(second))</trk>\(route)</gpx>"
+        let directory = try ImportFixtures.folder(["two.gpx": file])
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let loaded = try ImportRequest.gpx(at: directory.appendingPathComponent("two.gpx")).load()
+        #expect(loaded.activities.count == 2 && loaded.activities.allSatisfy { $0.tags["gpx.file"] == .string("two.gpx") })
+        #expect(loaded.activities[0].tags["gpx.name"] == .string("First") && loaded.activities[0].tags["gpx.type"] == .string("running"))
+        #expect(loaded.problems.count == 1 && loaded.problems[0].hasPrefix("Plan"))
     }
 }
 

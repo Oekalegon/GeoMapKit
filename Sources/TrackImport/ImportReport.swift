@@ -8,8 +8,10 @@ public struct ImportReport: Sendable, Equatable {
     public var skipped = 0
     /// Activities handled in each category (added, replaced or skipped).
     public var categories: [String: Int] = [:]
-    /// What failed, and what in a source was no activity.
+    /// What failed: a source that cannot be read, an activity that could not be matched or added.
     public var failures: [ImportFailure] = []
+    /// What in a source is no activity (a planned route, a track with no times): not an error, but not imported.
+    public var notActivities: [ImportFailure] = []
     /// Whether the run was stopped before all requests were done; what was done stays in the store.
     public var cancelled = false
 

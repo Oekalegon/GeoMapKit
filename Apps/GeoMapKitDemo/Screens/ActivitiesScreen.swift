@@ -19,6 +19,8 @@ struct ActivitiesScreen: View {
     @State private var problem: String?
 
     /// The tracks that have a box, to pick a place from.
+    private var datesAreValid: Bool { !limitDates || from <= until }
+
     private var places: [TrackItem] { tracks.items.filter { tracks.summaries[$0.id]?.box != nil } }
 
     var body: some View {
@@ -57,10 +59,11 @@ struct ActivitiesScreen: View {
                     ForEach(places) { Text($0.name).tag(Optional($0.id)) }
                 }
                 TextField("Category", text: $category)
+                if !datesAreValid { Text("From is after Until.").font(.footnote).foregroundStyle(.red) }
                 Button("Set the category") { start(change: change()) }
-                    .disabled(activities.isRunning || category.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(activities.isRunning || category.trimmingCharacters(in: .whitespaces).isEmpty || !datesAreValid)
             } header: { Text("Set a category in bulk") } footer: {
-                Text("The activities that are picked are put in the database again in this category. A category called orienteering is kept as it was recorded, with no matching.")
+                Text("Only activities that are in the database are changed; files that were not imported are left alone. A category called orienteering is kept as it was recorded, with no matching. Whole days count, in your time zone.")
             }
         }
         .navigationTitle("Activities")
@@ -74,14 +77,16 @@ struct ActivitiesScreen: View {
                 Text("\(failure.source): \(failure.message)").font(.footnote).foregroundStyle(.red)
             }
             if report.failures.count > 5 { Text("and \(report.failures.count - 5) more").font(.footnote).foregroundStyle(.secondary) }
+            if !report.notActivities.isEmpty {
+                Text("\(report.notActivities.count) tracks or routes without times were not imported.").font(.footnote).foregroundStyle(.secondary)
+            }
         }
     }
 
     private func change() -> CategoryChange {
-        let dates: ClosedRange<Date>? = limitDates && from <= until ? from...until : nil
         let box = placeID.flatMap { tracks.summaries[$0]?.box }
-        return CategoryChange(
-            selection: ActivitySelection(dates: dates, startsIn: box), category: category.trimmingCharacters(in: .whitespaces))
+        let selection = limitDates && datesAreValid ? ActivitySelection(days: from...until, startsIn: box) : ActivitySelection(startsIn: box)
+        return CategoryChange(selection: selection, category: category.trimmingCharacters(in: .whitespaces))
     }
 
     private func start(change: CategoryChange?) {
@@ -92,7 +97,17 @@ struct ActivitiesScreen: View {
         }
         do {
             let map = try library.open(item)
-            activities.start(files: tracks.items.map { tracks.url(of: $0) }, map: map, change: change)
+            if let change {
+                // A file with one activity that started outside the dates cannot be picked: it is not read at all.
+                let files = tracks.items.filter { item in
+                    guard let summary = tracks.summaries[item.id], summary.activities == 1, let start = summary.startDate, let dates = change.selection.dates
+                    else { return true }
+                    return dates.contains(start)
+                }
+                activities.retag(files: files.map { tracks.url(of: $0) }, map: map, change: change)
+            } else {
+                activities.start(files: tracks.items.map { tracks.url(of: $0) }, map: map)
+            }
         } catch { problem = "The map cannot be opened: \(error.localizedDescription)" }
     }
 }
