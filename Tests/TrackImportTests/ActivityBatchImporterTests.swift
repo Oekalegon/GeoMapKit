@@ -9,8 +9,9 @@ import Tracks
 
 @Suite("Activity batch importer")
 struct ActivityBatchImporterTests {
-    private func importer(_ store: TrackStore, matchedWith: Int = 1) throws -> ActivityBatchImporter {
-        ActivityBatchImporter(networks: ActivityNetworks(source: try ImportFixtures.map()), store: store, mapID: "test", matchedWith: matchedWith)
+    private func importer(_ store: TrackStore, matchedWith: Int = 1, policy: CategoryPolicy = CategoryPolicy()) throws -> ActivityBatchImporter {
+        ActivityBatchImporter(
+            networks: ActivityNetworks(source: try ImportFixtures.map()), store: store, mapID: "test", policy: policy, matchedWith: matchedWith)
     }
 
     private func requests(_ directory: URL) throws -> [ImportRequest] {
@@ -24,12 +25,16 @@ struct ActivityBatchImporterTests {
         ])
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = try TrackStore(url: nil)
-        let report = await (try importer(store)).run(try requests(directory))
+        // The standard policy suggests nothing: both are runs. An app that has the exception opts in.
+        let plain = await (try importer(store)).run(try requests(directory))
+        #expect(plain.categories == ["run": 2])
+        let other = try TrackStore(url: nil)
+        let report = await (try importer(other, policy: .orienteering)).run(try requests(directory))
         #expect(report.added == 2 && report.replaced == 0 && report.skipped == 0 && report.failures.isEmpty && !report.cancelled)
         #expect(report.categories == ["run": 1, "orienteering": 1])
-        let categories = try await store.activityCategories()
-        let runCounts = try await store.counts(ways: [7], categories: ["run"])
-        let olCounts = try await store.counts(ways: [7], categories: ["orienteering"])
+        let categories = try await other.activityCategories()
+        let runCounts = try await other.counts(ways: [7], categories: ["run"])
+        let olCounts = try await other.counts(ways: [7], categories: ["orienteering"])
         #expect(categories == ["run": 1, "orienteering": 1] && !runCounts.isEmpty && olCounts.isEmpty)
     }
 

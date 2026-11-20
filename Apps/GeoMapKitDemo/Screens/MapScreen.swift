@@ -23,6 +23,7 @@ struct MapScreen: View {
     /// The size of the map view, to fit a track in it.
     @State private var mapSize = CGSize(width: 600, height: 400)
     @State private var showLibrary = false
+    @State private var showLayers = false
     @State private var cutting = false
     /// The copy that was just cut, while the user is asked whether to send it to the Watch.
     @State private var offerToSend: MapItem?
@@ -47,7 +48,7 @@ struct MapScreen: View {
                 if let opened {
                     GeometryReader { proxy in
                         ZStack {
-                            MapView(source: opened.source, style: style, center: $center, zoom: $zoom, bearing: $bearing, overlays: heatMap.overlays + tracks.overlays)
+                            MapView(source: opened.source, style: style, center: $center, zoom: $zoom, bearing: $bearing, overlays: tracks.overlays + heatMap.overlays)
                                 .id(opened.id)
                             locationDot(in: proxy.size)
                         }
@@ -90,6 +91,12 @@ struct MapScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar { toolbar }
+            // The layers sit beside the map (a sheet on a narrow screen), so that a time-lapse can be watched while it plays.
+            .inspector(isPresented: $showLayers) {
+                LayersPanel()
+                    .environment(tracks).environment(activities).environment(heatMap).environment(library)
+                    .inspectorColumnWidth(min: 230, ideal: 270, max: 360)
+            }
         }
         .sheet(isPresented: $showLibrary, onDismiss: {
             // The library asked for a style to be edited: it is closed now, so the editor can open.
@@ -139,6 +146,10 @@ struct MapScreen: View {
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             Button { showLibrary = true } label: { Label("Library", systemImage: "books.vertical") }
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button { showLayers.toggle() } label: { Label("Layers", systemImage: "square.3.layers.3d") }
+                .help("Switch tracks and the heat map on and off")
         }
         ToolbarItem(placement: .primaryAction) { watchMenu }
         ToolbarItem(placement: .primaryAction) { styleMenu }

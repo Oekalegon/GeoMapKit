@@ -35,4 +35,14 @@ struct HeatMapModelTests {
         #expect(HeatMapModel.SpanChoice.month.span == .last(months: 1))
         #expect(HeatMapModel.SpanChoice.year.span == .last(months: 12))
     }
+
+    @Test("Switching the heat map off hides it without a frame to lose, and a new model draws it by default")
+    func visibility() {
+        let model = HeatMapModel()
+        #expect(model.isVisible && !model.hasFrame)
+        model.setVisible(false)
+        #expect(!model.isVisible && model.overlays.isEmpty)
+        model.setVisible(true)
+        #expect(model.isVisible && model.categories == nil && model.measure == .activities)
+    }
 }

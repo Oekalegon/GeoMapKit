@@ -2,6 +2,8 @@ import Foundation
 
 /// Suggests a category from the name and description of an activity.
 ///
+/// It has no rules by default and suggests nothing; an app adds the rules it wants (``CategoryRule/orienteering`` is one).
+///
 /// Words are the runs of letters and digits; case never matters, and accents do not unless the keyword says so (``CategoryKeyword/accentsMatter``). The first rule that has a keyword in the text wins, so
 /// the order of the rules is the order of preference.
 public struct CategorySuggester: Sendable, Equatable {
@@ -9,7 +11,7 @@ public struct CategorySuggester: Sendable, Equatable {
     public var rules: [CategoryRule]
 
     /// Creates a suggester.
-    public init(rules: [CategoryRule] = [.orienteering]) { self.rules = rules }
+    public init(rules: [CategoryRule] = []) { self.rules = rules }
 
     /// The suggestion for some texts (a name, a description), or `nil`.
     public func suggestion(for texts: [String]) -> CategorySuggestion? {

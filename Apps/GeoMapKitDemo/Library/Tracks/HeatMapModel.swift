@@ -48,6 +48,11 @@ final class HeatMapModel {
     }
     /// The view that the map shows now, kept by the map screen: the default area of a heat map.
     var viewport: MapViewport?
+    /// Whether the heat map is drawn. Switching it off keeps the frame, so switching it on again costs nothing.
+    private(set) var isVisible = true
+    /// What the last heat map counted, so that a new one for another view counts the same.
+    private(set) var categories: Set<String>?
+    private(set) var measure = HeatMapMeasure.activities
 
     private var area: HeatMapArea?
     private var areaKey: String?
@@ -55,7 +60,13 @@ final class HeatMapModel {
     private var listener: Task<Void, Never>?
 
     /// The overlays for the map: the frame, if there is one.
-    var overlays: [any MapOverlay] { frame.map { [$0.overlay] } ?? [] }
+    var overlays: [any MapOverlay] { isVisible ? frame.map { [$0.overlay] } ?? [] : [] }
+
+    /// Whether there is a heat map to switch on or off.
+    var hasFrame: Bool { frame != nil }
+
+    /// Draws or hides the heat map without making it again.
+    func setVisible(_ on: Bool) { isVisible = on }
 
     /// The month of the frame that is shown.
     var month: TrackMonth? { lapse?.month(at: index) }
@@ -74,6 +85,7 @@ final class HeatMapModel {
             let area = try await self.area(store: store, map: map, box: box)
             self.endPlayer()
             self.frame = try await area.frame(categories: categories, measure: measure)
+            self.remember(categories, measure)
         }
     }
 
@@ -87,6 +99,7 @@ final class HeatMapModel {
                 return
             }
             self.lapse = lapse
+            self.remember(categories, measure)
             self.index = 0
             let player = HeatMapPlayer(lapse: lapse, span: self.spanChoice.span)
             self.player = player
@@ -124,6 +137,12 @@ final class HeatMapModel {
 
     /// Says that the database changed, so that what is on the map is out of date.
     func databaseChanged() { if frame != nil { isOutOfDate = true } }
+
+    private func remember(_ categories: Set<String>?, _ measure: HeatMapMeasure) {
+        self.categories = categories
+        self.measure = measure
+        isVisible = true
+    }
 
     private func endPlayer() {
         if let player { Task { await player.close() } }
