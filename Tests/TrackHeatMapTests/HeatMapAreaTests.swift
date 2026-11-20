@@ -1,6 +1,7 @@
 import FeatureStore
 import Foundation
 import GeoCore
+import MapRender
 import Testing
 import Tracks
 
@@ -92,7 +93,7 @@ struct HeatMapAreaTests {
         let run = try await area.frame(categories: ["run"], measure: .passes)
         #expect(run.maximumCount == 2 && run.bucketCount == 20)
         let february = try await area.frame(months: TrackMonth(year: 2024, month: 2)...TrackMonth(year: 2024, month: 2))
-        #expect(february.maximumCount == 1 && february.bucketCount == 10 && february.months.lowerBound == february.months.upperBound)
+        #expect(february.maximumCount == 1 && february.bucketCount == 10 && february.months?.lowerBound == february.months?.upperBound && february.months != nil)
         let none = try await area.frame(categories: ["ski"])
         #expect(none.bucketCount == 0 && none.maximumCount == 0)
     }
@@ -118,7 +119,7 @@ struct HeatMapAreaTests {
         #expect(two.months == TrackMonth(year: 2024, month: 2)...TrackMonth(year: 2024, month: 3))
         // The window at the start is cut at the first month.
         let start = await lapse.frame(at: 0, span: .last(months: 12))
-        #expect(start.months.lowerBound == TrackMonth(year: 2024, month: 1))
+        #expect(start.months?.lowerBound == TrackMonth(year: 2024, month: 1))
     }
 
     @Test("A frame is the same however it is reached: forward, back, or by a jump")
@@ -165,5 +166,44 @@ struct HeatMapAreaTests {
         }
         let area = try await HeatMapArea.make(store: store, source: try map(), box: box)
         #expect(area.wayIDs == [7] && area.ways.contains(way: 7))
+    }
+
+    @Test("A time-lapse of one category runs over that category's months only; an index or a span out of range is brought into range")
+    func ranges() async throws {
+        let area = try await filled()
+        let trail = try #require(try await area.timeLapse(categories: ["trail"]))
+        #expect(trail.frameCount == 1 && trail.range.lowerBound == TrackMonth(year: 2024, month: 4))
+        let lapse = try #require(try await area.timeLapse())
+        let low = await lapse.frame(at: -5, span: .cumulative), high = await lapse.frame(at: 99, span: .cumulative)
+        let first = await lapse.frame(at: 0, span: .cumulative), last = await lapse.frame(at: 3, span: .cumulative)
+        #expect(low.bucketCount == first.bucketCount && high.bucketCount == last.bucketCount && high.months == last.months)
+        // A window of 0 or fewer months is one month.
+        let none = await lapse.frame(at: 1, span: .last(months: 0)), one = await lapse.frame(at: 1, span: .last(months: 1))
+        let negative = await lapse.frame(at: 1, span: .last(months: -3))
+        #expect(none.months == one.months && negative.months == one.months && none.bucketCount == one.bucketCount)
+    }
+
+    @Test("A frame of an empty store has no buckets and names no month")
+    func emptyFrame() async throws {
+        let area = try await HeatMapArea.make(store: try TrackStore(url: nil), source: try map(), box: box)
+        let frame = try await area.frame()
+        #expect(frame.bucketCount == 0 && frame.maximumCount == 0 && frame.months == nil)
+        let lapse = try await area.timeLapse()
+        #expect(lapse == nil)
+    }
+
+    @Test("The area of a view is its corners with a margin, also when the view is turned, and stays inside the Mercator limits")
+    func viewportBox() {
+        let centre = Coordinate(latitude: 60, longitude: 10)
+        let view = MapViewport(center: centre, zoom: 12, width: 800, height: 600)
+        let plain = HeatMapArea.box(of: view, margin: 0)
+        #expect(plain.contains(centre) && plain.south < 60 && plain.north > 60 && plain.west < 10 && plain.east > 10)
+        let wider = HeatMapArea.box(of: view, margin: 0.5)
+        #expect(wider.north - wider.south > (plain.north - plain.south) * 1.9 && wider.east - wider.west > (plain.east - plain.west) * 1.9)
+        // Turned a quarter, the box is as wide as the view is high, in metres: it is taller than wide now.
+        let turned = HeatMapArea.box(of: MapViewport(center: centre, zoom: 12, width: 800, height: 600, bearing: 90), margin: 0)
+        #expect((turned.north - turned.south) > (plain.north - plain.south) * 1.2)
+        let pole = HeatMapArea.box(of: MapViewport(center: Coordinate(latitude: 84.9, longitude: 0), zoom: 3, width: 800, height: 600), margin: 0.5)
+        #expect(pole.north <= 85 && pole.south >= -85)
     }
 }

@@ -1,6 +1,7 @@
 import FeatureStore
 import Foundation
 import GeoCore
+import MapRender
 import TrackMatching
 import TrackOverlays
 import TrackStorage
@@ -60,9 +61,7 @@ public final class HeatMapArea: Sendable {
         let counts = try await store.counts(ways: wayIDs, categories: categories, months: months)
         let buckets = counts.map { HeatMapBucket(wayID: $0.wayID, bucket: $0.bucket, count: measure == .passes ? $0.passes : $0.activities) }
         let stored = try await store.activityMonths(categories: categories)
-        let fallback = TrackMonth(year: 1970, month: 1)
-        let range = months ?? stored ?? fallback...fallback
-        return Self.frame(buckets: buckets, ways: ways, months: range, scale: scale)
+        return Self.frame(buckets: buckets, ways: ways, months: months ?? stored, scale: scale)
     }
 
     /// A time-lapse of the counts of some categories, month by month.
@@ -81,7 +80,24 @@ public final class HeatMapArea: Sendable {
         return HeatMapTimeLapse(range: range, counts: counts, measure: measure, ways: ways, scale: scale)
     }
 
-    static func frame(buckets: [HeatMapBucket], ways: HeatMapWays, months: ClosedRange<TrackMonth>, scale: HeatMapScale) -> HeatMapFrame {
+    /// The box of what a viewport shows, for the area of a heat map: the corners of the view (with its rotation), widened by a margin.
+    ///
+    /// - Parameters:
+    ///   - viewport: The view.
+    ///   - margin: The share of the width and the height that is added on every side, so that a small pan stays inside the area.
+    /// - Returns: The box, in latitudes within the Web Mercator limits.
+    public static func box(of viewport: MapViewport, margin: Double = 0.1) -> BoundingBox {
+        let extra = max(margin, 0)
+        let width = viewport.width * (1 + 2 * extra), height = viewport.height * (1 + 2 * extra)
+        let wide = MapViewport(center: viewport.center, zoom: viewport.zoom, width: width, height: height, bearing: viewport.bearing)
+        let corners = [ScreenPoint(x: 0, y: 0), ScreenPoint(x: width, y: 0), ScreenPoint(x: 0, y: height), ScreenPoint(x: width, y: height)]
+            .map { wide.coordinate(at: $0) }
+        return BoundingBox(
+            south: max(corners.map(\.latitude).min() ?? 0, -85), west: max(corners.map(\.longitude).min() ?? 0, -180),
+            north: min(corners.map(\.latitude).max() ?? 0, 85), east: min(corners.map(\.longitude).max() ?? 0, 180))
+    }
+
+    static func frame(buckets: [HeatMapBucket], ways: HeatMapWays, months: ClosedRange<TrackMonth>?, scale: HeatMapScale) -> HeatMapFrame {
         HeatMapFrame(
             overlay: HeatMapOverlay(buckets: buckets, ways: ways, scale: scale), months: months,
             bucketCount: buckets.filter { $0.count > 0 }.count, maximumCount: buckets.map(\.count).max() ?? 0)

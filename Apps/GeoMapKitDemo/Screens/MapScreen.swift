@@ -52,6 +52,10 @@ struct MapScreen: View {
                             locationDot(in: proxy.size)
                         }
                         .onChange(of: proxy.size, initial: true) { _, size in mapSize = size }
+                        // The heat map is made for the part of the map that is in view when it is asked for.
+                        .onChange(of: ViewKey(center: center, zoom: zoom, bearing: bearing, size: proxy.size), initial: true) { _, key in
+                            heatMap.viewport = MapViewport(center: key.center, zoom: key.zoom, width: key.size.width, height: key.size.height, bearing: key.bearing)
+                        }
                     }
                     // The map runs under the home indicator; the title bar stays.
                     .ignoresSafeArea(edges: .bottom)
@@ -296,4 +300,12 @@ struct MapScreen: View {
             message = error.localizedDescription
         }
     }
+}
+
+/// What the heat map needs to know about the view, to be told when any of it changes.
+private struct ViewKey: Equatable {
+    var center: Coordinate
+    var zoom: Double
+    var bearing: Double
+    var size: CGSize
 }

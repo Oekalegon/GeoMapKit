@@ -22,7 +22,8 @@ struct ActivitiesScreen: View {
     @State private var problem: String?
     @State private var heatCategories: Set<String> = []
     @State private var heatMeasure = HeatMapMeasure.activities
-    @State private var heatPlaceID: String?
+    /// `view`, `all`, or the id of a track.
+    @State private var heatArea = "view"
 
     /// The tracks that have a box, to pick a place from.
     private var datesAreValid: Bool { !limitDates || from <= until }
@@ -76,15 +77,17 @@ struct ActivitiesScreen: View {
         }
         .navigationTitle("Activities")
         .task { await activities.refresh(); await tracks.loadSummaries() }
+        .onChange(of: activities.totals) { _, _ in heatMap.databaseChanged() }
     }
 
     // MARK: Heat map
 
     private var heatMapSection: some View {
         Section {
-            Picker("Area", selection: $heatPlaceID) {
-                Text("All tracks").tag(String?.none)
-                ForEach(places) { Text($0.name).tag(Optional($0.id)) }
+            Picker("Area", selection: $heatArea) {
+                Text("Visible map").tag("view")
+                Text("All tracks").tag("all")
+                ForEach(places) { Text($0.name).tag($0.id) }
             }
             ForEach(activities.totals.categories.keys.sorted(), id: \.self) { name in
                 Toggle(name, isOn: Binding(get: { heatCategories.contains(name) }, set: { if $0 { heatCategories.insert(name) } else { heatCategories.remove(name) } }))
@@ -102,11 +105,13 @@ struct ActivitiesScreen: View {
             if heatMap.isBusy { ProgressView().controlSize(.small) }
             if let lapse = heatMap.lapse { timeLapseControls(lapse) }
             if let frame = heatMap.frame {
-                Text("\(frame.bucketCount) pieces of 10 m, most used \(frame.maximumCount) (\(label(frame.months)))").font(.footnote).foregroundStyle(.secondary)
+                Text("\(frame.bucketCount) pieces of 10 m, most used \(frame.maximumCount)\(frame.months.map { " (" + label($0) + ")" } ?? "")")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
+            if heatMap.isOutOfDate { Text("The database changed since this was made: press Show or Time-lapse again.").font(.footnote).foregroundStyle(.orange) }
             if let problem = heatMap.problem { Text(problem).font(.footnote).foregroundStyle(.red) }
         } header: { Text("Heat map") } footer: {
-            Text("The counts of the database drawn on the ways of the selected map. The colour of a count is fixed (1, 2–3, 4–9, 10–29, 30 and more), so months can be compared. No category switched on means all.")
+            Text("The counts of the database drawn on the ways of the selected map. The area is fixed when you press Show: the visible map (zoom in to a city or a region; a very large view is refused), all tracks, or the area of one track. The colour of a count is fixed (1, 2–3, 4–9, 10–29, 30 and more), so months can be compared. No category switched on means all.")
         }
     }
 
@@ -116,7 +121,7 @@ struct ActivitiesScreen: View {
                 ForEach(HeatMapModel.SpanChoice.allCases) { Text($0.rawValue).tag($0) }
             }
             HStack {
-                Button { heatMap.isPlaying ? heatMap.stop() : heatMap.play() } label: {
+                Button { Task { if heatMap.isPlaying { await heatMap.stop() } else { await heatMap.play() } } } label: {
                     Image(systemName: heatMap.isPlaying ? "pause.fill" : "play.fill")
                 }
                 Slider(
@@ -139,13 +144,23 @@ struct ActivitiesScreen: View {
             return
         }
         guard let store = activities.store else { return }
-        let boxes = (heatPlaceID.map { [$0] } ?? tracks.items.map(\.id)).compactMap { tracks.summaries[$0]?.box }
-        guard var box = boxes.first else {
-            problem = "No track has a place yet: wait for the tracks to be read."
-            return
-        }
-        for other in boxes.dropFirst() {
-            box = BoundingBox(south: min(box.south, other.south), west: min(box.west, other.west), north: max(box.north, other.north), east: max(box.east, other.east))
+        var box: BoundingBox
+        if heatArea == "view" {
+            guard let view = heatMap.viewBox else {
+                heatMap.setProblem("The map has not been shown yet.")
+                return
+            }
+            box = view
+        } else {
+            let boxes = (heatArea == "all" ? tracks.items.map(\.id) : [heatArea]).compactMap { tracks.summaries[$0]?.box }
+            guard var union = boxes.first else {
+                problem = "No track has a place yet: wait for the tracks to be read."
+                return
+            }
+            for other in boxes.dropFirst() {
+                union = BoundingBox(south: min(union.south, other.south), west: min(union.west, other.west), north: max(union.north, other.north), east: max(union.east, other.east))
+            }
+            box = union
         }
         do {
             let map = try library.open(item)
