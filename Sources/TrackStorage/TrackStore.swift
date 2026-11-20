@@ -1,4 +1,5 @@
 import Foundation
+import GeoCore
 import TrackMatching
 import Tracks
 
@@ -14,21 +15,41 @@ import Tracks
 /// leaves the store as it was.
 public actor TrackStore {
     /// The version of the layout of the database (`user_version`). A database with a higher number is refused.
-    public static let version = 1
+    public static let version = 2
 
     private let database: SQLiteDatabase
+    /// How the off-track lines are put together into traces. They are kept in the file: a store opened with other rules than the ones the
+    /// traces were made with makes the traces again.
+    public nonisolated let traceRules: TraceRules
 
     /// Opens a database, or makes one.
     ///
     /// One store is expected per file: a second connection to the same file waits up to 2 s for a change in progress and then fails
     /// with ``TrackStoreError/sqlite(_:)``.
     ///
-    /// - Parameter url: The file; its folder must exist. `nil` makes a database in memory that is gone when the store is.
+    /// - Parameters:
+    ///   - url: The file; its folder must exist. `nil` makes a database in memory that is gone when the store is.
+    ///   - traceRules: How off-track lines are put together. They are kept in the file; opening it with other rules makes the traces again
+    ///     the next time they are asked for.
     /// - Throws: ``TrackStoreError``.
-    public init(url: URL?) throws {
+    public init(url: URL?, traceRules: TraceRules = .standard) throws {
         let database = try SQLiteDatabase(path: url?.path ?? ":memory:")
         try Self.prepare(database, wal: url != nil)
+        try Self.keep(traceRules, in: database)
         self.database = database
+        self.traceRules = traceRules
+    }
+
+    /// Writes the rules of the traces into the file; if they are not the ones that the traces were made with, the traces are stale.
+    private static func keep(_ rules: TraceRules, in database: SQLiteDatabase) throws {
+        let text = String(decoding: try JSONEncoder().encode(rules), as: UTF8.self)
+        var stored: String?
+        try database.run("SELECT value FROM meta WHERE key = 'trace_rules'") { stored = $0.text(0) }
+        guard stored != text else { return }
+        try database.transaction {
+            try database.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('trace_rules', ?)", [.text(text)])
+            try database.execute("UPDATE meta SET value = '1' WHERE key = 'traces_stale'")
+        }
     }
 
     /// Makes the tables of a new database and refuses one of a newer version.
@@ -61,6 +82,24 @@ public actor TrackStore {
                         way INTEGER NOT NULL, bucket INTEGER NOT NULL, month INTEGER NOT NULL, category TEXT NOT NULL,
                         activities INTEGER NOT NULL, passes INTEGER NOT NULL, PRIMARY KEY(way, bucket, month, category)) WITHOUT ROWID
                     """)
+                // Version 1 is complete here, so a file that is not finished with version 2 can be opened again.
+                try database.execute("PRAGMA user_version = 1")
+            }
+        }
+        if found < 2 {
+            try database.transaction {
+                try database.execute(
+                    "CREATE TABLE offtrack(id INTEGER PRIMARY KEY AUTOINCREMENT, activity INTEGER NOT NULL REFERENCES activity(id) ON DELETE CASCADE, "
+                        + "seq INTEGER NOT NULL, started_at REAL NOT NULL, elapsed REAL NOT NULL, length REAL NOT NULL, line BLOB NOT NULL)")
+                try database.execute("CREATE INDEX offtrack_activity ON offtrack(activity)")
+                try database.execute("CREATE TABLE trace(id INTEGER PRIMARY KEY, line BLOB NOT NULL, length REAL NOT NULL)")
+                try database.execute(
+                    "CREATE TABLE trace_pass(trace INTEGER NOT NULL REFERENCES trace(id) ON DELETE CASCADE, "
+                        + "offtrack INTEGER NOT NULL REFERENCES offtrack(id) ON DELETE CASCADE)")
+                try database.execute("CREATE INDEX trace_pass_trace ON trace_pass(trace)")
+                try database.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                // The traces are derived from the off-track lines; there are none yet, so they are current.
+                try database.execute("INSERT INTO meta(key, value) VALUES ('traces_stale', '0')")
                 try database.execute("PRAGMA user_version = \(version)")
             }
         }
@@ -78,10 +117,11 @@ public actor TrackStore {
     /// - Parameters:
     ///   - activity: The activity.
     ///   - legs: Its legs, in the order of travel; see ``TrackLegs``.
+    ///   - offTrack: Its off-track stretches (see ``OffTrackLines``); the traces are made from them when they are asked for.
     /// - Returns: The number of legs that were kept.
     /// - Throws: ``TrackStoreError``; nothing is changed then.
     @discardableResult
-    public func add(_ activity: StoredActivity, legs: [TrackLeg]) throws -> Int {
+    public func add(_ activity: StoredActivity, legs: [TrackLeg], offTrack: [OffTrackLine] = []) throws -> Int {
         let stored = legs.compactMap(StoredLeg.init)
         let tags = try JSONEncoder().encode(activity.tags)
         return try database.transaction {
@@ -105,6 +145,15 @@ public actor TrackStore {
                     ])
             }
             try changeCounts(activity: id, by: 1)
+            for (sequence, line) in offTrack.enumerated() {
+                try database.execute(
+                    "INSERT INTO offtrack(activity, seq, started_at, elapsed, length, line) VALUES (?, ?, ?, ?, ?, ?)",
+                    [
+                        .integer(id), .integer(Int64(sequence)), .real(line.start.timeIntervalSince1970), .real(line.elapsed), .real(line.length),
+                        .blob(LineBlob.encode(line.coordinates)),
+                    ])
+            }
+            if !offTrack.isEmpty { try setTracesStale() }
             return stored.count
         }
     }
@@ -137,6 +186,9 @@ public actor TrackStore {
         var id: Int64?
         try database.run("SELECT id FROM activity WHERE app_id = ?", [.text(appID)]) { id = $0.integer(0) }
         guard let id else { return false }
+        var hadOffTrack = false
+        try database.run("SELECT 1 FROM offtrack WHERE activity = ? LIMIT 1", [.integer(id)]) { _ in hadOffTrack = true }
+        if hadOffTrack { try setTracesStale() }
         try changeCounts(activity: id, by: -1)
         try database.execute("DELETE FROM activity WHERE id = ?", [.integer(id)])
         return true
@@ -166,6 +218,97 @@ public actor TrackStore {
                 [.integer(key.way), .integer(Int64(key.bucket)), .integer(month), .text(category), .integer(sign), .integer(sign * count)])
         }
         if sign < 0 { try database.execute("DELETE FROM count WHERE activities <= 0 AND passes <= 0") }
+    }
+
+    // MARK: Traces
+
+    private func setTracesStale() throws {
+        try database.execute("UPDATE meta SET value = '1' WHERE key = 'traces_stale'")
+    }
+
+    /// Makes the traces again from the off-track lines, in the order of the activities' start times (see ``TraceBuilder``).
+    ///
+    /// The traces are derived (by ``traceRules``), so this is for a repair. It is one transaction. ``traces(categories:months:)``
+    /// does it by itself when an activity with off-track lines was added or removed since the last time.
+    ///
+    /// - Throws: ``TrackStoreError``.
+    public func rebuildTraces() throws {
+        try database.transaction {
+            var builder = TraceBuilder(rules: traceRules)
+            var damaged: Int64?
+            try database.run(
+                "SELECT offtrack.id, offtrack.line FROM offtrack JOIN activity ON activity.id = offtrack.activity ORDER BY activity.started, offtrack.id"
+            ) { row in
+                guard let line = LineBlob.decode(row.blob(1)) else {
+                    damaged = row.integer(0)
+                    return
+                }
+                builder.add(line, source: row.integer(0))
+            }
+            if let damaged { throw TrackStoreError.damaged("the off-track line \(damaged)") }
+            try database.execute("DELETE FROM trace_pass")
+            try database.execute("DELETE FROM trace")
+            for trace in builder.traces {
+                try database.execute(
+                    "INSERT INTO trace(id, line, length) VALUES (?, ?, ?)",
+                    [.integer(trace.id), .blob(LineBlob.encode(trace.coordinates)), .real(trace.length)])
+                for source in trace.sources {
+                    try database.execute("INSERT INTO trace_pass(trace, offtrack) VALUES (?, ?)", [.integer(trace.id), .integer(source)])
+                }
+            }
+            try database.execute("UPDATE meta SET value = '0' WHERE key = 'traces_stale'")
+        }
+    }
+
+    /// The traces, with how often each was run along by the activities of the categories and months asked for.
+    ///
+    /// The traces are made again first if an activity with off-track lines was added or removed since they were made. A trace that none
+    /// of the activities asked for ran along is left out.
+    ///
+    /// - Parameters:
+    ///   - categories: The categories to count, or `nil` for all.
+    ///   - months: The months to count, or `nil` for all.
+    /// - Returns: The traces in the order of their ids.
+    /// - Throws: ``TrackStoreError``.
+    public func traces(categories: Set<String>? = nil, months: ClosedRange<TrackMonth>? = nil) throws -> [StoredTrace] {
+        var stale = false
+        try database.run("SELECT value FROM meta WHERE key = 'traces_stale'") { stale = $0.text(0) != "0" }
+        if stale { try rebuildTraces() }
+        var sql =
+            "SELECT trace.id, trace.line, trace.length, COUNT(*), COUNT(DISTINCT offtrack.activity) FROM trace_pass "
+            + "JOIN trace ON trace.id = trace_pass.trace JOIN offtrack ON offtrack.id = trace_pass.offtrack "
+            + "JOIN activity ON activity.id = offtrack.activity WHERE 1 = 1"
+        var values: [SQLiteValue] = []
+        if let months {
+            sql += " AND activity.month BETWEEN ? AND ?"
+            values += [.integer(Int64(months.lowerBound.index)), .integer(Int64(months.upperBound.index))]
+        }
+        if let categories {
+            guard !categories.isEmpty else { return [] }
+            let sorted = categories.sorted()
+            sql += " AND activity.category IN (\(sorted.map { _ in "?" }.joined(separator: ",")))"
+            values += sorted.map { .text($0) }
+        }
+        sql += " GROUP BY trace.id ORDER BY trace.id"
+        var result: [StoredTrace] = []
+        var damaged: Int64?
+        try database.run(sql, values) { row in
+            guard let line = LineBlob.decode(row.blob(1)) else {
+                damaged = row.integer(0)
+                return
+            }
+            result.append(
+                StoredTrace(id: row.integer(0), coordinates: line, length: row.real(2), activities: Int(row.integer(4)), passes: Int(row.integer(3))))
+        }
+        if let damaged { throw TrackStoreError.damaged("the trace \(damaged)") }
+        return result
+    }
+
+    /// The number of off-track lines in the store.
+    public func offTrackLineCount() throws -> Int {
+        var count = 0
+        try database.run("SELECT COUNT(*) FROM offtrack") { count = Int($0.integer(0)) }
+        return count
     }
 
     private struct BucketKey: Hashable {
