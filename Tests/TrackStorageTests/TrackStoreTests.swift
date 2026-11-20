@@ -1,4 +1,5 @@
 import Foundation
+import GeoCore
 import Testing
 import Tracks
 
@@ -219,5 +220,99 @@ struct TrackStoreTests {
         #expect(TrackMonth(year: 2024, month: 13) == TrackMonth(year: 2025, month: 1))
         #expect(TrackMonth(year: 2024, month: 0) == TrackMonth(year: 2023, month: 12))
         #expect(TrackMonth(year: 2024, month: 5) < TrackMonth(year: 2024, month: 6))
+    }
+
+    // MARK: Traces
+
+    /// An off-track line along 60 N from `from` to `to` metres, `north` metres to the north, a point every 10 m.
+    private func offTrack(_ from: Double, _ to: Double, north: Double = 0, at offset: Double = 0) throws -> OffTrackLine {
+        let count = Int(abs(to - from) / 10)
+        let points = (0...count).map {
+            Coordinate(latitude: 60 + north / 111_195, longitude: 10 + (from + (to - from) * Double($0) / Double(count)) / 55_597)
+        }
+        return try #require(OffTrackLine(coordinates: points, start: start.addingTimeInterval(offset), elapsed: 100, length: abs(to - from)))
+    }
+
+    @Test("Activities that ran the same way across open ground make one trace, counted once for each activity and once for each pass")
+    func traces() async throws {
+        let store = try TrackStore(url: nil)
+        try await store.add(activity("a"), legs: [], offTrack: [try offTrack(0, 300), try offTrack(300, 0, at: 500)])
+        try await store.add(
+            activity("b", at: start.addingTimeInterval(86_400)), legs: [], offTrack: [try offTrack(0, 300, north: 6)])
+        let found = try await store.traces()
+        #expect(found.count == 1 && found[0].activities == 2 && found[0].passes == 3, "\(found.map { ($0.activities, $0.passes) })")
+        #expect(abs(found[0].length - 300) < 2 && found[0].coordinates.count >= 55)
+        #expect(try await store.offTrackLineCount() == 3)
+    }
+
+    @Test("Traces can be asked for by category and month, and a trace that nobody asked for is left out")
+    func tracesByCategory() async throws {
+        let store = try TrackStore(url: nil)
+        let june = Date(timeIntervalSince1970: 1_717_200_000)
+        try await store.add(activity("trail", category: "trail", at: start), legs: [], offTrack: [try offTrack(0, 300)])
+        try await store.add(activity("road", category: "road", at: june), legs: [], offTrack: [try offTrack(0, 300, north: 3), try offTrack(0, 200, north: 200)])
+        #expect(try await store.traces().count == 2)
+        #expect(try await store.traces(categories: ["trail"]).map(\.passes) == [1])
+        #expect(try await store.traces(categories: ["road"]).map(\.activities) == [1, 1])
+        #expect(try await store.traces(categories: []).isEmpty)
+        #expect(try await store.traces(months: TrackMonth(start)...TrackMonth(start)).count == 1)
+    }
+
+    @Test("Removing or replacing an activity makes the traces again the next time they are asked for")
+    func tracesFollowChanges() async throws {
+        let store = try TrackStore(url: nil)
+        try await store.add(activity("a"), legs: [], offTrack: [try offTrack(0, 300)])
+        try await store.add(activity("b", at: start.addingTimeInterval(10)), legs: [], offTrack: [try offTrack(0, 300, north: 4)])
+        #expect(try await store.traces().map(\.passes) == [2])
+        try await store.remove(appID: "a")
+        let afterRemoval = try await store.traces()
+        #expect(afterRemoval.map(\.passes) == [1] && afterRemoval[0].id != 0)
+        try await store.add(activity("b", at: start.addingTimeInterval(10)), legs: [], offTrack: [])
+        let lines = try await store.offTrackLineCount()
+        #expect(try await store.traces().isEmpty && lines == 0)
+    }
+
+    @Test("A database of version 1 is changed to version 2 when it is opened, and keeps its activities")
+    func migration() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("trackstore-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("tracks.sqlite")
+        do {
+            let store = try TrackStore(url: url)
+            try await store.add(activity("a"), legs: [try leg(1, 0, 50)])
+        }
+        // Make it a version 1 database: without the tables of version 2.
+        let database = try SQLiteDatabase(path: url.path)
+        for table in ["trace_pass", "trace", "offtrack", "meta"] { try database.execute("DROP TABLE \(table)") }
+        try database.execute("PRAGMA user_version = 1")
+        let reopened = try TrackStore(url: url)
+        #expect(try await reopened.counts(ways: [1]).count == 5)
+        try await reopened.add(activity("b"), legs: [], offTrack: [try offTrack(0, 300)])
+        #expect(try await reopened.traces().count == 1)
+    }
+
+    @Test("A damaged off-track line is an error, not a trace that is left out")
+    func damagedLine() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("trackstore-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("tracks.sqlite")
+        let store = try TrackStore(url: url)
+        try await store.add(activity("a"), legs: [], offTrack: [try offTrack(0, 300)])
+        _ = try await store.traces()
+        let other = try SQLiteDatabase(path: url.path)
+        try other.execute("UPDATE offtrack SET line = ?", [.blob(Data([1, 2, 3]))])
+        await #expect(throws: TrackStoreError.self) { try await store.rebuildTraces() }
+        try other.execute("UPDATE trace SET line = ?", [.blob(Data([1, 2, 3]))])
+        await #expect(throws: TrackStoreError.damaged("the trace 1000")) { try await store.traces() }
+    }
+
+    @Test("A line keeps its points to a centimetre when it is stored")
+    func lineBlob() throws {
+        let line = [Coordinate(latitude: 59.9139123, longitude: 10.7522456), Coordinate(latitude: -33.8688, longitude: -151.2093)]
+        let back = try #require(LineBlob.decode(LineBlob.encode(line)))
+        #expect(zip(line, back).allSatisfy { abs($0.latitude - $1.latitude) < 1e-7 && abs($0.longitude - $1.longitude) < 1e-7 })
+        #expect(LineBlob.decode(Data([1, 2, 3])) == nil && LineBlob.decode(Data()) == [])
     }
 }
