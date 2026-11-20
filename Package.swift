@@ -26,6 +26,7 @@ let package = Package(
         .library(name: "Tracks", targets: ["Tracks"]),
         .library(name: "TrackOverlays", targets: ["TrackOverlays"]),
         .library(name: "TrackMatching", targets: ["TrackMatching"]),
+        .library(name: "TrackStorage", targets: ["TrackStorage"]),
     ],
     targets: [
         // Web Mercator maths, tile coordinates, geometry.
@@ -64,6 +65,8 @@ let package = Package(
         // Matching recorded tracks to the lines of a map (v2): the line network of a map area and, later, the matcher. Runs on the phone and the Mac.
         // `Tracks` is for the matcher (step b2); the line network does not use it yet.
         .target(name: "TrackMatching", dependencies: ["GeoCore", "FeatureStore", "Tracks"]),
+        // The segment database. TrackMatching is for TrackLeg, the unit that is stored.
+        .target(name: "TrackStorage", dependencies: ["GeoCore", "Tracks", "TrackMatching"]),
 
         // Builds small PBF files for tests (test-only; no product).
         .target(name: "PBFTestSupport", path: "Tests/PBFTestSupport"),
@@ -79,6 +82,7 @@ let package = Package(
         .testTarget(name: "RegionsTests", dependencies: ["Regions", "GeoCore"]),
         .testTarget(name: "TracksTests", dependencies: ["Tracks", "GeoCore"]),
         .testTarget(name: "TrackMatchingTests", dependencies: ["TrackMatching", "FeatureStore", "FeatureStoreBuilder", "Tracks", "GeoCore"]),
+        .testTarget(name: "TrackStorageTests", dependencies: ["TrackStorage", "TrackMatching", "Tracks", "GeoCore"]),
         .testTarget(name: "TrackOverlaysTests", dependencies: ["TrackOverlays", "MapRender", "MapStyle", "Tracks", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
