@@ -1,7 +1,9 @@
+import TrackMatching
+
 /// How often a bucket of a way was used: the unit of the heat map.
 public struct BucketCount: Sendable, Equatable {
     /// The length of a bucket along a way, in metres.
-    public static let length = 10.0
+    public static let length = TrackLeg.bucketLength
 
     /// The OSM id of the way.
     public let wayID: Int64

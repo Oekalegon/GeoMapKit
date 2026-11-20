@@ -5,6 +5,8 @@ import TrackMatching
 ///
 /// It is made from a ``LineNetwork`` (whose edges know their distance along the way), so the buckets of the track store, which are
 /// counted along the ways of a map, are drawn on the ways of the same map. A way is as long as the part of it that the network holds.
+///
+/// It also gives the line of any range along a way, such as a leg of an activity (the activities on a segment of step 7).
 public struct HeatMapWays: Sendable {
     private struct Piece: Sendable {
         var offset: Double
@@ -42,9 +44,14 @@ public struct HeatMapWays: Sendable {
         var parts: [[Coordinate]] = []
         var current: [Coordinate] = []
         var currentEnd = -Double.infinity
-        for piece in list {
+        // The first piece that ends after `from`, by binary search: a way of thousands of edges is looked at once for every run.
+        var low = 0, high = list.count
+        while low < high {
+            let middle = (low + high) / 2
+            if list[middle].offset + list[middle].length <= from { low = middle + 1 } else { high = middle }
+        }
+        for piece in list[low...] {
             let end = piece.offset + piece.length
-            if end <= from { continue }
             if piece.offset >= to { break }
             let low = max(piece.offset, from), high = min(end, to)
             guard high > low, piece.length > 0 else { continue }

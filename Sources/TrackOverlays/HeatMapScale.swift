@@ -3,6 +3,9 @@ import MapStyle
 
 /// The colours and widths of a heat map by count: a fixed scale, so that two maps (two months of a time-lapse, road and trail) are
 /// drawn with the same meaning for a colour.
+///
+/// The width carries the same information as the colour (a busier bucket is wider), so the map can be read without telling the colours
+/// apart. A scale in one hue is for later, with a style that can choose it.
 public struct HeatMapScale: Sendable, Equatable {
     /// One step of the scale: from a count up, until the next step.
     public struct Step: Sendable, Equatable {
@@ -21,10 +24,13 @@ public struct HeatMapScale: Sendable, Equatable {
     /// The steps from the least count to the highest, in order of `minimumCount`, at least one.
     public let steps: [Step]
 
-    /// Creates a scale. The steps are put in order of their least count; a scale with no steps gets the standard ones.
-    public init(steps: [Step]) {
-        let sorted = steps.sorted { $0.minimumCount < $1.minimumCount }
-        self.steps = sorted.isEmpty ? Self.standard.steps : sorted
+    /// Creates a scale. The steps are put in order of their least count.
+    ///
+    /// - Parameter steps: At least one step.
+    /// - Returns: `nil` for no steps, which is not a scale.
+    public init?(steps: [Step]) {
+        guard !steps.isEmpty else { return nil }
+        self.steps = steps.sorted { $0.minimumCount < $1.minimumCount }
     }
 
     /// The index of the step for a count, or `nil` for a count below the first step.

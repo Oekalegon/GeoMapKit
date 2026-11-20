@@ -201,6 +201,11 @@ struct TrackStoreTests {
         #expect(try await store.counts(ways: [2]).map(\.bucket) == [14])
     }
 
+    @Test("The buckets of the store are as long as the buckets that the heat map draws")
+    func bucketLength() {
+        #expect(BucketCount.length == TrackLeg.bucketLength)
+    }
+
     @Test("Many ways are looked up in groups")
     func manyWays() async throws {
         let store = try TrackStore(url: nil)

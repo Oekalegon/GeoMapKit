@@ -1,3 +1,5 @@
+import TrackMatching
+
 /// How often a bucket of a way was used, as the heat map takes it: a number of the measure the app chose (the activities, or the
 /// passes, of the track store).
 public struct HeatMapBucket: Sendable, Equatable {
@@ -16,5 +18,5 @@ public struct HeatMapBucket: Sendable, Equatable {
     }
 
     /// The length of a bucket along a way, in metres. It is the length that the track store counts in.
-    public static let bucketLength = 10.0
+    public static let bucketLength = TrackLeg.bucketLength
 }

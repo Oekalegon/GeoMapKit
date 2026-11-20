@@ -74,14 +74,14 @@ struct HeatMapOverlayTests {
     }
 
     @Test("Counts below the first step, unknown ways and negative buckets are not drawn")
-    func notDrawn() {
+    func notDrawn() throws {
         let ways = HeatMapWays(network: network([(1, way)]))
-        let scale = HeatMapScale(steps: [.init(minimumCount: 5, style: OverlayLineStyle(color: .init(red: 1, green: 0, blue: 0), width: 3))])
+        let scale = try #require(HeatMapScale(steps: [.init(minimumCount: 5, style: OverlayLineStyle(color: .init(red: 1, green: 0, blue: 0), width: 3))]))
         let overlay = HeatMapOverlay(
             buckets: [HeatMapBucket(wayID: 1, bucket: 0, count: 4), HeatMapBucket(wayID: 9, bucket: 0, count: 50), HeatMapBucket(wayID: 1, bucket: -1, count: 50)],
             ways: ways, scale: scale)
         #expect(overlay.runCount == 0 && overlay.items(for: viewport()).isEmpty)
-        #expect(HeatMapScale(steps: []) == HeatMapScale.standard)
+        #expect(HeatMapScale(steps: []) == nil, "no steps is not a scale")
     }
 
     @Test("Lines are in screen points where the way is, and a run outside the view costs no item")
@@ -101,5 +101,88 @@ struct HeatMapOverlayTests {
         let overlay = HeatMapOverlay(buckets: (0..<50).map { HeatMapBucket(wayID: 1, bucket: $0, count: 1) }, ways: ways)
         let items = lines(overlay.items(for: viewport(zoom: 20)))
         #expect(items.count == 1 && items[0].points.allSatisfy { $0.x >= -20 && $0.x <= 420 })
+    }
+
+    @Test("A scale whose steps are given in the wrong order looks up the right step")
+    func scaleOrder() throws {
+        let low = OverlayLineStyle(color: .init(red: 1, green: 1, blue: 0), width: 2), high = OverlayLineStyle(color: .init(red: 1, green: 0, blue: 0), width: 5)
+        let scale = try #require(HeatMapScale(steps: [.init(minimumCount: 10, style: high), .init(minimumCount: 1, style: low)]))
+        let ways = HeatMapWays(network: network([(1, way)]))
+        let overlay = HeatMapOverlay(
+            buckets: [HeatMapBucket(wayID: 1, bucket: 0, count: 3), HeatMapBucket(wayID: 1, bucket: 5, count: 12)], ways: ways, scale: scale)
+        #expect(lines(overlay.items(for: viewport())).map(\.style) == [low, high])
+    }
+
+    @Test("A turned map still shows the way, and a view that holds half of the way shows half of the line")
+    func bearingAndPartialView() {
+        let ways = HeatMapWays(network: network([(1, way)]))
+        let overlay = HeatMapOverlay(buckets: (0..<50).map { HeatMapBucket(wayID: 1, bucket: $0, count: 1) }, ways: ways)
+        let turned = MapViewport(center: Coordinate(latitude: 60, longitude: 10.005), zoom: 14, width: 400, height: 300, bearing: 90)
+        let upright = lines(overlay.items(for: turned))
+        #expect(upright.count == 1 && upright[0].points.map(\.x).allSatisfy { abs($0 - 200) < 1 }, "a way to the east runs up the screen")
+        // Zoom 17: the way is 4,000 points long, and the view shows the middle 400.
+        let zoomed = lines(overlay.items(for: viewport(zoom: 17)))
+        #expect(zoomed.count == 1 && zoomed[0].points.first!.x < 0 && zoomed[0].points.last!.x > 400)
+    }
+
+    @Test("A closed way is drawn all round, and buckets across its start follow each other")
+    func closedWay() {
+        let loop = StoredFeature(
+            classID: FeatureClass.path.rawValue, kind: .line, objectType: .way, objectID: 5,
+            parts: [GeometryPart(points: [(10.0, 60.0), (10.004, 60.0), (10.004, 60.002), (10.0, 60.002), (10.0, 60.0)].map {
+                PackedPoint(longitude: Int32(($0.0 * 1e7).rounded()), latitude: Int32(($0.1 * 1e7).rounded()))
+            })])
+        let ways = HeatMapWays(network: LineNetwork(features: [loop]))
+        let overlay = HeatMapOverlay(buckets: (0..<100).map { HeatMapBucket(wayID: 5, bucket: $0, count: 1) }, ways: ways)
+        #expect(overlay.runCount == 1)
+        let around = MapViewport(center: Coordinate(latitude: 60.001, longitude: 10.002), zoom: 17, width: 400, height: 300)
+        #expect(lines(overlay.items(for: around)).count >= 1)
+    }
+
+    @Test("The overlay keeps at most the runs it is allowed to, the busiest first, and says how many it dropped")
+    func maximumRuns() {
+        let ways = HeatMapWays(network: network([(1, way)]))
+        let buckets = [HeatMapBucket(wayID: 1, bucket: 0, count: 1), HeatMapBucket(wayID: 1, bucket: 2, count: 5), HeatMapBucket(wayID: 1, bucket: 4, count: 40)]
+        let overlay = HeatMapOverlay(buckets: buckets, ways: ways, maximumRuns: 2)
+        #expect(overlay.runCount == 2 && overlay.droppedRunCount == 1)
+        #expect(lines(overlay.items(for: viewport())).map(\.style) == [HeatMapScale.standard.steps[2].style, HeatMapScale.standard.steps[4].style])
+        #expect(HeatMapOverlay(buckets: buckets, ways: ways).droppedRunCount == 0)
+        #expect(HeatMapOverlay(buckets: buckets, ways: ways, maximumRuns: 0).runCount == 0)
+    }
+
+    @Test("The grid gives what looking at every run gives: the same lines for views all along a long way, and for a view of the whole country")
+    func gridAgreesWithEverything() {
+        let longitudes = (0...400).map { 10.0 + Double($0) * 0.005 }
+        let ways = HeatMapWays(network: network([(1, longitudes)]))
+        let overlay = HeatMapOverlay(buckets: (0..<2_000).map { HeatMapBucket(wayID: 1, bucket: $0 * 2, count: 1 + $0 % 3) }, ways: ways)
+        #expect(overlay.runCount == 2_000)
+        for longitude in stride(from: 10.05, to: 10.7, by: 0.11) {
+            let near = lines(overlay.items(for: viewport(zoom: 15, longitude: longitude)))
+            #expect(!near.isEmpty && near.count < 60, "a village-size view at \(longitude) holds \(near.count) lines")
+        }
+        let whole = lines(overlay.items(for: MapViewport(center: Coordinate(latitude: 60, longitude: 11), zoom: 6, width: 400, height: 300)))
+        #expect(!whole.isEmpty)
+        #expect(overlay.items(for: viewport(zoom: 15, longitude: 40)).isEmpty)
+    }
+
+    @Test("A frame with 100,000 runs costs little when the view is small")
+    func manyRuns() throws {
+        // 1,000 km of way along 60 N (3,600 vertices), a bucket of every 10 m with counts that alternate, so every bucket is a run.
+        let longitudes = (0...3_600).map { 10.0 + Double($0) * 0.005 }
+        let ways = HeatMapWays(network: network([(1, longitudes)]))
+        let buckets = (0..<100_000).map { HeatMapBucket(wayID: 1, bucket: $0, count: 1 + $0 % 2) }
+        let clock = ContinuousClock()
+        var created: HeatMapOverlay?
+        let made = clock.measure { created = HeatMapOverlay(buckets: buckets, ways: ways) }
+        #expect(made < .seconds(3), "making the overlay took \(made)")
+        let overlay = try #require(created)
+        #expect(overlay.runCount == 100_000)
+        let time = clock.measure { _ = overlay.items(for: viewport(zoom: 15, longitude: 20)) }
+        #expect(time < .milliseconds(100), "a frame took \(time)")
+    }
+
+    @Test("The store and the heat map count in buckets of the same length")
+    func bucketLength() {
+        #expect(HeatMapBucket.bucketLength == TrackLeg.bucketLength && TrackLeg.bucketLength == 10)
     }
 }
