@@ -60,7 +60,7 @@ let package = Package(
         .target(name: "Tracks", dependencies: ["GeoCore"]),
 
         // Overlays that draw tracks and routes over the map (a `Route` as a line with start, end and waypoint markers).
-        .target(name: "TrackOverlays", dependencies: ["GeoCore", "MapRender", "MapStyle", "Tracks"]),
+        .target(name: "TrackOverlays", dependencies: ["GeoCore", "MapRender", "MapStyle", "Tracks", "TrackMatching"]),
 
         // Matching recorded tracks to the lines of a map (v2): the line network of a map area and, later, the matcher. Runs on the phone and the Mac.
         // `Tracks` is for the matcher (step b2); the line network does not use it yet.
@@ -83,7 +83,7 @@ let package = Package(
         .testTarget(name: "TracksTests", dependencies: ["Tracks", "GeoCore"]),
         .testTarget(name: "TrackMatchingTests", dependencies: ["TrackMatching", "FeatureStore", "FeatureStoreBuilder", "Tracks", "GeoCore"]),
         .testTarget(name: "TrackStorageTests", dependencies: ["TrackStorage", "TrackMatching", "Tracks", "GeoCore"]),
-        .testTarget(name: "TrackOverlaysTests", dependencies: ["TrackOverlays", "MapRender", "MapStyle", "Tracks", "GeoCore"]),
+        .testTarget(name: "TrackOverlaysTests", dependencies: ["TrackOverlays", "TrackMatching", "FeatureStore", "MapRender", "MapStyle", "Tracks", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]
 )
