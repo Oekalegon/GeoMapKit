@@ -5,6 +5,10 @@ import Foundation
 /// This is the unit that the segment statistics and the heat map count. A way is cut into buckets of fixed length by the store;
 /// a leg says which buckets a track passed, when, and in which direction.
 public struct TrackLeg: Sendable, Equatable {
+    /// The length of a bucket along a way, in metres: the unit in which the track store counts and the heat map draws. It is defined
+    /// here, where both of them can see it, so that they cannot disagree.
+    public static let bucketLength = 10.0
+
     /// The way travelled in either direction along it: increasing distance from its first node is ``forward``.
     public enum Direction: Sendable, Equatable {
         /// Towards the end of the way (the distance along the way grows).
