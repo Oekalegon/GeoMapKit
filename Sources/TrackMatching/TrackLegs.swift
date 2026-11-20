@@ -37,7 +37,12 @@ public enum TrackLegs {
         minimumLength: Double = defaultMinimumLength
     ) -> [TrackLeg] {
         guard stretch.isMatched else { return [] }
-        let timed = stretch.fixes.filter { $0.point < points.count && points[$0.point].time != nil }
+        // The fixes that have a time. A time that goes back is set to the one before it, so a leg never ends before it starts.
+        var timed: [(fix: MatchedFix, time: Date)] = []
+        for fix in stretch.fixes where fix.point < points.count {
+            guard let time = points[fix.point].time else { continue }
+            timed.append((fix, max(time, timed.last?.time ?? time)))
+        }
         guard !timed.isEmpty else { return [] }
         var legs: [TrackLeg] = []
         var run: [(edge: Int, metre: Double, time: Date)] = []
@@ -53,8 +58,8 @@ public enum TrackLegs {
             if run.isEmpty { run.append((move.edge, a, move.start)) }
             run.append((move.edge, b, move.end))
         }
-        for (first, second) in zip(timed, timed.dropFirst()) {
-            guard let start = points[first.point].time, let end = points[second.point].time else { continue }
+        for (from, to) in zip(timed, timed.dropFirst()) {
+            let first = from.fix, second = to.fix, start = from.time, end = to.time
             // No route goes across a gap: the run ends at the first fix, and the next one starts at the second.
             if stretch.edgeGaps.contains(where: { $0 >= first.edgeIndex && $0 < second.edgeIndex }) {
                 finish()
@@ -76,7 +81,8 @@ public enum TrackLegs {
         return legs
     }
 
-    /// The legs of all counted stretches of a matched track: the stretches that `MatchedTrack.countedStretches` would give.
+    /// The legs of all counted stretches of a matched track: the stretches that ``MatchedSegment/countedStretches(minimumConfidence:minimumLength:)``
+    /// gives.
     ///
     /// - Parameters:
     ///   - matched: The matched track.
@@ -84,39 +90,55 @@ public enum TrackLegs {
     ///   - network: The network that the matcher used.
     ///   - minimumConfidence: The least confidence of a stretch.
     ///   - minimumStretchLength: The least recorded length of a stretch, in metres.
+    /// - Throws: ``TrackLegsError/segmentCountsDiffer`` when the tracks do not have the same number of segments.
     public static func legs(
         of matched: MatchedTrack, from cleaned: CleanedTrack, in network: LineNetwork, minimumConfidence: Double = 0.5,
         minimumStretchLength: Double = 100
-    ) -> [TrackLeg] {
-        zip(matched.segments, cleaned.segments).flatMap { matchedSegment, segment in
-            matchedSegment.stretches
-                .filter { $0.isMatched && $0.confidence >= minimumConfidence && $0.length >= minimumStretchLength }
+    ) throws -> [TrackLeg] {
+        guard matched.segments.count == cleaned.segments.count else {
+            throw TrackLegsError.segmentCountsDiffer(matched: matched.segments.count, cleaned: cleaned.segments.count)
+        }
+        return zip(matched.segments, cleaned.segments).flatMap { matchedSegment, segment in
+            matchedSegment.countedStretches(minimumConfidence: minimumConfidence, minimumLength: minimumStretchLength)
                 .flatMap { legs(of: $0, points: segment.points, in: network) }
         }
     }
 
     /// The movement from one fix to the next along the edges between them.
+    ///
+    /// The direction in which each edge is travelled follows from the node by which the movement entered it, which is the end of the
+    /// edge before it that the route left by. Where two edges share no node (a hop between dead ends, which the matcher allows) the
+    /// movement leaves by the end that is nearest to the next edge and enters it by its nearest end. The first edge is the one case
+    /// that can be ambiguous: if the next edge shares both of its ends (two ways between the same two nodes) the movement is taken
+    /// towards `to`.
     private static func route(from first: MatchedFix, to second: MatchedFix, stretch: MatchedStretch, network: LineNetwork) -> [Move] {
         let edges = Array(stretch.edges[first.edgeIndex...second.edgeIndex])
         let zero = Date(timeIntervalSince1970: 0)
         if edges.count == 1 { return [Move(edge: edges[0], from: first.fraction, to: second.fraction, start: zero, end: zero)] }
-        // The node by which the movement leaves each edge: the end that the next edge shares.
+        func distance(_ a: Int, _ b: Int) -> Double { network.coordinates[a].distance(to: network.coordinates[b]) }
         var moves: [Move] = []
         var entry: Int?
         for (number, edge) in edges.enumerated() {
             let line = network.edges[edge]
             let exit: Int
-            if number + 1 < edges.count {
-                let next = network.edges[edges[number + 1]]
-                exit = (line.to == next.from || line.to == next.to) ? line.to : line.from
-            } else {
+            if let entry {
                 exit = entry == line.from ? line.to : line.from
+            } else {
+                // The first edge: leave by the end that is nearest to an end of the next edge (the one they share, if they do).
+                let next = network.edges[edges[1]]
+                let toNext = min(distance(line.to, next.from), distance(line.to, next.to))
+                let fromNext = min(distance(line.from, next.from), distance(line.from, next.to))
+                exit = toNext <= fromNext ? line.to : line.from
             }
             let forward = exit == line.to
             let start = number == 0 ? first.fraction : (forward ? 0.0 : 1.0)
             let end = number + 1 == edges.count ? second.fraction : (forward ? 1.0 : 0.0)
             moves.append(Move(edge: edge, from: start, to: end, start: zero, end: zero))
-            entry = exit
+            if number + 1 < edges.count {
+                // The next edge is entered by its end that is nearest to where this one was left.
+                let next = network.edges[edges[number + 1]]
+                entry = distance(exit, next.from) <= distance(exit, next.to) ? next.from : next.to
+            }
         }
         return moves
     }
@@ -128,14 +150,14 @@ public enum TrackLegs {
         guard run.count >= 2 else { return [] }
         let way = network.edges[run[0].edge]
         var legs: [TrackLeg] = []
-        func emit(_ samples: ArraySlice<(edge: Int, metre: Double, time: Date)>) {
+        func emit(_ samples: ArraySlice<(edge: Int, metre: Double, time: Date)>, direction: Double) {
             let metres = samples.map(\.metre)
             guard let low = metres.min(), let high = metres.max(), high - low >= minimumLength, let first = samples.first, let last = samples.last
             else { return }
             legs.append(
                 TrackLeg(
                     wayID: way.wayID, classID: way.classID, lowerMetre: low, upperMetre: high,
-                    direction: last.metre >= first.metre ? .forward : .backward,
+                    direction: (direction != 0 ? direction > 0 : last.metre >= first.metre) ? .forward : .backward,
                     samples: samples.map { TrackLeg.Sample(metre: $0.metre, time: $0.time) }, confidence: confidence))
         }
         var legStart = 0
@@ -148,13 +170,13 @@ public enum TrackLegs {
             } else if (metre - run[extreme].metre) * direction >= 0 {
                 extreme = index
             } else if (run[extreme].metre - metre) * direction >= turnDistance {
-                emit(run[legStart...extreme])
+                emit(run[legStart...extreme], direction: direction)
                 legStart = extreme
                 direction = -direction
                 extreme = index
             }
         }
-        emit(run[legStart...])
+        emit(run[legStart...], direction: direction)
         return legs
     }
 }

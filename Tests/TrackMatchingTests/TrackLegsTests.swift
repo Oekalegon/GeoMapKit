@@ -4,6 +4,7 @@ import GeoCore
 import Testing
 import Tracks
 
+@testable import FeatureStoreBuilder
 @testable import TrackMatching
 
 /// The legs along ways that a matched stretch gives.
@@ -24,6 +25,22 @@ struct TrackLegsTests {
 
     /// Fixes along a line from east `from` to east `to` (in steps of 0.0001 degrees, on the latitude `north`), a fix about every 11 m,
     /// `secondsPerFix` apart, the first at `first` seconds.
+    /// Fixes along a polyline through corners (in steps of 0.0001 degrees), a fix about every 11 m, `secondsPerFix` apart.
+    private func follow(_ corners: [(Double, Double)], secondsPerFix: Double = 4) -> [TrackPoint] {
+        var points: [TrackPoint] = []
+        for (from, to) in zip(corners, corners.dropFirst()) {
+            let count = max(Int((hypot((to.0 - from.0) * 5.56, (to.1 - from.1) * 11.12) / 11).rounded()), 1)
+            for index in (points.isEmpty ? 0 : 1)...count {
+                let t = Double(index) / Double(count)
+                points.append(
+                    TrackPoint(
+                        coordinate: Coordinate(latitude: 60 + (from.1 + (to.1 - from.1) * t) * 0.0001, longitude: 10 + (from.0 + (to.0 - from.0) * t) * 0.0001),
+                        time: start.addingTimeInterval(Double(points.count) * secondsPerFix)))
+            }
+        }
+        return points
+    }
+
     private func walk(_ from: Double, _ to: Double, north: Double = 0, first: Double = 0, secondsPerFix: Double = 4) -> [TrackPoint] {
         let count = max(Int((abs(to - from) * 5.6 / 11).rounded()), 1)
         return (0...count).map { index in
@@ -145,5 +162,124 @@ struct TrackLegsTests {
         #expect(counted.count == 1, "the wobble is taken in: \(matched.stretches.map(\.pointRange))")
         let result = TrackLegs.legs(of: counted[0], points: points, in: network)
         #expect(result.count == 1 && result[0].direction == .forward && abs(result[0].upperMetre - 500.4) < 3)
+    }
+
+    @Test("Two ways a metre or two apart, joined by a hop: each is travelled in the direction of the track, with no extra legs")
+    func hop() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (50, 0)]), way(2, [(50.3, 0), (100, 0)])])
+        let points = walk(10, 90)
+        let matched = TrackMatcher.match(TrackSegment(points: points), on: network)
+        let result = matched.stretches.flatMap { TrackLegs.legs(of: $0, points: points, in: network) }
+        #expect(result.map(\.wayID) == [1, 2] && result.allSatisfy { $0.direction == .forward }, "\(result.map { ($0.wayID, $0.lowerMetre, $0.upperMetre) })")
+        #expect(result[0].upperMetre < 290 && result[1].lowerMetre < 5 && result[1].upperMetre < 230)
+    }
+
+    @Test("Where the edges are not connected the leg ends, and no time is shared across the gap")
+    func gap() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (50, 0)]), way(2, [(68, 0), (118, 0)])])
+        let points = walk(10, 108)
+        var rules = MatchingRules.standard
+        rules.minimumRawLength = 400
+        let matched = TrackMatcher.match(TrackSegment(points: points), on: network, rules: rules)
+        let stretch = try #require(matched.stretches.first)
+        #expect(matched.stretches.count == 1 && stretch.isMatched && !stretch.edgeGaps.isEmpty, "stretches \(matched.stretches.map(\.pointRange))")
+        let result = TrackLegs.legs(of: stretch, points: points, in: network)
+        #expect(result.map(\.wayID) == [1, 2])
+        #expect(result[0].end < result[1].start, "the legs do not meet: the track was on neither way in between")
+    }
+
+    @Test("A closed way that the track passes the start of is two legs, one to the end of the way and one from its start")
+    func closedWay() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (40, 0), (40, 10), (0, 10), (0, 0)])])
+        let result = try legs(follow([(20, 0), (40, 0), (40, 10), (0, 10), (0, 0), (20, 0)]), on: network)
+        #expect(result.count == 2 && result.allSatisfy { $0.wayID == 1 && $0.direction == .forward })
+        #expect(result[0].lowerMetre > 100 && result[1].lowerMetre < 1 && result[1].upperMetre > 100)
+        #expect(abs(result[0].upperMetre - (network.edges.map(\.length).reduce(0, +))) < 1, "the first leg ends at the end of the way")
+    }
+
+    @Test("A leg that ends with a small step back keeps the direction of the leg")
+    func wobbleAtTheEnd() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (100, 0)])])
+        let result = try legs(walk(10, 40) + walk(40, 36, first: 200).dropFirst(), on: network)
+        #expect(result.count == 1 && result[0].direction == .forward)
+    }
+
+    @Test("The turn distance and the minimum length are the caller's: a longer turn distance keeps a there-and-back as one leg, a longer minimum drops the leg")
+    func parameters() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (100, 0)])])
+        let points = walk(10, 70) + walk(70, 10, first: 200).dropFirst()
+        let stretch = try #require(TrackMatcher.match(TrackSegment(points: points), on: network).stretches.first)
+        #expect(TrackLegs.legs(of: stretch, points: points, in: network).count == 2)
+        #expect(TrackLegs.legs(of: stretch, points: points, in: network, turnDistance: 500).count == 1)
+        #expect(TrackLegs.legs(of: stretch, points: points, in: network, minimumLength: 400).isEmpty)
+        // A turn of exactly the turn distance counts as a turn, one a little less does not.
+        let out = walk(10, 50), back = walk(50, 40, first: 100)
+        let small = TrackLegs.legs(of: try #require(TrackMatcher.match(TrackSegment(points: out + back.dropFirst()), on: network).stretches.first), points: out + back.dropFirst(), in: network, turnDistance: 100)
+        #expect(small.count == 1)
+    }
+
+    @Test("A time that goes back is set to the one before it: no leg ends before it starts")
+    func timesGoingBack() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (100, 0)])])
+        var points = walk(10, 90)
+        points[points.count / 2].time = start.addingTimeInterval(-1_000)
+        let result = try legs(points, on: network)
+        #expect(result.allSatisfy { $0.elapsed >= 0 && $0.samples.map(\.time) == $0.samples.map(\.time).sorted() })
+    }
+
+    @Test("The legs of a matched track are those of its counted stretches, and a cleaned track of another size is refused")
+    func wholeTrack() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (100, 0)])])
+        let points = walk(10, 90)
+        let cleaned = CleanedTrack(segments: [TrackSegment(points: points)], breaks: [], mergedPoints: 0, droppedSegments: 0)
+        let matched = TrackMatcher.match(cleaned, on: network)
+        let result = try TrackLegs.legs(of: matched, from: cleaned, in: network)
+        #expect(result.count == 1 && result[0].direction == .forward)
+        #expect(try TrackLegs.legs(of: matched, from: cleaned, in: network, minimumStretchLength: 10_000).isEmpty)
+        #expect(throws: TrackLegsError.segmentCountsDiffer(matched: 0, cleaned: 1)) {
+            try TrackLegs.legs(of: MatchedTrack(segments: []), from: cleaned, in: network)
+        }
+    }
+
+    @Test("Every fix of a stretch points at the edge it lies on, also after a short raw stretch was taken in")
+    func fixes() throws {
+        let network = LineNetwork(features: [way(1, [(0, 0), (30, 0), (100, 0)])])
+        var points = walk(10, 90)
+        let middle = points.count / 2
+        for index in middle..<(middle + 4) {
+            points[index].coordinate = Coordinate(latitude: points[index].coordinate.latitude + 0.0004, longitude: points[index].coordinate.longitude)
+        }
+        var rules = MatchingRules.standard
+        rules.minimumRawLength = 300
+        let stretch = try #require(TrackMatcher.match(TrackSegment(points: points), on: network, rules: rules).stretches.first)
+        #expect(stretch.fixes.count > 10 && stretch.fixes.map(\.point) == stretch.fixes.map(\.point).sorted())
+        for fix in stretch.fixes {
+            #expect(fix.edgeIndex >= 0 && fix.edgeIndex < stretch.edges.count)
+            let edge = stretch.edges[fix.edgeIndex]
+            #expect(network.edges(near: points[fix.point].coordinate, within: 40).contains { $0.edge == edge }, "fix at point \(fix.point)")
+        }
+    }
+
+    @Test("The offset along the way agrees with the offsets that the store builder gives the pieces of a line cut at cell borders")
+    func offsetsAgreeWithTheBuilder() {
+        let line = (0...12).map { PackedPoint(longitude: 100_000_000 + Int32($0) * 1_000_000, latitude: 600_000_000) }
+        let pieces = CellSplitter.split(line: line)
+        #expect(pieces.count >= 3, "the line crosses cell borders")
+        let features = pieces.map {
+            StoredFeature(
+                classID: FeatureClass.path.rawValue, kind: .line, objectType: .way, objectID: 1, offsetAlongLine: $0.piece.offsetCentimetres,
+                parts: [GeometryPart(points: $0.piece.points)])
+        }
+        let network = LineNetwork(features: features)
+        // The distance along the original line: the steps between its vertices, then the way to the place from the vertex before it.
+        let vertices = line.map { Coordinate(latitude: Double($0.latitude) / 1e7, longitude: Double($0.longitude) / 1e7) }
+        var cumulative = [0.0]
+        for (a, b) in zip(vertices, vertices.dropFirst()) { cumulative.append(cumulative[cumulative.count - 1] + a.distance(to: b)) }
+        for edge in network.edges {
+            let place = network.coordinates[edge.from]
+            let index = min(Int(((place.longitude - 10) / 0.1).rounded(.down)), vertices.count - 1)
+            let expected = cumulative[index] + vertices[index].distance(to: place)
+            #expect(abs(edge.wayOffset - expected) < 0.2, "offset \(edge.wayOffset), expected \(expected)")
+        }
     }
 }
