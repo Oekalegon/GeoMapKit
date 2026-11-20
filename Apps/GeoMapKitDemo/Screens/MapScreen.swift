@@ -96,6 +96,9 @@ struct MapScreen: View {
                 LayersPanel()
                     .environment(tracks).environment(activities).environment(heatMap).environment(library)
                     .inspectorColumnWidth(min: 230, ideal: 270, max: 360)
+                    // On a phone the panel is a sheet; the map stays visible and usable behind it, so a time-lapse can be watched.
+                    .presentationDetents([.height(280), .medium, .large])
+                    .presentationBackgroundInteraction(.enabled)
             }
         }
         .sheet(isPresented: $showLibrary, onDismiss: {

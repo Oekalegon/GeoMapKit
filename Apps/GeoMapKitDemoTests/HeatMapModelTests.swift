@@ -15,7 +15,9 @@ struct HeatMapModelTests {
         await model.play()
         await model.stop()
         await model.show(3)
-        model.hide()
+        model.seek(to: 2)
+        model.togglePlaying()
+        model.requestPause()
         #expect(!model.isPlaying && model.overlays.isEmpty && model.viewBox == nil)
     }
 
@@ -43,6 +45,6 @@ struct HeatMapModelTests {
         model.setVisible(false)
         #expect(!model.isVisible && model.overlays.isEmpty)
         model.setVisible(true)
-        #expect(model.isVisible && model.categories == nil && model.measure == .activities)
+        #expect(model.isVisible && model.lastCategories == nil && model.lastMeasure == .activities)
     }
 }

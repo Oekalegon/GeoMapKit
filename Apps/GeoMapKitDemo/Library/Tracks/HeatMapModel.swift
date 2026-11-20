@@ -51,8 +51,8 @@ final class HeatMapModel {
     /// Whether the heat map is drawn. Switching it off keeps the frame, so switching it on again costs nothing.
     private(set) var isVisible = true
     /// What the last heat map counted, so that a new one for another view counts the same.
-    private(set) var categories: Set<String>?
-    private(set) var measure = HeatMapMeasure.activities
+    private(set) var lastCategories: Set<String>?
+    private(set) var lastMeasure = HeatMapMeasure.activities
 
     private var area: HeatMapArea?
     private var areaKey: String?
@@ -66,7 +66,11 @@ final class HeatMapModel {
     var hasFrame: Bool { frame != nil }
 
     /// Draws or hides the heat map without making it again.
-    func setVisible(_ on: Bool) { isVisible = on }
+    func setVisible(_ on: Bool) {
+        isVisible = on
+        // A player that is stepping while nothing is drawn only makes frames nobody sees.
+        if !on { requestPause() }
+    }
 
     /// The month of the frame that is shown.
     var month: TrackMonth? { lapse?.month(at: index) }
@@ -90,7 +94,9 @@ final class HeatMapModel {
     }
 
     /// Prepares a time-lapse and shows its first frame.
-    func prepareTimeLapse(store: TrackStore, map: OpenedMap, box: BoundingBox, categories: Set<String>?, measure: HeatMapMeasure) async {
+    func prepareTimeLapse(
+        store: TrackStore, map: OpenedMap, box: BoundingBox, categories: Set<String>?, measure: HeatMapMeasure, startingAt month: Int = 0
+    ) async {
         await work {
             let area = try await self.area(store: store, map: map, box: box)
             self.endPlayer()
@@ -100,7 +106,7 @@ final class HeatMapModel {
             }
             self.lapse = lapse
             self.remember(categories, measure)
-            self.index = 0
+            self.index = max(month, 0)
             let player = HeatMapPlayer(lapse: lapse, span: self.spanChoice.span)
             self.player = player
             self.listener = Task {
@@ -110,7 +116,7 @@ final class HeatMapModel {
                     self.isPlaying = playback.isPlaying
                 }
             }
-            await player.seek(to: 0)
+            await player.seek(to: max(month, 0))
         }
     }
 
@@ -126,11 +132,29 @@ final class HeatMapModel {
     /// Stops the player; the frame stays.
     func stop() async { await player?.pause() }
 
-    /// Takes the heat map off the map.
-    func hide() {
-        endPlayer()
-        frame = nil
+    /// Makes the heat map again for another view, with what the last one counted: a time-lapse stays a time-lapse, on the same month
+    /// and with the same frame choice; a picture stays a picture.
+    func update(store: TrackStore, map: OpenedMap, box: BoundingBox) async {
+        if lapse != nil {
+            await prepareTimeLapse(store: store, map: map, box: box, categories: lastCategories, measure: lastMeasure, startingAt: index)
+        } else {
+            await showAll(store: store, map: map, box: box, categories: lastCategories, measure: lastMeasure)
+        }
     }
+
+    // MARK: From views
+
+    /// Starts `update(store:map:box:)` and returns at once, for a button.
+    func requestUpdate(store: TrackStore, map: OpenedMap, box: BoundingBox) { Task { await update(store: store, map: map, box: box) } }
+
+    /// Goes to a month and returns at once, for a slider.
+    func seek(to newIndex: Int) { Task { await show(newIndex) } }
+
+    /// Plays or pauses and returns at once, for a button.
+    func togglePlaying() { Task { if isPlaying { await stop() } else { await play() } } }
+
+    /// Pauses and returns at once.
+    func requestPause() { Task { await stop() } }
 
     /// Shows a reason why a heat map could not be made.
     func setProblem(_ text: String) { problem = text }
@@ -139,8 +163,8 @@ final class HeatMapModel {
     func databaseChanged() { if frame != nil { isOutOfDate = true } }
 
     private func remember(_ categories: Set<String>?, _ measure: HeatMapMeasure) {
-        self.categories = categories
-        self.measure = measure
+        lastCategories = categories
+        lastMeasure = measure
         isVisible = true
     }
 

@@ -168,6 +168,20 @@ final class TrackLibrary {
         if on { await load(item) }
     }
 
+    /// More tracks than this are shown only after the user confirms: every one is read from its file and drawn.
+    static let confirmShowAllAbove = 100
+
+    /// Shows or hides every track, one after the other (a thousand files are not read at once).
+    func setAllVisible(_ on: Bool) async {
+        for item in items where visible.contains(item.id) != on { await setVisible(item, on) }
+    }
+
+    /// Starts `setAllVisible(_:)` and returns at once, for a button.
+    func requestAllVisible(_ on: Bool) { Task { await setAllVisible(on) } }
+
+    /// Shows or hides one track and returns at once, for a switch.
+    func request(_ item: TrackItem, visible on: Bool) { Task { await setVisible(item, on) } }
+
     /// Asks the map to fit a box (a track).
     func requestFit(_ box: BoundingBox) { fit = Fit(box: box) }
 
