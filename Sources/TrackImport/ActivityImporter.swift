@@ -19,9 +19,11 @@ public struct ActivityImporter: Sendable {
     public var cleaning: TrackCleaningRules
     /// How points are matched; the app chooses them for the sport.
     public var matching: MatchingRules
-    /// The least confidence of a stretch that counts, from 0 to 1.
+    /// The least confidence of a stretch that counts, from 0 to 1 (a value outside that is brought into it, one that is not a number
+    /// is 0.5).
     public var minimumConfidence: Double
-    /// The shortest recorded length of a stretch that counts, in metres.
+    /// The shortest recorded length of a stretch that counts, in metres (not below 0; one that is not a number is 100). Also the
+    /// shortest of a raw line is ``OffTrackLines/defaultMinimumLength``.
     public var minimumStretchLength: Double
     /// The version number stored as ``StoredActivity/matchedWith``: raise it when the rules change, so that older activities can be found.
     public var matchedWith: Int
@@ -54,23 +56,28 @@ public struct ActivityImporter: Sendable {
         let length = cleaned.segments.reduce(0.0) { $0 + Self.length(of: $1) }
         switch mode {
         case .raw:
+            // A segment shorter than an off-track stretch may be is noise (a stub at the start), as it is for a matched track.
             let lines = cleaned.segments.compactMap { segment -> OffTrackLine? in
                 guard let start = segment.points.first?.time, let end = segment.points.last?.time else { return nil }
+                let segmentLength = Self.length(of: segment)
+                guard segmentLength >= OffTrackLines.defaultMinimumLength else { return nil }
                 return OffTrackLine(
-                    coordinates: segment.points.map(\.coordinate), start: start, elapsed: end.timeIntervalSince(start),
-                    length: Self.length(of: segment))
+                    coordinates: segment.points.map(\.coordinate), start: start, elapsed: end.timeIntervalSince(start), length: segmentLength)
             }
             return ImportedActivity(
-                activity: record, legs: [], offTrack: lines, length: length, matchedLength: 0, lengthByClass: [:],
+                activity: record, legs: [], offTrack: lines, length: length, matchedLength: 0, countedLength: 0, lengthByClass: [:],
                 droppedSegments: cleaned.droppedSegments)
         case .matched:
             let matched = TrackMatcher.match(cleaned, on: network, rules: matching)
+            let confidence = minimumConfidence.isNaN ? 0.5 : min(max(minimumConfidence, 0), 1)
+            let stretchLength = minimumStretchLength.isNaN ? 100 : max(minimumStretchLength, 0)
             let legs = try TrackLegs.legs(
-                of: matched, from: cleaned, in: network, minimumConfidence: minimumConfidence, minimumStretchLength: minimumStretchLength)
+                of: matched, from: cleaned, in: network, minimumConfidence: confidence, minimumStretchLength: stretchLength)
+            let counted = matched.countedStretches(minimumConfidence: confidence, minimumLength: stretchLength).reduce(0.0) { $0 + $1.length }
             let lines = try OffTrackLines.lines(of: matched, from: cleaned)
             return ImportedActivity(
                 activity: record, legs: legs, offTrack: lines, length: length, matchedLength: matched.length - matched.unmatchedLength,
-                lengthByClass: matched.lengthByClass, droppedSegments: cleaned.droppedSegments)
+                countedLength: counted, lengthByClass: matched.lengthByClass, droppedSegments: cleaned.droppedSegments)
         }
     }
 

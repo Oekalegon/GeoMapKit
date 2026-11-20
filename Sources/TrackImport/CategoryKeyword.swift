@@ -8,14 +8,17 @@ public struct CategoryKeyword: Sendable, Equatable {
         case prefix
     }
 
-    /// The text, without case and accents mattering (`orientatie` matches "Oriëntatieloop").
+    /// The text. Case never matters; accents do not either unless ``accentsMatter`` is set (`orientatie` matches "Oriëntatieloop").
     public var text: String
     /// How it is compared.
     public var match: Match
+    /// Whether an accent must be the same. A short word needs it: with accents ignored `OL` would match the Swedish *öl* (beer).
+    public var accentsMatter: Bool
 
     /// Creates a keyword.
-    public init(_ text: String, _ match: Match = .word) {
+    public init(_ text: String, _ match: Match = .word, accentsMatter: Bool = false) {
         self.text = text
         self.match = match
+        self.accentsMatter = accentsMatter
     }
 }

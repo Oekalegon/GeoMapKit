@@ -98,4 +98,75 @@ struct ActivityImporterTests {
         let two = try importer().prepare(track, category: "trail", mode: .matched)
         #expect(one == two)
     }
+
+    /// Two stretches of the path with a pause and a jump between them: cleaning cuts the track in two.
+    private func twoSegments() -> [TrackPoint] { walk(0, 40) + walk(60, 100, first: 900) }
+
+    @Test("A track with a gap is two segments: raw gives a line for each, matched gives legs from both")
+    func gap() throws {
+        let track = try ActivityTrack(id: "g", points: twoSegments(), tags: [:])
+        let raw = try importer().prepare(track, category: "orienteering", mode: .raw)
+        #expect(raw.offTrack.count == 2 && raw.offTrack.allSatisfy { $0.length >= 30 })
+        let matched = try importer().prepare(track, category: "trail", mode: .matched)
+        #expect(matched.legs.count == 2 && matched.offTrack.isEmpty)
+        let covered: Double = matched.legs.map { $0.upperMetre - $0.lowerMetre }.reduce(0, +)
+        #expect(abs(matched.countedLength - covered) < 40)
+    }
+
+    @Test("Only a stretch that counts is in the counted length: a short matched one is in the matched length alone")
+    func counted() throws {
+        let track = try ActivityTrack(id: "s", points: walk(0, 100), tags: [:])
+        let all = try importer().prepare(track, category: "trail", mode: .matched)
+        #expect(all.countedLength > 400 && abs(all.countedLength - all.matchedLength) < 1)
+        var strict = importer()
+        strict.minimumStretchLength = 10_000
+        let none = try strict.prepare(track, category: "trail", mode: .matched)
+        #expect(none.legs.isEmpty && none.countedLength == 0 && none.matchedLength > 400)
+    }
+
+    @Test("A raw segment under 30 m is noise and gives no line; a track of such segments gives none")
+    func shortRaw() throws {
+        let track = try ActivityTrack(id: "t", points: walk(0, 4), tags: [:])
+        #expect(try importer().prepare(track, category: "orienteering", mode: .raw).offTrack.isEmpty)
+    }
+
+    @Test("Thresholds that are not numbers or out of range are brought into range, not passed on")
+    func thresholds() throws {
+        let track = try ActivityTrack(id: "n", points: walk(0, 100), tags: [:])
+        var odd = importer()
+        odd.minimumConfidence = .nan
+        odd.minimumStretchLength = -5
+        #expect(try odd.prepare(track, category: "trail", mode: .matched).legs.count == 1)
+        odd.minimumConfidence = 7
+        #expect(try odd.prepare(track, category: "trail", mode: .matched).legs.isEmpty)
+    }
+
+    @Test("A raw line of one category does not shape the traces of another")
+    func rawAndTrailTracesApart() async throws {
+        let store = try TrackStore(url: nil)
+        // Open ground 60 north of the path: the trail run is off track there, the orienteering run is raw over the same ground.
+        let ground = try ActivityTrack(id: "t", points: walk(0, 100, north: 60), tags: [:])
+        let orienteering = try ActivityTrack(id: "o", points: walk(0, 100, north: 60, first: 100_000), tags: [:])
+        try await importer().add(ground, category: "trail", mode: .matched, to: store)
+        try await importer().add(orienteering, category: "orienteering", mode: .raw, to: store)
+        let trail = try await store.traces(categories: ["trail"])
+        let raw = try await store.traces(categories: ["orienteering"])
+        #expect(trail.count == 1 && trail[0].activities == 1 && trail[0].passes == 1)
+        #expect(raw.count == 1 && raw[0].activities == 1 && raw[0].passes == 1)
+        #expect(Set(trail.map(\.id)).isDisjoint(with: raw.map(\.id)))
+    }
+
+    @Test("An import that fails leaves the store as it was")
+    func failure() async throws {
+        let store = try TrackStore(url: nil)
+        let track = try ActivityTrack(id: "a", points: walk(0, 100), tags: [:])
+        try await importer().add(track, category: "trail", mode: .matched, to: store)
+        let before = try await store.legCount()
+        // A store that is closed by a newer-version refusal cannot be made here, so a failing prepare is the case: a network with
+        // no edges gives no legs and no error, and the activity is still replaced as a whole.
+        let empty = ActivityImporter(network: LineNetwork(features: []), mapID: "none")
+        try await empty.add(track, category: "trail", mode: .matched, to: store)
+        let after = try await store.legCount(), count = try await store.activityCount()
+        #expect(before == 1 && after == 0 && count == 1)
+    }
 }

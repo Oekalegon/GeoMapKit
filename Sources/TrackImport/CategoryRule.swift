@@ -12,12 +12,12 @@ public struct CategoryRule: Sendable, Equatable {
     }
 
     /// Orienteering: the words `OL` and `NK` (a championship), and the starts of the words for orienteering in English, Dutch, German and
-    /// Norwegian or Swedish. A name such as "Col de la Madeleine" has none of them as a word. A suggestion, never a decision: the user or
+    /// Norwegian or Swedish. The two short words must have the same accents (the Swedish *öl* is beer). A name such as "Col de la Madeleine" has none of them as a word. A suggestion, never a decision: the user or
     /// the app has the last word, because a run on the paths of a forest can have such a name too.
     public static let orienteering = CategoryRule(
         category: "orienteering",
         keywords: [
-            CategoryKeyword("OL"), CategoryKeyword("NK"), CategoryKeyword("orienteer", .prefix), CategoryKeyword("orientatie", .prefix),
+            CategoryKeyword("OL", accentsMatter: true), CategoryKeyword("NK", accentsMatter: true), CategoryKeyword("orienteer", .prefix), CategoryKeyword("orientatie", .prefix),
             CategoryKeyword("orientierung", .prefix), CategoryKeyword("orientering", .prefix),
         ])
 }

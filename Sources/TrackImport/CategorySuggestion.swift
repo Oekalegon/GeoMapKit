@@ -4,4 +4,10 @@ public struct CategorySuggestion: Sendable, Equatable {
     public let category: String
     /// The keyword that was found.
     public let keyword: CategoryKeyword
+
+    /// Creates a suggestion.
+    public init(category: String, keyword: CategoryKeyword) {
+        self.category = category
+        self.keyword = keyword
+    }
 }

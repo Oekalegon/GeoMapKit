@@ -15,7 +15,7 @@ import Tracks
 /// leaves the store as it was.
 public actor TrackStore {
     /// The version of the layout of the database (`user_version`). A database with a higher number is refused.
-    public static let version = 2
+    public static let version = 3
 
     private let database: SQLiteDatabase
     /// How the off-track lines are put together into traces. They are kept in the file: a store opened with other rules than the ones the
@@ -100,7 +100,15 @@ public actor TrackStore {
                 try database.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
                 // The traces are derived from the off-track lines; there are none yet, so they are current.
                 try database.execute("INSERT INTO meta(key, value) VALUES ('traces_stale', '0')")
-                try database.execute("PRAGMA user_version = \(version)")
+                try database.execute("PRAGMA user_version = 2")
+            }
+        }
+        if found < 3 {
+            // Version 3 makes the traces of each category apart (see ``rebuildTraces()``); the ones that are there were made from all
+            // categories together, so they are made again when they are next asked for.
+            try database.transaction {
+                try database.execute("UPDATE meta SET value = '1' WHERE key = 'traces_stale'")
+                try database.execute("PRAGMA user_version = 3")
             }
         }
     }
@@ -228,27 +236,34 @@ public actor TrackStore {
 
     /// Makes the traces again from the off-track lines, in the order of the activities' start times (see ``TraceBuilder``).
     ///
+    /// **The traces of each category are made apart** (one ``TraceBuilder`` for each category). A line of one category never joins a
+    /// trace of another, so the whole tracks of orienteering runs (which are kept as off-track lines, see `ImportMode.raw` of
+    /// `TrackImport`) do not move the traces of trail runs. The cost is that a combination of categories shows the traces of each: two
+    /// traces over the same ground are not merged into one.
+    ///
     /// The traces are derived (by ``traceRules``), so this is for a repair. It is one transaction. ``traces(categories:months:)``
     /// does it by itself when an activity with off-track lines was added or removed since the last time.
     ///
     /// - Throws: ``TrackStoreError``.
     public func rebuildTraces() throws {
         try database.transaction {
-            var builder = TraceBuilder(rules: traceRules)
+            var builders: [String: TraceBuilder] = [:]
             var damaged: Int64?
             try database.run(
-                "SELECT offtrack.id, offtrack.line FROM offtrack JOIN activity ON activity.id = offtrack.activity ORDER BY activity.started, offtrack.id"
+                "SELECT offtrack.id, offtrack.line, activity.category FROM offtrack JOIN activity ON activity.id = offtrack.activity "
+                    + "ORDER BY activity.started, offtrack.id"
             ) { row in
                 guard let line = LineBlob.decode(row.blob(1)) else {
                     damaged = row.integer(0)
                     return
                 }
-                builder.add(line, source: row.integer(0))
+                builders[row.text(2), default: TraceBuilder(rules: traceRules)].add(line, source: row.integer(0))
             }
             if let damaged { throw TrackStoreError.damaged("the off-track line \(damaged)") }
             try database.execute("DELETE FROM trace_pass")
             try database.execute("DELETE FROM trace")
-            for trace in builder.traces {
+            // The id of a trace is made from the id of the line that started it, so the ids of different categories never meet.
+            for trace in builders.values.flatMap(\.traces) {
                 try database.execute(
                     "INSERT INTO trace(id, line, length) VALUES (?, ?, ?)",
                     [.integer(trace.id), .blob(LineBlob.encode(trace.coordinates)), .real(trace.length)])

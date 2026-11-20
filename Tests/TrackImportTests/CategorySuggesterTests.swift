@@ -24,7 +24,7 @@ struct CategorySuggesterTests {
     @Test("The keyword is named, so the user can be shown why; the name and the description are both read")
     func keywordAndTexts() {
         let found = suggester.suggestion(for: ["Morning run", "Club event, NK middle distance"])
-        #expect(found == CategorySuggestion(category: "orienteering", keyword: CategoryKeyword("NK")))
+        #expect(found == CategorySuggestion(category: "orienteering", keyword: CategoryKeyword("NK", accentsMatter: true)))
     }
 
     @Test("The first rule that has a keyword wins")
@@ -38,5 +38,13 @@ struct CategorySuggesterTests {
     func emptyKeyword() {
         let rule = CategoryRule(category: "x", keywords: [CategoryKeyword("", .prefix), CategoryKeyword("")])
         #expect(CategorySuggester(rules: [rule]).suggestion(for: ["anything"]) == nil)
+    }
+
+    @Test("OL needs its own accents: the Swedish öl is beer, the Norwegian øl too, and OL and ol are the same word")
+    func accents() {
+        for text in ["Öl", "ÖL med vänner", "øl-løp"] { #expect(suggester.suggestion(for: [text]) == nil, "\(text)") }
+        #expect(suggester.suggestion(for: ["ol"])?.category == "orienteering")
+        // A longer keyword still ignores accents.
+        #expect(suggester.suggestion(for: ["Orïenteering"])?.category == "orienteering")
     }
 }
