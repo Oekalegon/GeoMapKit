@@ -31,6 +31,10 @@ public struct LineNetwork: Sendable {
         public let wayID: Int64
         /// The feature class of the way (see ``FeatureClass``).
         public let classID: UInt8
+        /// The distance along the whole way, in metres, from its first node to ``from``. It is made from the offset that the store keeps
+        /// for each piece of a way, so it is the same whichever cells the network is made of, and it stays the same when the area changes.
+        /// ``from`` to ``to`` follows the order of the nodes of the way.
+        public let wayOffset: Double
     }
 
     /// The feature classes a runner or rider can use: paths, tracks, roads, service roads and pavements. A matcher for one sport takes
@@ -80,7 +84,7 @@ public struct LineNetwork: Sendable {
     /// Makes a network from the line features of one or more cells.
     ///
     /// Features that are not lines, and lines of other classes than `classes`, are left out. A step of no length is left out, and so is a
-    /// step that is stored twice for the same way.
+    /// step that is stored twice for the same way (a way that goes over the same step twice has the offset of the first time).
     ///
     /// - Parameters:
     ///   - features: The features, from any band (the detail band has the whole geometry).
@@ -143,8 +147,12 @@ public struct LineNetwork: Sendable {
             for feature in features where feature.kind == .line && classes.contains(feature.classID) {
                 for part in feature.parts where part.points.count >= 2 {
                     var previous = node(part.points[0])
+                    // The distance along the way to `previous`: the offset of the piece (in centimetres), then the steps.
+                    var offset = Double(feature.offsetAlongLine) / 100
                     for point in part.points.dropFirst() {
                         let next = node(point)
+                        let start = offset
+                        offset += coordinates[previous].distance(to: coordinates[next])
                         defer { previous = next }
                         guard next != previous,
                             seen.insert(EdgeKey(low: min(previous, next), high: max(previous, next), way: feature.objectID)).inserted
@@ -154,7 +162,7 @@ public struct LineNetwork: Sendable {
                         edges.append(
                             Edge(
                                 from: previous, to: next, length: coordinates[previous].distance(to: coordinates[next]), wayID: feature.objectID,
-                                classID: feature.classID))
+                                classID: feature.classID, wayOffset: start))
                     }
                 }
             }

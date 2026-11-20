@@ -29,6 +29,9 @@ public struct MatchedStretch: Sendable, Equatable {
     /// route, such as the segment statistics, must not take the two edges as neighbours. A hop of a metre or two between dead ends is
     /// a join, not a gap.
     public let edgeGaps: [Int]
+    /// The fixes that were laid on the lines, in order, with the place of each in ``edges``; empty for a raw stretch. A matched stretch
+    /// that took in a short raw stretch has the fixes of both sides and none for the raw part.
+    public let fixes: [MatchedFix]
     /// The length that was recorded in this stretch, in metres, as the sum of the straight steps between its points.
     public let length: Double
     /// For a matched stretch, the part of ``length`` on each feature class of the lines (the step to a point counts for the class of the
@@ -38,8 +41,9 @@ public struct MatchedStretch: Sendable, Equatable {
     /// Creates a stretch.
     public init(
         pointRange: Range<Int>, isMatched: Bool, confidence: Double, coordinates: [Coordinate], edges: [Int], length: Double,
-        lengthByClass: [UInt8: Double], edgeGaps: [Int] = [], joinsTo: Coordinate? = nil
+        lengthByClass: [UInt8: Double], edgeGaps: [Int] = [], joinsTo: Coordinate? = nil, fixes: [MatchedFix] = []
     ) {
+        self.fixes = fixes
         self.edgeGaps = edgeGaps
         self.joinsTo = joinsTo
         self.pointRange = pointRange
