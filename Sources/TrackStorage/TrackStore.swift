@@ -20,6 +20,9 @@ public actor TrackStore {
 
     /// Opens a database, or makes one.
     ///
+    /// One store is expected per file: a second connection to the same file waits up to 2 s for a change in progress and then fails
+    /// with ``TrackStoreError/sqlite(_:)``.
+    ///
     /// - Parameter url: The file; its folder must exist. `nil` makes a database in memory that is gone when the store is.
     /// - Throws: ``TrackStoreError``.
     public init(url: URL?) throws {
@@ -68,7 +71,9 @@ public actor TrackStore {
     /// Adds an activity with its legs, in one transaction, and counts its buckets.
     ///
     /// An activity with the same ``StoredActivity/appID`` is replaced (its legs and its counts are taken out first). A leg whose range
-    /// rounds to less than one bucket is left out as noise.
+    /// rounds to less than one bucket is left out as noise. **Rounding:** each end of a leg is rounded to the nearest 10 m, so a bucket
+    /// counts when the leg covers more than half of it at an end (a leg from 141 to 144 m is dropped as noise, one from 143 to 148 m counts the whole
+    /// bucket from 140 to 150 m), and a bucket moves by at most 5 m at each end.
     ///
     /// - Parameters:
     ///   - activity: The activity.
@@ -176,7 +181,8 @@ public actor TrackStore {
     ///
     /// - Parameters:
     ///   - ways: The OSM ids of the ways (for example those of a map area). Many ids are looked up in groups.
-    ///   - categories: The categories to count, or `nil` for all.
+    ///   - categories: The categories to count, or `nil` for all. An empty set counts nothing. At most about 30,000 values (SQLite's limit
+    ///     of variables in one statement).
     ///   - months: The months to count, or `nil` for all.
     /// - Returns: The buckets that were used at least once, in the order of way and bucket.
     /// - Throws: ``TrackStoreError``.

@@ -22,18 +22,21 @@ struct SQLiteRow {
     }
 }
 
-/// A thin wrapper over the C interface of SQLite. It is used from one actor only, so it holds the handle without a lock.
+/// A thin wrapper over the C interface of SQLite. It is used from one actor only, so the connection is opened without SQLite's own
+/// mutex and the handle is held without a lock.
 final class SQLiteDatabase {
     private var handle: OpaquePointer?
 
     init(path: String) throws {
         var opened: OpaquePointer?
-        guard sqlite3_open_v2(path, &opened, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
+        guard sqlite3_open_v2(path, &opened, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
             let message = opened.map { String(cString: sqlite3_errmsg($0)) } ?? "out of memory"
             sqlite3_close(opened)
             throw TrackStoreError.cannotOpen(message)
         }
         handle = opened
+        // Another connection that holds the file (a second store, a backup) is waited for, not failed at once.
+        sqlite3_busy_timeout(opened, 2_000)
     }
 
     deinit { sqlite3_close(handle) }

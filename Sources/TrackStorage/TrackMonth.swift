@@ -33,5 +33,13 @@ public struct TrackMonth: Sendable, Hashable, Comparable, Codable {
         month = index - years * 12 + 1
     }
 
+    private enum CodingKeys: String, CodingKey { case year, month }
+
+    /// Decodes a month and carries one outside 1 to 12 into the year, as ``init(year:month:)`` does.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(year: try container.decode(Int.self, forKey: .year), month: try container.decode(Int.self, forKey: .month))
+    }
+
     public static func < (lhs: TrackMonth, rhs: TrackMonth) -> Bool { lhs.index < rhs.index }
 }

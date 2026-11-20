@@ -140,6 +140,67 @@ struct TrackStoreTests {
         #expect(throws: TrackStoreError.self) { try TrackStore(url: directory.appendingPathComponent("missing/none.sqlite")) }
     }
 
+    @Test("A change that fails half way leaves the store as it was: the old activity and its counts are still there")
+    func rollback() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("trackstore-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("tracks.sqlite")
+        let store = try TrackStore(url: url)
+        try await store.add(activity("a"), legs: [try leg(1, 0, 50)])
+        // Another connection takes the leg table away, so the replacement fails after the old activity was removed.
+        let other = try SQLiteDatabase(path: url.path)
+        try other.execute("DROP TABLE leg")
+        await #expect(throws: TrackStoreError.self) { try await store.add(activity("a"), legs: [try leg(2, 0, 30)]) }
+        let found = try await store.activity(appID: "a")
+        let counts = try await store.counts(ways: [1, 2])
+        #expect(found != nil && counts.map(\.wayID) == [1, 1, 1, 1, 1], "the old activity and counts are kept")
+    }
+
+    @Test("Tags that cannot be read are an error, not an empty set")
+    func damagedTags() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("trackstore-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("tracks.sqlite")
+        let store = try TrackStore(url: url)
+        try await store.add(activity("a"), legs: [])
+        let other = try SQLiteDatabase(path: url.path)
+        try other.execute("UPDATE activity SET tags = ?", [.blob(Data("not json".utf8))])
+        await #expect(throws: TrackStoreError.damaged("the tags of the activity a")) { try await store.activity(appID: "a") }
+    }
+
+    @Test("A second connection waits for a change in progress instead of failing at once")
+    func busy() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("trackstore-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("tracks.sqlite")
+        let store = try TrackStore(url: url)
+        let holder = try SQLiteDatabase(path: url.path)
+        try holder.execute("BEGIN IMMEDIATE")
+        let started = ContinuousClock.now
+        await #expect(throws: TrackStoreError.self) { try await store.add(activity("a"), legs: []) }
+        #expect(ContinuousClock.now - started >= .seconds(1), "it waited for the lock")
+        try holder.execute("ROLLBACK")
+    }
+
+    @Test("A month that is read from JSON is carried like one that is made")
+    func decodedMonth() throws {
+        let decoded = try JSONDecoder().decode(TrackMonth.self, from: Data(#"{"year":2024,"month":13}"#.utf8))
+        #expect(decoded == TrackMonth(year: 2025, month: 1))
+        let again = try JSONDecoder().decode(TrackMonth.self, from: try JSONEncoder().encode(TrackMonth(year: 2023, month: 11)))
+        #expect(again == TrackMonth(year: 2023, month: 11))
+    }
+
+    @Test("A leg is rounded at both ends to the nearest 10 m: the bucket counts when it is covered by more than half at an end")
+    func rounding() async throws {
+        let store = try TrackStore(url: nil)
+        try await store.add(activity("a"), legs: [try leg(1, 141, 144), try leg(2, 143, 148)])
+        #expect(try await store.counts(ways: [1]).isEmpty)
+        #expect(try await store.counts(ways: [2]).map(\.bucket) == [14])
+    }
+
     @Test("Many ways are looked up in groups")
     func manyWays() async throws {
         let store = try TrackStore(url: nil)
