@@ -15,6 +15,7 @@
 		0D7E524BF7AA42ED9E8F0807 /* Tracks in Frameworks */ = {isa = PBXBuildFile; productRef = 96C04EDA5619DC44D64AA022 /* Tracks */; };
 		0DB85CFB3B979DA8D73DB476 /* BuildStatusSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 426176FDB478F9280E3E3C56 /* BuildStatusSummary.swift */; };
 		17FEE7FD6BC9B39D889067C2 /* GeoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9CD0091E55ACE0D613480C7F /* GeoCore */; };
+		19263FF38483D54FC9740382 /* HeatMapModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBEBA783E515336372BFC11D /* HeatMapModelTests.swift */; };
 		2547326A9C1C9B803A0DD083 /* TrackLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF04A807BB74EBE6DD86E539 /* TrackLibraryTests.swift */; };
 		2629F900C12F9F4731D48B12 /* WatchMapStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 450CB319C115819F95A20AFE /* WatchMapStoreTests.swift */; };
 		2806E16AB42644B99124EB81 /* MapBuildHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0B9D5413295C071D1EB2AA1 /* MapBuildHost.swift */; };
@@ -26,11 +27,13 @@
 		2FE136A8866B18F77FF6690B /* MapBuildModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DB9486C6E58890D1178043E /* MapBuildModelTests.swift */; };
 		34F6B37F2D37F6AD943C6ACD /* BuildStatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3DE705A683504F3739A29F /* BuildStatusBar.swift */; };
 		3531C206C0CAEEA973CDE9ED /* FeatureStore in Frameworks */ = {isa = PBXBuildFile; productRef = D6BE4F640EE5A9B38E0F542B /* FeatureStore */; };
+		3744771A71751BA4D52153A2 /* TrackHeatMap in Frameworks */ = {isa = PBXBuildFile; productRef = 0C897BB9FFEAABFC78AB333E /* TrackHeatMap */; };
 		3B68326DBBD82C9C41DE7C31 /* LibraryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FFD9548FE43CBA881787881 /* LibraryScreen.swift */; };
 		3BB8857933F5508449AD9F19 /* WatchCutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4ABA3EE5D34A2322AE59AE /* WatchCutTests.swift */; };
 		3BCC7A29B994531CBDF911D5 /* MapStyle in Frameworks */ = {isa = PBXBuildFile; productRef = E12ADCF435FC6B0E4B5563EA /* MapStyle */; };
 		3C604BF97356544F009CFBE0 /* MapBuildModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32B771940DDAA0A9DA5FBCC /* MapBuildModel.swift */; };
 		413852D5D0C985D2423224B8 /* MapBuilder in Frameworks */ = {isa = PBXBuildFile; productRef = A60E4AA954455ABA298DD09A /* MapBuilder */; };
+		42A77F26930236DD4216E38A /* TrackHeatMap in Frameworks */ = {isa = PBXBuildFile; productRef = E87D6709783770D892F79CDB /* TrackHeatMap */; };
 		433C851C48EE67859E273EF8 /* StyleItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0877FCC5C94C2B18FE723F6 /* StyleItem.swift */; };
 		4AD3AC8F18EE76279935F29D /* TrackOverlays in Frameworks */ = {isa = PBXBuildFile; productRef = 19264DB3B4E6BEDF0BB65CF3 /* TrackOverlays */; };
 		51289FFF05297937B965F6EC /* SourceFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D0151CAA95BC23598DB7FB6 /* SourceFolderTests.swift */; };
@@ -55,6 +58,7 @@
 		90198D88BF0E373C6754D480 /* SourceFilesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFB82712FB858D09CBBB55C2 /* SourceFilesScreen.swift */; };
 		90A0C62CC732AF45B7DE4195 /* GeoMapKitDemoWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = FC772F2A0A656DE857078DBA /* GeoMapKitDemoWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		93101A95EE256C0AFE3AB915 /* VariantEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D87138AACA491660E94EF418 /* VariantEditing.swift */; };
+		948A2544BD8B398475F109B3 /* HeatMapModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7E81EE167F6B453D758AB6F /* HeatMapModel.swift */; };
 		9583F6DE940E42E74A5FA94E /* StyleSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2BE2D399774A342944A5350 /* StyleSync.swift */; };
 		96372809037E2BADAE6737A2 /* ActivityLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBDAAB855A6A83F6D1B43B4E /* ActivityLibraryTests.swift */; };
 		9A6D4A45B81D61F34FC9A144 /* ActivitiesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E48A01C733CBFC50E3B184D /* ActivitiesScreen.swift */; };
@@ -184,6 +188,7 @@
 		A1A0D6F072CACB7064DD275B /* SourceFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFolder.swift; sourceTree = "<group>"; };
 		A32B771940DDAA0A9DA5FBCC /* MapBuildModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapBuildModel.swift; sourceTree = "<group>"; };
 		A33C1909D578129B30CCD77C /* MapMergeTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapMergeTools.swift; sourceTree = "<group>"; };
+		A7E81EE167F6B453D758AB6F /* HeatMapModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatMapModel.swift; sourceTree = "<group>"; };
 		AF04A807BB74EBE6DD86E539 /* TrackLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackLibraryTests.swift; sourceTree = "<group>"; };
 		AF703213CC78C6BF2AD511F3 /* CoordinatedFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinatedFiles.swift; sourceTree = "<group>"; };
 		B0B9D5413295C071D1EB2AA1 /* MapBuildHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapBuildHost.swift; sourceTree = "<group>"; };
@@ -198,6 +203,7 @@
 		C956AE40C8C20823841848C7 /* StyleEditorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleEditorModel.swift; sourceTree = "<group>"; };
 		C9DEF99A4525C0DA69EF181A /* MapLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLibraryTests.swift; sourceTree = "<group>"; };
 		CB7A25C64E44504B8E53062A /* BuildStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildStatusTests.swift; sourceTree = "<group>"; };
+		CBEBA783E515336372BFC11D /* HeatMapModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatMapModelTests.swift; sourceTree = "<group>"; };
 		CF8C97FBE2E6D6943B813367 /* MapBuildHost+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MapBuildHost+Live.swift"; sourceTree = "<group>"; };
 		D2675E11624EF30CE5A2559B /* MapItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapItem.swift; sourceTree = "<group>"; };
 		D2AE03746C6E993A644FD1C7 /* StyleEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleEditorTests.swift; sourceTree = "<group>"; };
@@ -221,7 +227,7 @@
 		FC772F2A0A656DE857078DBA /* GeoMapKitDemoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GeoMapKitDemoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FDF8CB02E49A353C896A05F6 /* ColorConversion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorConversion.swift; sourceTree = "<group>"; };
 		FE3B86DDB658DF90DBFCB70E /* ZoomRangeEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomRangeEditor.swift; sourceTree = "<group>"; };
-		"TEMP_34838BF7-FBA7-4966-A5BF-4A791AAF0085" /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		"TEMP_1BF654C8-80ED-4541-B76A-B85C3184A0E5" /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -249,6 +255,7 @@
 				0A452B14E6D4A53C3D1C8D09 /* TrackOverlays in Frameworks */,
 				71E7A12874CB31C0199D4054 /* TrackImport in Frameworks */,
 				FFB9B2C2CFA8ED5E362D743A /* TrackStorage in Frameworks */,
+				42A77F26930236DD4216E38A /* TrackHeatMap in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -267,6 +274,7 @@
 				4AD3AC8F18EE76279935F29D /* TrackOverlays in Frameworks */,
 				A7E6F30BC3D4A5CDB8C4E91E /* TrackImport in Frameworks */,
 				AA52418ADDE64C2FBE6A5B7C /* TrackStorage in Frameworks */,
+				3744771A71751BA4D52153A2 /* TrackHeatMap in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -296,6 +304,7 @@
 			children = (
 				DBDAAB855A6A83F6D1B43B4E /* ActivityLibraryTests.swift */,
 				CB7A25C64E44504B8E53062A /* BuildStatusTests.swift */,
+				CBEBA783E515336372BFC11D /* HeatMapModelTests.swift */,
 				4DB9486C6E58890D1178043E /* MapBuildModelTests.swift */,
 				C9DEF99A4525C0DA69EF181A /* MapLibraryTests.swift */,
 				1E6A3E4DC5E4DABAFB7F4AA6 /* MapMergeModelTests.swift */,
@@ -350,6 +359,7 @@
 			isa = PBXGroup;
 			children = (
 				20AED71EBB101CBBD917C2B5 /* ActivityLibrary.swift */,
+				A7E81EE167F6B453D758AB6F /* HeatMapModel.swift */,
 				3CFDC064797C337CA2E12EEC /* TrackItem.swift */,
 				3A4759E0C63863FF1C4E42F1 /* TrackLibrary.swift */,
 				0B7261A72C8208B51C5E2E6A /* TrackSummary.swift */,
@@ -448,10 +458,10 @@
 			path = GeoMapKitDemoWatch;
 			sourceTree = "<group>";
 		};
-		"TEMP_00639D70-86AD-4E53-ACBE-489619612998" /* Apps */ = {
+		"TEMP_D35CF357-7E75-40B4-A9F5-0B5E562DF267" /* Apps */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_34838BF7-FBA7-4966-A5BF-4A791AAF0085" /* Config.xcconfig */,
+				"TEMP_1BF654C8-80ED-4541-B76A-B85C3184A0E5" /* Config.xcconfig */,
 			);
 			path = Apps;
 			sourceTree = "<group>";
@@ -485,6 +495,7 @@
 				19264DB3B4E6BEDF0BB65CF3 /* TrackOverlays */,
 				0A43F8B90E9FA623B2015F9E /* TrackImport */,
 				F279587663CD02142612C5BE /* TrackStorage */,
+				0C897BB9FFEAABFC78AB333E /* TrackHeatMap */,
 			);
 			productName = GeoMapKitDemo;
 			productReference = EC97AB61E841599637C86F07 /* GeoMapKitDemo.app */;
@@ -535,6 +546,7 @@
 				6933E61F5B1E47EE13EF40EF /* TrackOverlays */,
 				7C5BD1F730F4910948B6EC97 /* TrackImport */,
 				3739E1615072A4FE15A1BE1F /* TrackStorage */,
+				E87D6709783770D892F79CDB /* TrackHeatMap */,
 			);
 			productName = GeoMapKitDemoTests;
 			productReference = 91CAE03E8B77900B93FACDC2 /* GeoMapKitDemoTests.xctest */;
@@ -603,6 +615,7 @@
 			files = (
 				96372809037E2BADAE6737A2 /* ActivityLibraryTests.swift in Sources */,
 				7BE53C4448E42072DBEB4849 /* BuildStatusTests.swift in Sources */,
+				19263FF38483D54FC9740382 /* HeatMapModelTests.swift in Sources */,
 				2FE136A8866B18F77FF6690B /* MapBuildModelTests.swift in Sources */,
 				D80DDE180F4A3F498D9501EE /* MapLibraryTests.swift in Sources */,
 				B8C13510712F0FA6DB72F28D /* MapMergeModelTests.swift in Sources */,
@@ -637,6 +650,7 @@
 				EDF8BB0AAB15727C2D70E6DA /* EditorSession.swift in Sources */,
 				84762BB1E7635ABA5EB93DF8 /* GeneralEditorView.swift in Sources */,
 				6D605B0C07EFF24E308961AF /* GeoMapKitDemoApp.swift in Sources */,
+				948A2544BD8B398475F109B3 /* HeatMapModel.swift in Sources */,
 				BCB03618A00AAC053045A133 /* JSONEditorView.swift in Sources */,
 				B50CE7842E124FBC86216B01 /* LibraryError.swift in Sources */,
 				3B68326DBBD82C9C41DE7C31 /* LibraryScreen.swift in Sources */,
@@ -794,7 +808,7 @@
 		};
 		BDCADAD5C2E4D45BC51AFB17 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_34838BF7-FBA7-4966-A5BF-4A791AAF0085" /* Config.xcconfig */;
+			baseConfigurationReference = "TEMP_1BF654C8-80ED-4541-B76A-B85C3184A0E5" /* Config.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -863,7 +877,7 @@
 		};
 		E8DADC79AC588C4379677925 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_34838BF7-FBA7-4966-A5BF-4A791AAF0085" /* Config.xcconfig */;
+			baseConfigurationReference = "TEMP_1BF654C8-80ED-4541-B76A-B85C3184A0E5" /* Config.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -999,6 +1013,10 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = TrackImport;
 		};
+		0C897BB9FFEAABFC78AB333E /* TrackHeatMap */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TrackHeatMap;
+		};
 		14E277F6BAD6AC73F44E2257 /* MapUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MapUI;
@@ -1082,6 +1100,10 @@
 		E12ADCF435FC6B0E4B5563EA /* MapStyle */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MapStyle;
+		};
+		E87D6709783770D892F79CDB /* TrackHeatMap */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TrackHeatMap;
 		};
 		F279587663CD02142612C5BE /* TrackStorage */ = {
 			isa = XCSwiftPackageProductDependency;
