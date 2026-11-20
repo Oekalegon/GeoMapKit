@@ -1,4 +1,5 @@
 import Foundation
+import GeoCore
 import TrackOverlays
 import TrackStorage
 
@@ -38,9 +39,16 @@ public actor HeatMapTimeLapse {
     private var months: [[(key: Key, count: Int)]]
     /// The running total and the months (by number) that it holds.
     private var total: [Key: Int] = [:]
+    /// The traces by id (the lines), and the counts of each month and the running total of them, as for the buckets.
+    private let traceLines: [Int64: [Coordinate]]
+    private var traceMonths: [[(id: Int64, count: Int)]]
+    private var traceTotal: [Int64: Int] = [:]
     private var held: ClosedRange<Int>?
 
-    init(range: ClosedRange<TrackMonth>, counts: [MonthlyBucketCount], measure: HeatMapMeasure, ways: HeatMapWays, scale: HeatMapScale) {
+    init(
+        range: ClosedRange<TrackMonth>, counts: [MonthlyBucketCount], traces: [StoredTrace] = [], traceCounts: [MonthlyTraceCount] = [],
+        measure: HeatMapMeasure, ways: HeatMapWays, scale: HeatMapScale
+    ) {
         self.range = range
         self.measure = measure
         self.ways = ways
@@ -55,6 +63,15 @@ public actor HeatMapTimeLapse {
             if value > 0 { months[offset].append((Key(way: item.count.wayID, bucket: item.count.bucket), value)) }
         }
         self.months = months
+        traceLines = Dictionary(traces.map { ($0.id, $0.coordinates) }, uniquingKeysWith: { first, _ in first })
+        var traceMonths = [[(id: Int64, count: Int)]](repeating: [], count: length)
+        for item in traceCounts where traceLines[item.traceID] != nil {
+            let offset = range.lowerBound.months(to: item.month)
+            guard offset >= 0, offset < length else { continue }
+            let value = measure == .passes ? item.passes : item.activities
+            if value > 0 { traceMonths[offset].append((item.traceID, value)) }
+        }
+        self.traceMonths = traceMonths
     }
 
     /// The month of a frame.
@@ -74,8 +91,11 @@ public actor HeatMapTimeLapse {
         }
         move(to: first...last)
         let buckets = total.map { HeatMapBucket(wayID: $0.key.way, bucket: $0.key.bucket, count: $0.value) }
+        let lines = traceTotal.sorted { $0.key < $1.key }.compactMap { id, count in
+            traceLines[id].map { HeatMapTraceLine(coordinates: $0, count: count) }
+        }
         return HeatMapArea.frame(
-            buckets: buckets, ways: ways, wayCount: wayCount, months: range.lowerBound.adding(months: first)...range.lowerBound.adding(months: last),
+            buckets: buckets, traces: lines, ways: ways, wayCount: wayCount, months: range.lowerBound.adding(months: first)...range.lowerBound.adding(months: last),
             filtered: true, scale: scale)
     }
 
@@ -83,6 +103,7 @@ public actor HeatMapTimeLapse {
     private func move(to wanted: ClosedRange<Int>) {
         guard let current = held, current.overlaps(wanted) else {
             total = [:]
+            traceTotal = [:]
             for month in wanted { add(month, sign: 1) }
             held = wanted
             return
@@ -98,6 +119,10 @@ public actor HeatMapTimeLapse {
         for (key, count) in months[month] {
             let value = total[key, default: 0] + sign * count
             if value > 0 { total[key] = value } else { total[key] = nil }
+        }
+        for (id, count) in traceMonths[month] {
+            let value = traceTotal[id, default: 0] + sign * count
+            if value > 0 { traceTotal[id] = value } else { traceTotal[id] = nil }
         }
     }
 }

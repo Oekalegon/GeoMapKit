@@ -286,9 +286,7 @@ public actor TrackStore {
     /// - Returns: The traces in the order of their ids.
     /// - Throws: ``TrackStoreError``.
     public func traces(categories: Set<String>? = nil, months: ClosedRange<TrackMonth>? = nil) throws -> [StoredTrace] {
-        var stale = false
-        try database.run("SELECT value FROM meta WHERE key = 'traces_stale'") { stale = $0.text(0) != "0" }
-        if stale { try rebuildTraces() }
+        try rebuildTracesIfStale()
         var sql =
             "SELECT trace.id, trace.line, trace.length, COUNT(*), COUNT(DISTINCT offtrack.activity) FROM trace_pass "
             + "JOIN trace ON trace.id = trace_pass.trace JOIN offtrack ON offtrack.id = trace_pass.offtrack "
@@ -316,6 +314,47 @@ public actor TrackStore {
                 StoredTrace(id: row.integer(0), coordinates: line, length: row.real(2), activities: Int(row.integer(4)), passes: Int(row.integer(3))))
         }
         if let damaged { throw TrackStoreError.damaged("the trace \(damaged)") }
+        return result
+    }
+
+    private func rebuildTracesIfStale() throws {
+        var stale = false
+        try database.run("SELECT value FROM meta WHERE key = 'traces_stale'") { stale = $0.text(0) != "0" }
+        if stale { try rebuildTraces() }
+    }
+
+    /// How often each trace was run along in each month: the traces of a time-lapse.
+    ///
+    /// The traces are made again first if they are stale (see ``traces(categories:months:)``). A month in which a trace was not run along
+    /// has no entry.
+    ///
+    /// - Parameters:
+    ///   - categories: The categories to count, or `nil` for all.
+    ///   - months: The months to count, or `nil` for all.
+    /// - Returns: The counts in the order of month and trace id.
+    /// - Throws: ``TrackStoreError``.
+    public func monthlyTraceCounts(categories: Set<String>? = nil, months: ClosedRange<TrackMonth>? = nil) throws -> [MonthlyTraceCount] {
+        try rebuildTracesIfStale()
+        var sql =
+            "SELECT trace_pass.trace, activity.month, COUNT(*), COUNT(DISTINCT activity.id) FROM trace_pass "
+            + "JOIN offtrack ON offtrack.id = trace_pass.offtrack JOIN activity ON activity.id = offtrack.activity WHERE 1 = 1"
+        var values: [SQLiteValue] = []
+        if let months {
+            sql += " AND activity.month BETWEEN ? AND ?"
+            values += [.integer(Int64(months.lowerBound.index)), .integer(Int64(months.upperBound.index))]
+        }
+        if let categories {
+            guard !categories.isEmpty else { return [] }
+            let sorted = categories.sorted()
+            sql += " AND activity.category IN (\(sorted.map { _ in "?" }.joined(separator: ",")))"
+            values += sorted.map { .text($0) }
+        }
+        sql += " GROUP BY trace_pass.trace, activity.month ORDER BY activity.month, trace_pass.trace"
+        var result: [MonthlyTraceCount] = []
+        try database.run(sql, values) {
+            result.append(
+                MonthlyTraceCount(traceID: $0.integer(0), month: TrackMonth(index: Int($0.integer(1))), activities: Int($0.integer(3)), passes: Int($0.integer(2))))
+        }
         return result
     }
 
