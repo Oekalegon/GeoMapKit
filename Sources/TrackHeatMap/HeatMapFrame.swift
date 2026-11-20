@@ -11,4 +11,7 @@ public struct HeatMapFrame: Sendable {
     public let bucketCount: Int
     /// The highest count of a bucket, 0 for an empty frame.
     public let maximumCount: Int
+    /// The number of ways of the map in the area. When it is 0 the area has no lines (it is outside the map, or a place with no paths);
+    /// when it is not 0 and the frame is empty, the counts of the store are somewhere else.
+    public let waysInArea: Int
 }

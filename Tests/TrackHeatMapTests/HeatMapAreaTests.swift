@@ -95,7 +95,9 @@ struct HeatMapAreaTests {
         let february = try await area.frame(months: TrackMonth(year: 2024, month: 2)...TrackMonth(year: 2024, month: 2))
         #expect(february.maximumCount == 1 && february.bucketCount == 10 && february.months?.lowerBound == february.months?.upperBound && february.months != nil)
         let none = try await area.frame(categories: ["ski"])
-        #expect(none.bucketCount == 0 && none.maximumCount == 0)
+        #expect(none.bucketCount == 0 && none.maximumCount == 0 && none.waysInArea == 1 && activities.waysInArea == 1)
+        let counted = try await store.countedBucketCount()
+        #expect(counted == 20)
     }
 
     @Test("A time-lapse has a frame for every month between the first and the last, also a month with nothing in it")
