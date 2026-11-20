@@ -9,6 +9,7 @@ struct GeoMapKitDemoApp: App {
     @State private var library: MapLibrary
     @State private var tracks = TrackLibrary()
     @State private var activities = ActivityLibrary()
+    @State private var heatMap = HeatMapModel()
     @State private var sync: StyleSync
     @State private var watch = WatchLink()
     #if os(macOS)
@@ -33,6 +34,7 @@ struct GeoMapKitDemoApp: App {
                 .environment(library)
                 .environment(tracks)
                 .environment(activities)
+                .environment(heatMap)
                 .environment(watch)
                 .environment(sync)
                 #if os(macOS)

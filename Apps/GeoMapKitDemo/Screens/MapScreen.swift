@@ -8,6 +8,8 @@ import SwiftUI
 struct MapScreen: View {
     @Environment(MapLibrary.self) private var library
     @Environment(TrackLibrary.self) private var tracks
+    @Environment(ActivityLibrary.self) private var activities
+    @Environment(HeatMapModel.self) private var heatMap
     @Environment(WatchLink.self) private var watch
     #if os(macOS)
     @Environment(MapBuildHost.self) private var builds
@@ -33,9 +35,9 @@ struct MapScreen: View {
     /// The library, with what it needs from the environment.
     @ViewBuilder private var libraryScreen: some View {
         #if os(macOS)
-        LibraryScreen().environment(library).environment(tracks).environment(watch).environment(builds)
+        LibraryScreen().environment(library).environment(tracks).environment(activities).environment(heatMap).environment(watch).environment(builds)
         #else
-        LibraryScreen().environment(library).environment(tracks).environment(watch)
+        LibraryScreen().environment(library).environment(tracks).environment(activities).environment(heatMap).environment(watch)
         #endif
     }
 
@@ -45,7 +47,7 @@ struct MapScreen: View {
                 if let opened {
                     GeometryReader { proxy in
                         ZStack {
-                            MapView(source: opened.source, style: style, center: $center, zoom: $zoom, bearing: $bearing, overlays: tracks.overlays)
+                            MapView(source: opened.source, style: style, center: $center, zoom: $zoom, bearing: $bearing, overlays: heatMap.overlays + tracks.overlays)
                                 .id(opened.id)
                             locationDot(in: proxy.size)
                         }

@@ -42,4 +42,10 @@ public struct TrackMonth: Sendable, Hashable, Comparable, Codable {
     }
 
     public static func < (lhs: TrackMonth, rhs: TrackMonth) -> Bool { lhs.index < rhs.index }
+
+    /// The month that is some months later (earlier for a negative number).
+    public func adding(months: Int) -> TrackMonth { TrackMonth(index: index + months) }
+
+    /// The number of months from this month to another: 0 for the same month, negative if the other is earlier.
+    public func months(to other: TrackMonth) -> Int { other.index - index }
 }

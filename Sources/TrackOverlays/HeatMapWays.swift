@@ -27,6 +27,9 @@ public struct HeatMapWays: Sendable {
         pieces = byWay.mapValues { $0.sorted { $0.offset < $1.offset } }
     }
 
+    /// The OSM ids of the ways that the network has, in no order.
+    public var wayIDs: [Int64] { Array(pieces.keys) }
+
     /// Whether the network has a way.
     public func contains(way: Int64) -> Bool { pieces[way] != nil }
 

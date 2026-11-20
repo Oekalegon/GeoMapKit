@@ -1,5 +1,19 @@
 import TrackMatching
 
+/// How often a bucket of a way was used in one month: what a time-lapse of the heat map is made from.
+public struct MonthlyBucketCount: Sendable, Equatable {
+    /// The month in which the activities started.
+    public let month: TrackMonth
+    /// The counts of the bucket in that month.
+    public let count: BucketCount
+
+    /// Creates a count.
+    public init(month: TrackMonth, count: BucketCount) {
+        self.month = month
+        self.count = count
+    }
+}
+
 /// How often a bucket of a way was used: the unit of the heat map.
 public struct BucketCount: Sendable, Equatable {
     /// The length of a bucket along a way, in metres.

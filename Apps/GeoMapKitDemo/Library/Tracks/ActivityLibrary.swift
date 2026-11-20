@@ -31,7 +31,7 @@ final class ActivityLibrary {
 
     /// The store file.
     let url: URL
-    private var store: TrackStore?
+    private(set) var store: TrackStore?
     private var task: Task<Void, Never>?
 
     /// Opens the store in a folder: the Documents of the app, or another folder (tests use a new one).

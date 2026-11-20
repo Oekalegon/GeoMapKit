@@ -377,6 +377,64 @@ public actor TrackStore {
         return result.sorted { ($0.wayID, $0.bucket) < ($1.wayID, $1.bucket) }
     }
 
+    /// The counts of the buckets of some ways for each month, for the categories asked for.
+    ///
+    /// The same counts as ``counts(ways:categories:months:)``, not added over the months: this is what a time-lapse is made from.
+    ///
+    /// - Parameters:
+    ///   - ways: The OSM ids of the ways. Many ids are looked up in groups.
+    ///   - categories: The categories to count, or `nil` for all. An empty set counts nothing.
+    ///   - months: The months to count, or `nil` for all.
+    /// - Returns: The buckets used at least once in a month, in the order of month, way and bucket.
+    /// - Throws: ``TrackStoreError``.
+    public func monthlyCounts(ways: [Int64], categories: Set<String>? = nil, months: ClosedRange<TrackMonth>? = nil) throws -> [MonthlyBucketCount] {
+        var result: [MonthlyBucketCount] = []
+        if let categories, categories.isEmpty { return [] }
+        for group in stride(from: 0, to: ways.count, by: 500).map({ Array(ways[$0..<min($0 + 500, ways.count)]) }) {
+            var sql =
+                "SELECT way, bucket, month, SUM(activities), SUM(passes) FROM count WHERE way IN (\(group.map { _ in "?" }.joined(separator: ",")))"
+            var values = group.map { SQLiteValue.integer($0) }
+            if let months {
+                sql += " AND month BETWEEN ? AND ?"
+                values += [.integer(Int64(months.lowerBound.index)), .integer(Int64(months.upperBound.index))]
+            }
+            if let categories {
+                let sorted = categories.sorted()
+                sql += " AND category IN (\(sorted.map { _ in "?" }.joined(separator: ",")))"
+                values += sorted.map { .text($0) }
+            }
+            sql += " GROUP BY way, bucket, month"
+            try database.run(sql, values) {
+                result.append(
+                    MonthlyBucketCount(
+                        month: TrackMonth(index: Int($0.integer(2))),
+                        count: BucketCount(wayID: $0.integer(0), bucket: Int($0.integer(1)), activities: Int($0.integer(3)), passes: Int($0.integer(4)))))
+            }
+        }
+        return result.sorted { ($0.month, $0.count.wayID, $0.count.bucket) < ($1.month, $1.count.wayID, $1.count.bucket) }
+    }
+
+    /// The first and the last month in which an activity started, or `nil` for an empty store.
+    ///
+    /// - Parameter categories: The categories to look at, or `nil` for all.
+    public func activityMonths(categories: Set<String>? = nil) throws -> ClosedRange<TrackMonth>? {
+        if let categories, categories.isEmpty { return nil }
+        var sql = "SELECT MIN(month), MAX(month) FROM activity"
+        var values: [SQLiteValue] = []
+        if let categories {
+            let sorted = categories.sorted()
+            sql += " WHERE category IN (\(sorted.map { _ in "?" }.joined(separator: ",")))"
+            values = sorted.map { .text($0) }
+        }
+        var found: (Int, Int)?
+        try database.run(sql, values) { row in
+            if row.isNull(0) { return }
+            found = (Int(row.integer(0)), Int(row.integer(1)))
+        }
+        guard let found else { return nil }
+        return TrackMonth(index: found.0)...TrackMonth(index: found.1)
+    }
+
     /// The number of activities in the store.
     public func activityCount() throws -> Int {
         var count = 0
