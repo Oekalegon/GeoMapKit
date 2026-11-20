@@ -102,7 +102,7 @@ struct ActivitiesScreen: View {
             .disabled(heatMap.isBusy)
             if heatMap.isBusy { ProgressView().controlSize(.small) }
             if let frame = heatMap.frame {
-                Text("\(frame.bucketCount) pieces, most used \(frame.maximumCount)\(frame.months.map { " (" + label($0) + ")" } ?? "")")
+                Text("\(frame.bucketCount) pieces, \(frame.traceCount) off-paths, most used \(frame.maximumCount)\(frame.months.map { " (" + label($0) + ")" } ?? "")")
                     .font(.footnote).foregroundStyle(.secondary)
                 emptyExplanation(frame)
             }
@@ -113,9 +113,9 @@ struct ActivitiesScreen: View {
     /// Says why a heat map is empty; the reason is the package's (`HeatMapFrame.emptiness`), this only puts it in words.
     @ViewBuilder private func emptyExplanation(_ frame: HeatMapFrame) -> some View {
         let total = activities.totals.countedPieces
-        if let reason = frame.emptiness(databaseCountedPieces: total) {
+        if let reason = frame.emptiness(databaseCountedPieces: total, databaseOffTrackLines: activities.totals.offTrackLines) {
             let text: String = switch reason {
-            case .databaseHasNoCounts: "No counted pieces in the database. See the import report."
+            case .databaseHasNoCounts: "Nothing counted in the database. See the import report."
             case .noWaysInArea: "The map has no paths here. \(total) pieces are elsewhere."
             case .nothingInFilter: "Nothing in these months or categories."
             case .countsElsewhere: "Nothing here. \(total) pieces are elsewhere: try the area of the track."
