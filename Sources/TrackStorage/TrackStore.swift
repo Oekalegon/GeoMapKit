@@ -319,6 +319,16 @@ public actor TrackStore {
         return result
     }
 
+    /// How many activities each category has.
+    ///
+    /// - Returns: The activities by category; a category with none is not in it.
+    /// - Throws: ``TrackStoreError``.
+    public func activityCategories() throws -> [String: Int] {
+        var result: [String: Int] = [:]
+        try database.run("SELECT category, COUNT(*) FROM activity GROUP BY category") { result[$0.text(0)] = Int($0.integer(1)) }
+        return result
+    }
+
     /// The number of off-track lines in the store.
     public func offTrackLineCount() throws -> Int {
         var count = 0

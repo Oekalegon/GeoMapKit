@@ -77,6 +77,12 @@ struct LibraryScreen: View {
                     if !tracks.items.isEmpty { Text("Switch a track on to draw it over the map; the scope button moves the map to it.") }
                 }
 
+                Section {
+                    NavigationLink { ActivitiesScreen() } label: { Label("Activities", systemImage: "chart.line.uptrend.xyaxis") }
+                } header: { Text("Segment database") } footer: {
+                    Text("Put the tracks into the database of counts for each piece of a way, and set the category of an activity (run, orienteering…).")
+                }
+
                 #if os(iOS)
                 Section {
                     Label(watch.status.sentence, systemImage: watch.status == .ready ? "applewatch.radiowaves.left.and.right" : "applewatch.slash")
