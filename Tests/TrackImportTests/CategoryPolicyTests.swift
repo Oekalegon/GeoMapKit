@@ -15,7 +15,7 @@ struct CategoryPolicyTests {
 
     @Test("The text of the name decides the category, and anything else is the default")
     func category() throws {
-        let policy = CategoryPolicy()
+        let policy = CategoryPolicy.orienteering
         #expect(policy.category(for: try activity(["gpx.name": .string("OL Epe")])) == "orienteering")
         #expect(policy.category(for: try activity(["gpx.name": .string("Col de la Madeleine")])) == "run")
         #expect(policy.category(for: try activity([:])) == "run")
@@ -29,7 +29,17 @@ struct CategoryPolicyTests {
         #expect(policy.category(for: try activity(["title": .string("OL")])) == "ride")
         #expect(policy.mode(of: "ski") == .raw && policy.mode(of: "orienteering") == .matched)
         let custom = CategoryPolicy(textTags: ["title"])
-        #expect(custom.category(for: try activity(["title": .string("OL")])) == "orienteering")
-        #expect(CategoryPolicy().mode(of: "orienteering") == .raw)
+        #expect(custom.category(for: try activity(["title": .string("OL")])) == "run", "no rules unless the app adds them")
+        let opted = CategoryPolicy(suggester: CategorySuggester(rules: [.orienteering]), textTags: ["title"])
+        #expect(opted.category(for: try activity(["title": .string("OL")])) == "orienteering")
+        #expect(CategoryPolicy.orienteering.mode(of: "orienteering") == .raw)
+    }
+
+    @Test("The standard policy suggests nothing and lays every category on the lines")
+    func standard() throws {
+        let policy = CategoryPolicy()
+        #expect(policy.suggester == nil && policy.rawCategories.isEmpty)
+        #expect(policy.category(for: try activity(["gpx.name": .string("OL Epe")])) == "run")
+        #expect(policy.mode(of: "orienteering") == .matched && policy.mode(of: "run") == .matched)
     }
 }

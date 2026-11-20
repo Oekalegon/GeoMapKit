@@ -2,9 +2,9 @@ import Tracks
 
 /// How an activity gets its category when the user has not chosen one, and which categories are not laid on lines.
 ///
-/// The package knows no sport: the default category, the words and the raw categories are the app's. The standard policy is the one of
-/// the decision on orienteering: a name with orienteering words suggests `orienteering`, which is raw; every other activity is a
-/// `run` laid on the lines.
+/// The package knows no sport. The standard policy suggests nothing: every activity gets the default category and is laid on the lines.
+/// An app that has an exception (activities that leave every path, such as orienteering, which are kept raw) opts in with the suggester
+/// and the raw categories it wants; ``orienteering`` is a ready policy for that one.
 public struct CategoryPolicy: Sendable, Equatable {
     /// The category of an activity that nothing suggests anything for.
     public var defaultCategory: String
@@ -17,14 +17,17 @@ public struct CategoryPolicy: Sendable, Equatable {
 
     /// Creates a policy.
     public init(
-        defaultCategory: String = "run", suggester: CategorySuggester? = CategorySuggester(), textTags: [String] = ["gpx.name"],
-        rawCategories: Set<String> = ["orienteering"]
+        defaultCategory: String = "run", suggester: CategorySuggester? = nil, textTags: [String] = ["gpx.name"],
+        rawCategories: Set<String> = []
     ) {
         self.defaultCategory = defaultCategory
         self.suggester = suggester
         self.textTags = textTags
         self.rawCategories = rawCategories
     }
+
+    /// A policy for an app that has orienteering as an exception: a name with orienteering words suggests it, and it is kept raw.
+    public static let orienteering = CategoryPolicy(suggester: CategorySuggester(rules: [.orienteering]), rawCategories: ["orienteering"])
 
     /// The category that the text of an activity suggests, with the keyword that did it.
     public func suggestion(for activity: ActivityTrack) -> CategorySuggestion? {

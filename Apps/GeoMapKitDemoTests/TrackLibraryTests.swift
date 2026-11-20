@@ -122,6 +122,30 @@ struct TrackLibraryTests {
         #expect(withTap.count == 1 && withTap[0].route.waypoints.map(\.name) == ["Tap"], "only the waypoint near the track belongs to it")
     }
 
+    @Test("All tracks are shown or hidden one after the other, and only the ones that need it are touched")
+    func showsAndHidesAll() async throws {
+        let r = try rig()
+        defer { try? FileManager.default.removeItem(at: r.root) }
+        let tracks = library(r)
+        for name in ["a", "b", "c"] { try write(run, as: "\(name).gpx", in: r) }
+        _ = await tracks.add(["a", "b", "c"].map { r.inbox.appendingPathComponent("\($0).gpx") })
+        #expect(tracks.visible.count == 3)
+        await tracks.setAllVisible(false)
+        #expect(tracks.visible.isEmpty && tracks.overlays.isEmpty)
+        await tracks.setAllVisible(true)
+        #expect(tracks.visible.count == 3 && tracks.overlays.count == 3)
+        // A switch for one track does the same as the library's own call.
+        let first = try #require(tracks.items.first)
+        tracks.request(first, visible: false)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!tracks.visible.contains(first.id) && tracks.visible.count == 2)
+    }
+
+    @Test("Showing more tracks than the limit needs the user's word: the limit is a number the screen can test")
+    func limit() {
+        #expect(TrackLibrary.confirmShowAllAbove == 100)
+    }
+
     @Test("What is shown is remembered, a track that is hidden frees its routes, and showing it reads the file again")
     func visibility() async throws {
         let r = try rig()

@@ -5,7 +5,7 @@ import Testing
 
 @Suite("Category suggestions")
 struct CategorySuggesterTests {
-    private let suggester = CategorySuggester()
+    private let suggester = CategorySuggester(rules: [.orienteering])
 
     @Test("Orienteering is suggested from OL, NK and the words for it, with case and accents ignored")
     func orienteering() {
@@ -46,5 +46,10 @@ struct CategorySuggesterTests {
         #expect(suggester.suggestion(for: ["ol"])?.category == "orienteering")
         // A longer keyword still ignores accents.
         #expect(suggester.suggestion(for: ["Orïenteering"])?.category == "orienteering")
+    }
+
+    @Test("A suggester with no rules, the standard one, suggests nothing")
+    func nothingByDefault() {
+        #expect(CategorySuggester().suggestion(for: ["OL training", "NK", "orienteering"]) == nil)
     }
 }

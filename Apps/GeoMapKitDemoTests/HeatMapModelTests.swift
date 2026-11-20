@@ -15,7 +15,9 @@ struct HeatMapModelTests {
         await model.play()
         await model.stop()
         await model.show(3)
-        model.hide()
+        model.seek(to: 2)
+        model.togglePlaying()
+        model.requestPause()
         #expect(!model.isPlaying && model.overlays.isEmpty && model.viewBox == nil)
     }
 
@@ -34,5 +36,15 @@ struct HeatMapModelTests {
         #expect(HeatMapModel.SpanChoice.cumulative.span == .cumulative)
         #expect(HeatMapModel.SpanChoice.month.span == .last(months: 1))
         #expect(HeatMapModel.SpanChoice.year.span == .last(months: 12))
+    }
+
+    @Test("Switching the heat map off hides it without a frame to lose, and a new model draws it by default")
+    func visibility() {
+        let model = HeatMapModel()
+        #expect(model.isVisible && !model.hasFrame)
+        model.setVisible(false)
+        #expect(!model.isVisible && model.overlays.isEmpty)
+        model.setVisible(true)
+        #expect(model.isVisible && model.lastCategories == nil && model.lastMeasure == .activities)
     }
 }

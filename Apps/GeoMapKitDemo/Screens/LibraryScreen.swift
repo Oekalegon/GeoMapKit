@@ -80,7 +80,7 @@ struct LibraryScreen: View {
                 Section {
                     NavigationLink { ActivitiesScreen() } label: { Label("Activities", systemImage: "chart.line.uptrend.xyaxis") }
                 } header: { Text("Segment database") } footer: {
-                    Text("Put the tracks into the database of counts for each piece of a way, and set the category of an activity (run, orienteering…).")
+                    Text("Import the tracks into the database and make heat maps.")
                 }
 
                 #if os(iOS)
