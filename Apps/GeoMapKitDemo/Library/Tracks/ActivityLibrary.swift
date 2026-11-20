@@ -17,6 +17,8 @@ final class ActivityLibrary {
         var activities = 0
         var legs = 0
         var offTrackLines = 0
+        /// Pieces of 10 m of ways that have a count, in the whole database.
+        var countedPieces = 0
         var categories: [String: Int] = [:]
     }
 
@@ -49,7 +51,7 @@ final class ActivityLibrary {
         do {
             totals = Totals(
                 activities: try await store.activityCount(), legs: try await store.legCount(), offTrackLines: try await store.offTrackLineCount(),
-                categories: try await store.activityCategories())
+                countedPieces: try await store.countedBucketCount(), categories: try await store.activityCategories())
         } catch { problem = "\(error)" }
     }
 

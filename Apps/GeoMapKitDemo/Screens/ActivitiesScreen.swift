@@ -35,6 +35,7 @@ struct ActivitiesScreen: View {
             Section {
                 LabeledContent("Activities", value: "\(activities.totals.activities)")
                 LabeledContent("Legs along ways", value: "\(activities.totals.legs)")
+                LabeledContent("Counted pieces of 10 m", value: "\(activities.totals.countedPieces)")
                 LabeledContent("Off-track lines", value: "\(activities.totals.offTrackLines)")
                 ForEach(activities.totals.categories.sorted { $0.key < $1.key }, id: \.key) { name, count in
                     LabeledContent(name, value: "\(count)")
@@ -108,10 +109,29 @@ struct ActivitiesScreen: View {
                 Text("\(frame.bucketCount) pieces of 10 m, most used \(frame.maximumCount)\(frame.months.map { " (" + label($0) + ")" } ?? "")")
                     .font(.footnote).foregroundStyle(.secondary)
             }
+            if let frame = heatMap.frame { emptyExplanation(frame) }
             if heatMap.isOutOfDate { Text("The database changed since this was made: press Show or Time-lapse again.").font(.footnote).foregroundStyle(.orange) }
             if let problem = heatMap.problem { Text(problem).font(.footnote).foregroundStyle(.red) }
         } header: { Text("Heat map") } footer: {
             Text("The counts of the database drawn on the ways of the selected map. The area is fixed when you press Show: the visible map (zoom in to a city or a region; a very large view is refused), all tracks, or the area of one track. The colour of a count is fixed (1, 2–3, 4–9, 10–29, 30 and more), so months can be compared. No category switched on means all.")
+        }
+    }
+
+    /// Says why a heat map is empty; the reason is the package's (`HeatMapFrame.emptiness`), this only puts it in words.
+    @ViewBuilder private func emptyExplanation(_ frame: HeatMapFrame) -> some View {
+        let total = activities.totals.countedPieces
+        if let reason = frame.emptiness(databaseCountedPieces: total) {
+            let text: String = switch reason {
+            case .databaseHasNoCounts:
+                "The database has \(activities.totals.activities) activities but no counted pieces of ways. Usual reasons: the tracks did not follow paths of the selected map, they are of a category that is not matched (orienteering), or an import did not finish. The report under Import says what happened."
+            case .noWaysInArea:
+                "The map has no paths in this area, so nothing can be drawn here. The database has \(total) counted pieces elsewhere."
+            case .nothingInFilter:
+                "Nothing was counted in these months or categories. The database has \(total) counted pieces in all."
+            case .countsElsewhere:
+                "Nothing was counted on the \(frame.waysInArea) ways of this area; the database has \(total) counted pieces elsewhere. The place you look at may be where the track left the paths: that part is kept as off-track lines (\(activities.totals.offTrackLines) in the database) and is not drawn yet. Try the area of the track."
+            }
+            Text(text).font(.footnote).foregroundStyle(.orange)
         }
     }
 

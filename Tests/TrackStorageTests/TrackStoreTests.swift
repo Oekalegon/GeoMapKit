@@ -271,6 +271,16 @@ struct TrackStoreTests {
         #expect(try await store.activityCategories() == ["trail": 1, "road": 2])
     }
 
+    @Test("The counted buckets are counted once each, over months and categories")
+    func countedBuckets() async throws {
+        let store = try TrackStore(url: nil)
+        #expect(try await store.countedBucketCount() == 0)
+        try await store.add(activity("a", category: "trail"), legs: [try leg(1, 0, 50)])
+        try await store.add(activity("b", category: "road", at: start.addingTimeInterval(86_400 * 40)), legs: [try leg(1, 0, 50), try leg(2, 0, 30)])
+        // Way 1 has 5 buckets, used in two months and two categories; way 2 has 3.
+        #expect(try await store.countedBucketCount() == 8)
+    }
+
     @Test("The errors say in words what is wrong")
     func errorText() {
         #expect(TrackStoreError.newerVersion(found: 9, supported: 3).errorDescription?.contains("9") == true)
