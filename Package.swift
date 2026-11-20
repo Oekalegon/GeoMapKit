@@ -78,7 +78,7 @@ let package = Package(
         .testTarget(name: "MapBuilderTests", dependencies: ["MapBuilder", "MapStyle", "FeatureStore", "FeatureStoreBuilder", "GeoCore", "OSMPBF", "Regions"]),
         .testTarget(name: "RegionsTests", dependencies: ["Regions", "GeoCore"]),
         .testTarget(name: "TracksTests", dependencies: ["Tracks", "GeoCore"]),
-        .testTarget(name: "TrackMatchingTests", dependencies: ["TrackMatching", "FeatureStore", "Tracks", "GeoCore"]),
+        .testTarget(name: "TrackMatchingTests", dependencies: ["TrackMatching", "FeatureStore", "FeatureStoreBuilder", "Tracks", "GeoCore"]),
         .testTarget(name: "TrackOverlaysTests", dependencies: ["TrackOverlays", "MapRender", "MapStyle", "Tracks", "GeoCore"]),
     ],
     swiftLanguageModes: [.v6]

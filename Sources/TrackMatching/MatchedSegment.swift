@@ -10,4 +10,13 @@ public struct MatchedSegment: Sendable, Equatable {
     public var length: Double { stretches.reduce(0) { $0 + $1.length } }
     /// The length of the matched stretches, in metres.
     public var matchedLength: Double { stretches.filter(\.isMatched).reduce(0) { $0 + $1.length } }
+
+    /// The matched stretches that are sure enough and long enough to count in statistics of the lines.
+    ///
+    /// - Parameters:
+    ///   - minimumConfidence: The least confidence, from 0 to 1 (see ``MatchedStretch/confidence``).
+    ///   - minimumLength: The least recorded length of a stretch, in metres.
+    public func countedStretches(minimumConfidence: Double = 0.5, minimumLength: Double = 100) -> [MatchedStretch] {
+        stretches.filter { $0.isMatched && $0.confidence >= minimumConfidence && $0.length >= minimumLength }
+    }
 }

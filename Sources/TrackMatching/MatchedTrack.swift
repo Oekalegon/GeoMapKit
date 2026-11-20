@@ -30,7 +30,7 @@ public struct MatchedTrack: Sendable, Equatable {
     ///   - minimumLength: The least recorded length of a stretch, in metres. Like the confidence, a first value that is checked against
     ///     real tracks.
     public func countedStretches(minimumConfidence: Double = 0.5, minimumLength: Double = 100) -> [MatchedStretch] {
-        segments.flatMap(\.stretches).filter { $0.isMatched && $0.confidence >= minimumConfidence && $0.length >= minimumLength }
+        segments.flatMap { $0.countedStretches(minimumConfidence: minimumConfidence, minimumLength: minimumLength) }
     }
 
     /// The length that is on no line (the raw stretches), in metres.

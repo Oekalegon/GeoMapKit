@@ -198,7 +198,9 @@ public enum TrackMatcher {
                             ? (before.confidence * before.length + after.confidence * after.length) / weight
                             : min(before.confidence, after.confidence),
                         coordinates: before.coordinates + between.coordinates + after.coordinates, edges: edges,
-                        length: before.length + between.length + after.length, lengthByClass: byClass, edgeGaps: gaps)
+                        length: before.length + between.length + after.length, lengthByClass: byClass, edgeGaps: gaps,
+                        fixes: before.fixes
+                            + after.fixes.map { MatchedFix(point: $0.point, edgeIndex: position[$0.edgeIndex], fraction: $0.fraction) })
                 ])
             // The stretch after the merged one is now at `index`, so the same place is looked at again: a chain collapses.
         }
@@ -211,7 +213,8 @@ public enum TrackMatcher {
             guard index + 1 < stretches.count, let next = stretches[index + 1].coordinates.first else { return stretch }
             return MatchedStretch(
                 pointRange: stretch.pointRange, isMatched: stretch.isMatched, confidence: stretch.confidence, coordinates: stretch.coordinates,
-                edges: stretch.edges, length: stretch.length, lengthByClass: stretch.lengthByClass, edgeGaps: stretch.edgeGaps, joinsTo: next)
+                edges: stretch.edges, length: stretch.length, lengthByClass: stretch.lengthByClass, edgeGaps: stretch.edgeGaps, joinsTo: next,
+                fixes: stretch.fixes)
         }
     }
 
@@ -222,6 +225,8 @@ public enum TrackMatcher {
         func candidate(_ step: Int) -> EdgeProjection { candidates[step][states[step]] }
         var coordinates = [candidate(group.lowerBound).coordinate]
         var edges = [candidate(group.lowerBound).edge]
+        var gaps: [Int] = []
+        var fixes = [MatchedFix(point: used[group.lowerBound], edgeIndex: 0, fraction: candidate(group.lowerBound).fraction)]
         var routeLength = 0.0, straightLength = 0.0, mismatch = 0.0
         for step in group.dropFirst() {
             let from = candidate(step - 1), to = candidate(step)
@@ -236,7 +241,12 @@ public enum TrackMatcher {
             } else {
                 // The search that chose this state found a route, so this does not happen; the fix is then joined directly.
                 mismatch += straight
+                if edges.last != to.edge {
+                    gaps.append(edges.count - 1)
+                    edges.append(to.edge)
+                }
             }
+            fixes.append(MatchedFix(point: used[step], edgeIndex: edges.count - 1, fraction: to.fraction))
             straightLength += straight
             coordinates.append(to.coordinate)
         }
@@ -255,7 +265,7 @@ public enum TrackMatcher {
         let agreement = max(0, 1 - mismatch / max(straightLength, 1))
         return MatchedStretch(
             pointRange: range, isMatched: true, confidence: proximity * agreement, coordinates: coordinates, edges: edges, length: length,
-            lengthByClass: lengthByClass)
+            lengthByClass: lengthByClass, edgeGaps: gaps, fixes: fixes)
     }
 
     /// A stretch that is left as recorded.
