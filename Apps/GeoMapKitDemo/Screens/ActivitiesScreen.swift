@@ -102,7 +102,7 @@ struct ActivitiesScreen: View {
             .disabled(heatMap.isBusy)
             if heatMap.isBusy { ProgressView().controlSize(.small) }
             if let frame = heatMap.frame {
-                Text("\(frame.bucketCount) pieces, \(frame.traceCount) off-paths, most used \(frame.maximumCount)\(frame.months.map { " (" + label($0) + ")" } ?? "")")
+                Text("\(frame.bucketCount) pieces\(frame.traceCount > 0 ? ", \(frame.traceCount) off-paths" : ""), most used \(frame.maximumCount)\(frame.months.map { " (" + label($0) + ")" } ?? "")")
                     .font(.footnote).foregroundStyle(.secondary)
                 emptyExplanation(frame)
             }

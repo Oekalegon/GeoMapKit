@@ -1,6 +1,7 @@
 import FeatureStore
 import Foundation
 import GeoCore
+import MapRender
 import Testing
 
 @testable import FeatureStoreBuilder
@@ -68,7 +69,8 @@ struct HeatMapTraceTests {
         #expect(frame.bucketCount == 0 && frame.traceCount == 1 && frame.maximumCount == 2)
         #expect(frame.emptiness(databaseCountedPieces: 0, databaseOffTrackLines: 2) == nil)
         let without = try await area.frame(includeTraces: false)
-        #expect(without.traceCount == 0 && without.emptiness(databaseCountedPieces: 0, databaseOffTrackLines: 2) == .countsElsewhere)
+        #expect(without.traceCount == 0)
+        #expect(without.emptiness(databaseCountedPieces: 0, databaseOffTrackLines: 2) == .countsElsewhere)
         #expect(without.emptiness(databaseCountedPieces: 0) == .databaseHasNoCounts)
         let february = try await area.frame(months: TrackMonth(year: 2024, month: 2)...TrackMonth(year: 2024, month: 2))
         #expect(february.traceCount == 1 && february.maximumCount == 1)
@@ -108,5 +110,43 @@ struct HeatMapTraceTests {
         let drawn = HeatMapOverlay(buckets: [], ways: ways, traces: [HeatMapTraceLine(coordinates: coordinates, count: 1)])
         let zero = HeatMapOverlay(buckets: [], ways: ways, traces: [HeatMapTraceLine(coordinates: coordinates, count: 0)])
         #expect(drawn.runCount == 1 && zero.runCount == 0)
+    }
+
+    @Test("The overlay gives a line for a trace, with the look of its step, and nothing where the view has none")
+    func drawn() throws {
+        let ways = HeatMapWays(network: try LineNetwork(source: try map(), box: box, classes: LineNetwork.travelClasses))
+        let coordinates = [Coordinate(latitude: 60.001, longitude: 10.0), Coordinate(latitude: 60.001, longitude: 10.005)]
+        let overlay = HeatMapOverlay(buckets: [], ways: ways, traces: [HeatMapTraceLine(coordinates: coordinates, count: 5)])
+        let over = MapViewport(center: Coordinate(latitude: 60.001, longitude: 10.0025), zoom: 15, width: 600, height: 400)
+        let items = overlay.items(for: over)
+        let lines = items.compactMap { item -> OverlayLine? in if case .line(let line) = item { line } else { nil } }
+        #expect(lines.count == 1 && lines[0].style == HeatMapScale.standard.steps[2].style)
+        let elsewhere = MapViewport(center: Coordinate(latitude: 61, longitude: 11), zoom: 15, width: 600, height: 400)
+        #expect(overlay.items(for: elsewhere).isEmpty)
+    }
+
+    @Test("A frame has the counts of the paths and the traces together, and a combination of categories shows the traces of each")
+    func together() async throws {
+        let store = try TrackStore(url: nil)
+        let start = date(1)
+        let samples = (0...20).map { TrackLeg.Sample(metre: Double($0) * 10, time: start.addingTimeInterval(Double($0) * 4)) }
+        let leg = try #require(TrackLeg(wayID: 7, classID: FeatureClass.path.rawValue, direction: .forward, samples: samples, confidence: 0.9))
+        try await store.add(StoredActivity(appID: "a", started: start, category: "trail", mapID: "m"), legs: [leg], offTrack: [try line(start)])
+        // The same ground in another category: two traces, not one.
+        try await store.add(StoredActivity(appID: "b", started: date(2), category: "run", mapID: "m"), legs: [], offTrack: [try line(date(2))])
+        let area = try await HeatMapArea.make(store: store, source: try map(), box: box)
+        let both = try await area.frame()
+        #expect(both.bucketCount == 20 && both.traceCount == 2 && both.maximumCount == 1)
+        let trail = try await area.frame(categories: ["trail"])
+        #expect(trail.bucketCount == 20 && trail.traceCount == 1)
+    }
+
+    @Test("A trace that crosses the area without a point in it is drawn")
+    func crossing() async throws {
+        let store = try await store(months: [1])
+        // The trace runs from 10.000° to 10.005° E at 60.001° N; the area lies between those, with no point of the line in it.
+        let middle = BoundingBox(south: 60.0005, west: 10.0021, north: 60.0015, east: 10.0022)
+        let area = try await HeatMapArea.make(store: store, source: try map(), box: middle)
+        #expect(try await area.frame().traceCount == 1)
     }
 }

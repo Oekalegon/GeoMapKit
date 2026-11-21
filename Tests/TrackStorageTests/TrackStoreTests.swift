@@ -283,7 +283,7 @@ struct TrackStoreTests {
 
     @Test("The errors say in words what is wrong")
     func errorText() {
-        #expect(TrackStoreError.newerVersion(found: 9, supported: 3).errorDescription?.contains("9") == true)
+        #expect(TrackStoreError.newerVersion(found: 9, supported: 4).errorDescription?.contains("9") == true)
         #expect(TrackStoreError.damaged("the trace 4").errorDescription?.contains("trace 4") == true)
     }
 
@@ -320,9 +320,54 @@ struct TrackStoreTests {
         try database.execute("DELETE FROM trace")
         try database.execute("INSERT INTO trace(id, line, length) VALUES (1, x'', 300)")
         try database.execute("UPDATE meta SET value = '0' WHERE key = 'traces_stale'")
+        try dropTraceBoxes(database)
         try database.execute("PRAGMA user_version = 2")
         let reopened = try TrackStore(url: url)
         #expect(try await reopened.traces().count == 2)
+    }
+
+    /// Takes away what version 4 added to the trace table, to make a file of an older version.
+    private func dropTraceBoxes(_ database: SQLiteDatabase) throws {
+        try database.execute("DROP INDEX trace_box")
+        for column in ["south", "west", "north", "east"] { try database.execute("ALTER TABLE trace DROP COLUMN \(column)") }
+    }
+
+    @Test("A database of version 3 gets the boxes of its traces when it is opened")
+    func versionFour() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("trackstore-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("tracks.sqlite")
+        do {
+            let store = try TrackStore(url: url)
+            try await store.add(activity("a"), legs: [], offTrack: [try offTrack(0, 300)])
+            #expect(try await store.traces().count == 1)
+        }
+        let database = try SQLiteDatabase(path: url.path)
+        try dropTraceBoxes(database)
+        try database.execute("UPDATE meta SET value = '0' WHERE key = 'traces_stale'")
+        try database.execute("PRAGMA user_version = 3")
+        let reopened = try TrackStore(url: url)
+        let area = BoundingBox(south: 59.99, west: 9.99, north: 60.01, east: 10.02)
+        #expect(try await reopened.traces(in: area).count == 1)
+        #expect(try await reopened.traces(in: BoundingBox(south: 61, west: 11, north: 62, east: 12)).isEmpty)
+    }
+
+    @Test("Only the traces whose box meets the area are given, also one that crosses it without a point inside")
+    func tracesInArea() async throws {
+        let store = try TrackStore(url: nil)
+        try await store.add(activity("a"), legs: [], offTrack: [try offTrack(0, 300)])
+        try await store.add(activity("b", at: start.addingTimeInterval(86_400)), legs: [], offTrack: [try offTrack(0, 300, north: 5_000)])
+        // The first trace is along 60° N from 10.0° E for 300 m (to about 10.0054° E); the second is 5 km north of it.
+        let around = BoundingBox(south: 59.999, west: 10.001, north: 60.001, east: 10.002)
+        let found = try await store.traces(in: around)
+        #expect(found.count == 1 && found[0].coordinates.first?.latitude == 60)
+        let months = try await store.monthlyTraceCounts(in: around)
+        #expect(months.count == 1 && months[0].traceID == found[0].id)
+        #expect(try await store.traces().count == 2)
+        // The box of a trace is kept for traces made again.
+        try await store.remove(appID: "b")
+        #expect(try await store.traces(in: around).count == 1)
     }
 
     @Test("Removing or replacing an activity makes the traces again the next time they are asked for")

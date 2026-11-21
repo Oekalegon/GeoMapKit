@@ -12,7 +12,8 @@ public enum HeatMapEmptiness: Sendable, Equatable {
 }
 
 extension HeatMapFrame {
-    /// Why the frame is empty, or `nil` when it has buckets or traces.
+    /// Why the frame is empty, or `nil` when it has buckets or traces. A frame of an area with no paths can still have traces, and then it is
+    /// not empty.
     ///
     /// - Parameters:
     ///   - databaseCountedPieces: The pieces of 10 m that have a count in the whole database (`TrackStore.countedBucketCount()`).

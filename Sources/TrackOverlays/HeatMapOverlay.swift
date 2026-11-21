@@ -6,7 +6,8 @@ import MapRender
 ///
 /// Each bucket of a way (10 m) is a count; neighbouring buckets on a step of the scale are drawn as one line, the colour and the width
 /// come from the step (``HeatMapScale``), and the busiest buckets are drawn last, over the others. The lines lie on the ways of the map
-/// (the geometry of ``HeatMapWays``), so they are as detailed as the map. The scale is fixed: it does not depend on the highest count,
+/// (the geometry of ``HeatMapWays``), so they are as detailed as the map. Lines off the paths (``HeatMapTraceLine``, the traces of the
+/// store) are drawn too, each with one count for its whole length, on the same steps. The scale is fixed: it does not depend on the highest count,
 /// so two overlays (two months, two categories) mean the same by a colour.
 ///
 /// It is for the phone and the Mac: the Watch has no heat map (question 64, H), and the lines of all runs are kept in memory, so an

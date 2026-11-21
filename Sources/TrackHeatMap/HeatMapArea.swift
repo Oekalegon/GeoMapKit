@@ -10,7 +10,8 @@ import TrackStorage
 ///
 /// The ways come from the detail band of the map (a ``LineNetwork`` of the box), so the lines are as detailed as the map and the counts
 /// of the store, which are along those ways, fall on them. Making the area reads the cells of the box once; after that an overlay is
-/// made from the store alone. The area is not for a country: the overlay keeps every run in memory (see ``HeatMapOverlay``).
+/// made from the store alone. Lines off the paths (the traces of the store whose own box meets the area) are drawn too, each with one
+/// count for its whole length, on the same scale. The area is not for a country: the overlay keeps every run in memory (see ``HeatMapOverlay``).
 public final class HeatMapArea: Sendable {
     /// The store.
     public let store: TrackStore
@@ -64,7 +65,7 @@ public final class HeatMapArea: Sendable {
         let stored = try await store.activityMonths(categories: categories)
         let lines: [HeatMapTraceLine] =
             includeTraces
-            ? try await store.traces(categories: categories, months: months).filter { Self.touches($0.coordinates, box) }
+            ? try await store.traces(in: box, categories: categories, months: months)
                 .map { HeatMapTraceLine(coordinates: $0.coordinates, count: measure == .passes ? $0.passes : $0.activities) }
             : []
         return Self.frame(
@@ -89,9 +90,8 @@ public final class HeatMapArea: Sendable {
         var traces: [StoredTrace] = []
         var traceCounts: [MonthlyTraceCount] = []
         if includeTraces {
-            traces = try await store.traces(categories: categories, months: range).filter { Self.touches($0.coordinates, box) }
-            let ids = Set(traces.map(\.id))
-            traceCounts = try await store.monthlyTraceCounts(categories: categories, months: range).filter { ids.contains($0.traceID) }
+            traces = try await store.traces(in: box, categories: categories, months: range)
+            traceCounts = try await store.monthlyTraceCounts(in: box, categories: categories, months: range)
         }
         return HeatMapTimeLapse(range: range, counts: counts, traces: traces, traceCounts: traceCounts, measure: measure, ways: ways, scale: scale)
     }
@@ -111,19 +111,6 @@ public final class HeatMapArea: Sendable {
         return BoundingBox(
             south: max(corners.map(\.latitude).min() ?? 0, -85), west: max(corners.map(\.longitude).min() ?? 0, -180),
             north: min(corners.map(\.latitude).max() ?? 0, 85), east: min(corners.map(\.longitude).max() ?? 0, 180))
-    }
-
-    /// Whether a line comes near the area: its own box meets the box (a line that crosses without a point inside is kept).
-    private static func touches(_ line: [Coordinate], _ box: BoundingBox) -> Bool {
-        guard let first = line.first else { return false }
-        var south = first.latitude, north = first.latitude, west = first.longitude, east = first.longitude
-        for point in line {
-            south = min(south, point.latitude)
-            north = max(north, point.latitude)
-            west = min(west, point.longitude)
-            east = max(east, point.longitude)
-        }
-        return south <= box.north && north >= box.south && west <= box.east && east >= box.west
     }
 
     static func frame(
