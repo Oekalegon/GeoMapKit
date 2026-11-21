@@ -23,6 +23,9 @@ import SwiftUI
 /// they are for what changes rarely; a change of the list of overlay ids draws a new image, and the old one stays on screen until then.
 ///
 /// The data credit is drawn over the map, in the corner of the view, as the style's `attribution` setting says.
+///
+/// A scale ruler can be shown in the lower left corner on iOS, iPadOS and macOS (``ScaleRulerSettings``, set with
+/// `View.mapScaleRuler(_:)`): always, only while the map is moved and shortly after, or never (the default). The Watch has none.
 public struct MapView: View {
     private let source: any CellSource
     private let style: MapStyle
@@ -43,6 +46,12 @@ public struct MapView: View {
     @State private var crownZoom = 0.0
     #endif
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.mapScaleRuler) private var scaleRuler
+    #if !os(watchOS)
+    /// Whether the scale ruler shows now; it follows the gestures (see ``ScaleRulerVisibility``).
+    @State private var rulerShown = false
+    @State private var rulerHide: Task<Void, Never>?
+    #endif
 
     /// The lowest and highest zoom a gesture can reach.
     public static let zoomRange: ClosedRange<Double> = 2...20
@@ -135,6 +144,7 @@ public struct MapView: View {
             .overlay(alignment: .bottomTrailing) { attributionLabel }
             #if !os(watchOS)
             .overlay(alignment: .topTrailing) { compass }
+            .overlay(alignment: .bottomLeading) { rulerLabel(for: viewport) }
             #endif
             .contentShape(Rectangle())
             .accessibilityElement()
@@ -159,9 +169,17 @@ public struct MapView: View {
             }
             .onAppear { crownZoom = min(max(zoom, Self.zoomRange.lowerBound), Self.zoomRange.upperBound) - Self.zoomRange.lowerBound }
             #endif
-            .onChange(of: viewport) { _, new in model.request(viewport: new, scale: displayScale, interacting: interacting) }
+            .onChange(of: viewport) { _, new in
+                model.request(viewport: new, scale: displayScale, interacting: interacting)
+                #if !os(watchOS)
+                rulerMoved()
+                #endif
+            }
             .onChange(of: interacting) { _, now in
                 if !now { model.request(viewport: viewport, scale: displayScale, interacting: false) }
+                #if !os(watchOS)
+                rulerMoved()
+                #endif
             }
             .onChange(of: style) { _, new in
                 model.update(source: source, style: new)
@@ -265,6 +283,30 @@ public struct MapView: View {
             .padding(8)
             .accessibilityLabel("Compass")
             .accessibilityHint("Turns the map back to north up")
+        }
+    }
+    #endif
+
+    #if !os(watchOS)
+    /// The scale ruler in the corner, or nothing when the settings hide it, or it is not its time, or no distance fits.
+    @ViewBuilder private func rulerLabel(for viewport: MapViewport) -> some View {
+        let shown = scaleRuler.visibility == .always || (scaleRuler.visibility != .hidden && rulerShown)
+        if shown, let ruler = ScaleRuler.make(in: viewport, maximumWidth: scaleRuler.maximumWidth, units: scaleRuler.units) {
+            ScaleRulerView(ruler: ruler).padding(6).transition(.opacity)
+        }
+    }
+
+    /// The map moved or a gesture began or ended: a ruler that shows after moving appears, and goes away again after its delay.
+    private func rulerMoved() {
+        guard let delay = scaleRuler.visibility.delay else { return }
+        rulerHide?.cancel()
+        withAnimation(.easeOut(duration: 0.15)) { rulerShown = true }
+        rulerHide = Task {
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            // Still held by a gesture (a long press without movement): it stays until the gesture ends.
+            let shown = scaleRuler.visibility.isShown(moving: interacting, idleFor: delay)
+            withAnimation(.easeIn(duration: 0.4)) { rulerShown = shown }
         }
     }
     #endif

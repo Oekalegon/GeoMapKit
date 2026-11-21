@@ -3,6 +3,7 @@ import MapRender
 import MapStyle
 import MapUI
 import SwiftUI
+import TrackHeatMap
 
 /// The map of the selected store, with the library, the style and the position of the user.
 struct MapScreen: View {
@@ -28,6 +29,7 @@ struct MapScreen: View {
     /// The copy that was just cut, while the user is asked whether to send it to the Watch.
     @State private var offerToSend: MapItem?
     @State private var editor: EditorSession?
+    @AppStorage(RulerChoice.storageKey) private var rulerChoice = RulerChoice.afterMoving
     @State private var location = LocationModel()
     /// The user pressed "centre on me" before there was a position: the first one that comes is where the map goes.
     @State private var centreWhenFound = false
@@ -49,8 +51,15 @@ struct MapScreen: View {
                     GeometryReader { proxy in
                         ZStack {
                             MapView(source: opened.source, style: style, center: $center, zoom: $zoom, bearing: $bearing, overlays: tracks.overlays + heatMap.overlays)
+                                .mapScaleRuler(rulerChoice.settings)
                                 .id(opened.id)
                             locationDot(in: proxy.size)
+                            // What the colours of the heat map mean, as long as it is drawn.
+                            if !heatMap.overlays.isEmpty {
+                                HeatMapLegendView(title: heatMap.lastMeasure == .passes ? "Passes" : "Activities")
+                                    .padding(8)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            }
                         }
                         .onChange(of: proxy.size, initial: true) { _, size in mapSize = size }
                         // The heat map is made for the part of the map that is in view when it is asked for.
