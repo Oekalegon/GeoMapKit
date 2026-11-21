@@ -6,7 +6,8 @@ import MapRender
 ///
 /// Each bucket of a way (10 m) is a count; neighbouring buckets on a step of the scale are drawn as one line, the colour and the width
 /// come from the step (``HeatMapScale``), and the busiest buckets are drawn last, over the others. The lines lie on the ways of the map
-/// (the geometry of ``HeatMapWays``), so they are as detailed as the map. The scale is fixed: it does not depend on the highest count,
+/// (the geometry of ``HeatMapWays``), so they are as detailed as the map. Lines off the paths (``HeatMapTraceLine``, the traces of the
+/// store) are drawn too, each with one count for its whole length, on the same steps. The scale is fixed: it does not depend on the highest count,
 /// so two overlays (two months, two categories) mean the same by a colour.
 ///
 /// It is for the phone and the Mac: the Watch has no heat map (question 64, H), and the lines of all runs are kept in memory, so an
@@ -57,11 +58,13 @@ public final class HeatMapOverlay: MapOverlay, Sendable {
     ///   - buckets: The counts, one for each bucket of a way; buckets of ways that `ways` does not have are not drawn, and neither are
     ///     counts below the first step of the scale.
     ///   - ways: The geometry of the ways.
+    ///   - traces: Lines off the paths, each with one count; they are drawn on the same scale as the buckets.
     ///   - scale: How a count looks.
     ///   - maximumRuns: The most runs to keep, which bounds the memory (a run is a few hundred bytes). If there are more, the runs of
     ///     the lowest steps are left out first and ``droppedRunCount`` says how many.
     public init(
-        buckets: [HeatMapBucket], ways: HeatMapWays, scale: HeatMapScale = .standard, maximumRuns: Int = HeatMapOverlay.defaultMaximumRuns
+        buckets: [HeatMapBucket], ways: HeatMapWays, traces: [HeatMapTraceLine] = [], scale: HeatMapScale = .standard,
+        maximumRuns: Int = HeatMapOverlay.defaultMaximumRuns
     ) {
         self.scale = scale
         var byWay: [Int64: [HeatMapBucket]] = [:]
@@ -87,6 +90,9 @@ public final class HeatMapOverlay: MapOverlay, Sendable {
                 if let run = Self.run(step: step, parts: parts) { made.append(run) }
                 first = last + 1
             }
+        }
+        for trace in traces where trace.coordinates.count >= 2 {
+            if let step = scale.stepIndex(for: trace.count), let run = Self.run(step: step, parts: [trace.coordinates]) { made.append(run) }
         }
         // The busiest last, so that they are drawn over the others; the way and the place fix the order of equal steps.
         var ordered = made.sorted { ($0.step, $0.south, $0.west) < ($1.step, $1.south, $1.west) }

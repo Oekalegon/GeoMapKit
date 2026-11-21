@@ -15,7 +15,7 @@ import Tracks
 /// leaves the store as it was.
 public actor TrackStore {
     /// The version of the layout of the database (`user_version`). A database with a higher number is refused.
-    public static let version = 3
+    public static let version = 4
 
     private let database: SQLiteDatabase
     /// How the off-track lines are put together into traces. They are kept in the file: a store opened with other rules than the ones the
@@ -109,6 +109,18 @@ public actor TrackStore {
             try database.transaction {
                 try database.execute("UPDATE meta SET value = '1' WHERE key = 'traces_stale'")
                 try database.execute("PRAGMA user_version = 3")
+            }
+        }
+        if found < 4 {
+            // Version 4 keeps the box of each trace, so that the traces of an area are found without reading all of them; the ones that
+            // are there have no box yet, so they are made again when they are next asked for.
+            try database.transaction {
+                for column in ["south", "west", "north", "east"] {
+                    try database.execute("ALTER TABLE trace ADD COLUMN \(column) REAL NOT NULL DEFAULT 0")
+                }
+                try database.execute("CREATE INDEX trace_box ON trace(south, north)")
+                try database.execute("UPDATE meta SET value = '1' WHERE key = 'traces_stale'")
+                try database.execute("PRAGMA user_version = 4")
             }
         }
     }
@@ -264,9 +276,13 @@ public actor TrackStore {
             try database.execute("DELETE FROM trace")
             // The id of a trace is made from the id of the line that started it, so the ids of different categories never meet.
             for trace in builders.values.flatMap(\.traces) {
+                let latitudes = trace.coordinates.map(\.latitude), longitudes = trace.coordinates.map(\.longitude)
                 try database.execute(
-                    "INSERT INTO trace(id, line, length) VALUES (?, ?, ?)",
-                    [.integer(trace.id), .blob(LineBlob.encode(trace.coordinates)), .real(trace.length)])
+                    "INSERT INTO trace(id, line, length, south, west, north, east) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        .integer(trace.id), .blob(LineBlob.encode(trace.coordinates)), .real(trace.length),
+                        .real(latitudes.min() ?? 0), .real(longitudes.min() ?? 0), .real(latitudes.max() ?? 0), .real(longitudes.max() ?? 0),
+                    ])
                 for source in trace.sources {
                     try database.execute("INSERT INTO trace_pass(trace, offtrack) VALUES (?, ?)", [.integer(trace.id), .integer(source)])
                 }
@@ -281,19 +297,23 @@ public actor TrackStore {
     /// of the activities asked for ran along is left out.
     ///
     /// - Parameters:
+    ///   - area: Only the traces whose own box meets this box, or `nil` for all. A trace that crosses the area without a point inside it
+    ///     is kept. The antimeridian is not supported.
     ///   - categories: The categories to count, or `nil` for all.
     ///   - months: The months to count, or `nil` for all.
     /// - Returns: The traces in the order of their ids.
     /// - Throws: ``TrackStoreError``.
-    public func traces(categories: Set<String>? = nil, months: ClosedRange<TrackMonth>? = nil) throws -> [StoredTrace] {
-        var stale = false
-        try database.run("SELECT value FROM meta WHERE key = 'traces_stale'") { stale = $0.text(0) != "0" }
-        if stale { try rebuildTraces() }
+    public func traces(in area: BoundingBox? = nil, categories: Set<String>? = nil, months: ClosedRange<TrackMonth>? = nil) throws -> [StoredTrace] {
+        try rebuildTracesIfStale()
         var sql =
             "SELECT trace.id, trace.line, trace.length, COUNT(*), COUNT(DISTINCT offtrack.activity) FROM trace_pass "
             + "JOIN trace ON trace.id = trace_pass.trace JOIN offtrack ON offtrack.id = trace_pass.offtrack "
             + "JOIN activity ON activity.id = offtrack.activity WHERE 1 = 1"
         var values: [SQLiteValue] = []
+        if let area {
+            sql += " AND trace.south <= ? AND trace.north >= ? AND trace.west <= ? AND trace.east >= ?"
+            values += [.real(area.north), .real(area.south), .real(area.east), .real(area.west)]
+        }
         if let months {
             sql += " AND activity.month BETWEEN ? AND ?"
             values += [.integer(Int64(months.lowerBound.index)), .integer(Int64(months.upperBound.index))]
@@ -316,6 +336,59 @@ public actor TrackStore {
                 StoredTrace(id: row.integer(0), coordinates: line, length: row.real(2), activities: Int(row.integer(4)), passes: Int(row.integer(3))))
         }
         if let damaged { throw TrackStoreError.damaged("the trace \(damaged)") }
+        return result
+    }
+
+    /// Makes the traces again if an activity with off-track lines was added or removed since they were made, and does nothing otherwise.
+    ///
+    /// The queries for traces do this by themselves, but it takes a while for a long history (it reads every off-track line), so an app
+    /// that imports can pay for it at the end of the run, where progress is already shown, and not at the first picture of the heat map.
+    ///
+    /// - Throws: ``TrackStoreError``.
+    public func rebuildTracesIfStale() throws {
+        var stale = false
+        try database.run("SELECT value FROM meta WHERE key = 'traces_stale'") { stale = $0.text(0) != "0" }
+        if stale { try rebuildTraces() }
+    }
+
+    /// How often each trace was run along in each month: the traces of a time-lapse.
+    ///
+    /// The traces are made again first if they are stale (see ``traces(categories:months:)``). A month in which a trace was not run along
+    /// has no entry.
+    ///
+    /// - Parameters:
+    ///   - area: Only the traces whose own box meets this box, or `nil` for all (see ``traces(in:categories:months:)``).
+    ///   - categories: The categories to count, or `nil` for all.
+    ///   - months: The months to count, or `nil` for all.
+    /// - Returns: The counts in the order of month and trace id.
+    /// - Throws: ``TrackStoreError``.
+    public func monthlyTraceCounts(in area: BoundingBox? = nil, categories: Set<String>? = nil, months: ClosedRange<TrackMonth>? = nil) throws -> [MonthlyTraceCount] {
+        try rebuildTracesIfStale()
+        var sql =
+            "SELECT trace_pass.trace, activity.month, COUNT(*), COUNT(DISTINCT activity.id) FROM trace_pass "
+            + "JOIN trace ON trace.id = trace_pass.trace JOIN offtrack ON offtrack.id = trace_pass.offtrack "
+            + "JOIN activity ON activity.id = offtrack.activity WHERE 1 = 1"
+        var values: [SQLiteValue] = []
+        if let area {
+            sql += " AND trace.south <= ? AND trace.north >= ? AND trace.west <= ? AND trace.east >= ?"
+            values += [.real(area.north), .real(area.south), .real(area.east), .real(area.west)]
+        }
+        if let months {
+            sql += " AND activity.month BETWEEN ? AND ?"
+            values += [.integer(Int64(months.lowerBound.index)), .integer(Int64(months.upperBound.index))]
+        }
+        if let categories {
+            guard !categories.isEmpty else { return [] }
+            let sorted = categories.sorted()
+            sql += " AND activity.category IN (\(sorted.map { _ in "?" }.joined(separator: ",")))"
+            values += sorted.map { .text($0) }
+        }
+        sql += " GROUP BY trace_pass.trace, activity.month ORDER BY activity.month, trace_pass.trace"
+        var result: [MonthlyTraceCount] = []
+        try database.run(sql, values) {
+            result.append(
+                MonthlyTraceCount(traceID: $0.integer(0), month: TrackMonth(index: Int($0.integer(1))), activities: Int($0.integer(3)), passes: Int($0.integer(2))))
+        }
         return result
     }
 

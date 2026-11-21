@@ -7,9 +7,11 @@ public struct HeatMapFrame: Sendable {
     public let overlay: HeatMapOverlay
     /// The months that are counted in it, or `nil` when the store has no activity to name a month by.
     public let months: ClosedRange<TrackMonth>?
-    /// The number of buckets (10 m pieces of ways) with a count.
+    /// The number of buckets (10 m pieces of ways) with a count, not counting the traces.
     public let bucketCount: Int
-    /// The highest count of a bucket, 0 for an empty frame.
+    /// The number of lines off the paths (traces of the store) with a count: where activities left the lines of the map.
+    public let traceCount: Int
+    /// The highest count of a bucket or a trace, 0 for an empty frame.
     public let maximumCount: Int
     /// The number of ways of the map in the area; 0 means the area has no lines (outside the map, or a place with no paths).
     public let waysInArea: Int

@@ -107,6 +107,11 @@ public struct ActivityBatchImporter: Sendable {
             }
         }
         report.cancelled = report.cancelled || finished < requests.count || Task.isCancelled
+        // The traces are derived from the off-track lines and made again when they are asked for; doing it here puts the wait in the
+        // import, not in the first picture of the heat map.
+        do { try await store.rebuildTracesIfStale() } catch {
+            report.failures.append(ImportFailure(source: "traces", activityID: nil, message: error.localizedDescription))
+        }
         return report
     }
 
