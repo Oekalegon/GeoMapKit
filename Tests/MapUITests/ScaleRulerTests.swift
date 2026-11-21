@@ -1,6 +1,7 @@
 import Foundation
 import GeoCore
 import MapRender
+import SwiftUI
 import Testing
 
 @testable import MapUI
@@ -61,13 +62,18 @@ struct ScaleRulerTests {
         #expect(ScaleRuler.make(latitude: 0, zoom: 10, maximumWidth: .infinity, units: .metric) == nil)
     }
 
-    @Test("The ruler of a view uses the latitude of its lower edge, also for a turned map")
+    @Test("The ruler of a view uses the latitude of the place where it is drawn, also for a turned map")
     func viewport() throws {
         let view = MapViewport(center: Coordinate(latitude: 60, longitude: 10), zoom: 12, width: 600, height: 800)
         let ruler = try #require(ScaleRuler.make(in: view, maximumWidth: 120, units: .metric))
-        let bottom = view.coordinate(at: ScreenPoint(x: 300, y: 800))
-        #expect(ruler == ScaleRuler.make(latitude: bottom.latitude, zoom: 12, maximumWidth: 120, units: .metric))
-        #expect(bottom.latitude < 60)
+        let place = view.coordinate(at: ScreenPoint(x: 71, y: 788))
+        #expect(ruler == ScaleRuler.make(latitude: place.latitude, zoom: 12, maximumWidth: 120, units: .metric))
+        #expect(place.latitude < 60)
+        // Turned by 90° the lower left corner is on another side of the map: a different latitude, so a different ruler place.
+        let turned = MapViewport(center: Coordinate(latitude: 60, longitude: 10), zoom: 12, width: 600, height: 800, bearing: 90)
+        let turnedPlace = turned.coordinate(at: ScreenPoint(x: 71, y: 788))
+        #expect(abs(turnedPlace.latitude - place.latitude) > 0.001)
+        #expect(ScaleRuler.make(in: turned, maximumWidth: 120, units: .metric) == ScaleRuler.make(latitude: turnedPlace.latitude, zoom: 12, maximumWidth: 120, units: .metric))
     }
 
     @Test("The visibility: hidden never, always always, and after moving while moving and for the delay after")
@@ -85,14 +91,8 @@ struct ScaleRulerTests {
     func settings() {
         #expect(ScaleRulerSettings(visibility: .always, maximumWidth: 1).maximumWidth == 20)
         #expect(ScaleRulerSettings(visibility: .always, maximumWidth: .nan).maximumWidth == 120)
-        #expect(ScaleRulerSettings.hidden.visibility == .hidden && EnvironmentValuesDefault.isHidden)
+        #expect(ScaleRulerSettings.hidden.visibility == .hidden && EnvironmentValues().mapScaleRuler == .hidden)
         #expect(ScaleRulerUnits.preferred(for: Locale(identifier: "en_US")) == .imperial)
         #expect(ScaleRulerUnits.preferred(for: Locale(identifier: "nl_NL")) == .metric)
     }
-}
-
-import SwiftUI
-
-private enum EnvironmentValuesDefault {
-    static var isHidden: Bool { EnvironmentValues().mapScaleRuler == .hidden }
 }

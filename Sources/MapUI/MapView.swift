@@ -48,9 +48,8 @@ public struct MapView: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.mapScaleRuler) private var scaleRuler
     #if !os(watchOS)
-    /// Whether the scale ruler shows now; it follows the gestures (see ``ScaleRulerVisibility``).
-    @State private var rulerShown = false
-    @State private var rulerHide: Task<Void, Never>?
+    /// When a ruler that shows after moving is on screen; it follows the changes of the map (see ``ScaleRulerVisibility``).
+    @State private var ruler = ScaleRulerPresenter()
     #endif
 
     /// The lowest and highest zoom a gesture can reach.
@@ -145,6 +144,7 @@ public struct MapView: View {
             #if !os(watchOS)
             .overlay(alignment: .topTrailing) { compass }
             .overlay(alignment: .bottomLeading) { rulerLabel(for: viewport) }
+            .animation(.easeInOut(duration: 0.25), value: ruler.isShown)
             #endif
             .contentShape(Rectangle())
             .accessibilityElement()
@@ -172,15 +172,18 @@ public struct MapView: View {
             .onChange(of: viewport) { _, new in
                 model.request(viewport: new, scale: displayScale, interacting: interacting)
                 #if !os(watchOS)
-                rulerMoved()
+                ruler.changed(visibility: scaleRuler.visibility, moving: interacting)
                 #endif
             }
             .onChange(of: interacting) { _, now in
                 if !now { model.request(viewport: viewport, scale: displayScale, interacting: false) }
                 #if !os(watchOS)
-                rulerMoved()
+                ruler.changed(visibility: scaleRuler.visibility, moving: now)
                 #endif
             }
+            #if !os(watchOS)
+            .onDisappear { ruler.cancel() }
+            #endif
             .onChange(of: style) { _, new in
                 model.update(source: source, style: new)
                 model.request(viewport: viewport, scale: displayScale, interacting: false)
@@ -290,23 +293,9 @@ public struct MapView: View {
     #if !os(watchOS)
     /// The scale ruler in the corner, or nothing when the settings hide it, or it is not its time, or no distance fits.
     @ViewBuilder private func rulerLabel(for viewport: MapViewport) -> some View {
-        let shown = scaleRuler.visibility == .always || (scaleRuler.visibility != .hidden && rulerShown)
-        if shown, let ruler = ScaleRuler.make(in: viewport, maximumWidth: scaleRuler.maximumWidth, units: scaleRuler.units) {
-            ScaleRulerView(ruler: ruler).padding(6).transition(.opacity)
-        }
-    }
-
-    /// The map moved or a gesture began or ended: a ruler that shows after moving appears, and goes away again after its delay.
-    private func rulerMoved() {
-        guard let delay = scaleRuler.visibility.delay else { return }
-        rulerHide?.cancel()
-        withAnimation(.easeOut(duration: 0.15)) { rulerShown = true }
-        rulerHide = Task {
-            try? await Task.sleep(for: delay)
-            guard !Task.isCancelled else { return }
-            // Still held by a gesture (a long press without movement): it stays until the gesture ends.
-            let shown = scaleRuler.visibility.isShown(moving: interacting, idleFor: delay)
-            withAnimation(.easeIn(duration: 0.4)) { rulerShown = shown }
+        let shown = scaleRuler.visibility == .always || (scaleRuler.visibility != .hidden && ruler.isShown)
+        if shown, let scale = ScaleRuler.make(in: viewport, maximumWidth: scaleRuler.maximumWidth, units: scaleRuler.units) {
+            ScaleRulerView(ruler: scale).padding(6).transition(.opacity)
         }
     }
     #endif

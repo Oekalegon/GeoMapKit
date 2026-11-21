@@ -8,7 +8,7 @@ struct ScaleRulerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(ruler.label)
-                .font(.system(size: 10, weight: .medium))
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(Color.black.opacity(0.85))
             Path { path in
                 path.move(to: CGPoint(x: 0, y: 0))

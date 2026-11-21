@@ -58,7 +58,7 @@ public struct ScaleRuler: Sendable, Equatable {
         }
     }
 
-    /// The ruler of the view of a map, at the latitude of its lower edge (where the ruler is drawn).
+    /// The ruler of the view of a map, at the latitude of the place where it is drawn: the lower left corner, with the margin of a card.
     ///
     /// - Parameters:
     ///   - viewport: The view.
@@ -66,8 +66,8 @@ public struct ScaleRuler: Sendable, Equatable {
     ///   - units: The units of the label.
     /// - Returns: See ``make(latitude:zoom:maximumWidth:units:)``.
     public static func make(in viewport: MapViewport, maximumWidth: Double, units: ScaleRulerUnits) -> ScaleRuler? {
-        let bottom = viewport.coordinate(at: ScreenPoint(x: viewport.width / 2, y: viewport.height))
-        return make(latitude: bottom.latitude, zoom: viewport.zoom, maximumWidth: maximumWidth, units: units)
+        let place = viewport.coordinate(at: ScreenPoint(x: min(11 + maximumWidth / 2, viewport.width), y: max(viewport.height - 12, 0)))
+        return make(latitude: place.latitude, zoom: viewport.zoom, maximumWidth: maximumWidth, units: units)
     }
 
     /// The largest of 1, 2 and 5 times a power of ten, with the extra values, that is at most `limit`; nil when `limit` is below `from`.

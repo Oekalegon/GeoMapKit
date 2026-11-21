@@ -17,7 +17,8 @@ public struct ScaleRulerSettings: Sendable, Equatable {
     /// - Parameters:
     ///   - visibility: When the ruler shows.
     ///   - units: The units; those of the user's locale by default.
-    ///   - maximumWidth: The longest the bar may be, in points; the bar is as long as the nicest distance that fits.
+    ///   - maximumWidth: The longest the bar may be, in points; the bar is as long as the nicest distance that fits. At least 20 (a smaller
+    ///     value becomes 20); a value that is not finite becomes 120.
     public init(visibility: ScaleRulerVisibility, units: ScaleRulerUnits = .preferred(), maximumWidth: Double = 120) {
         self.visibility = visibility
         self.units = units
