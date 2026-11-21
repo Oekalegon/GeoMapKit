@@ -9,6 +9,7 @@ struct LayersPanel: View {
     @Environment(ActivityLibrary.self) private var activities
     @Environment(HeatMapModel.self) private var heatMap
     @Environment(MapLibrary.self) private var library
+    @AppStorage(RulerChoice.storageKey) private var rulerChoice = RulerChoice.afterMoving
     @State private var problem: String?
     @State private var confirmingShowAll = false
 
@@ -20,6 +21,11 @@ struct LayersPanel: View {
             Section {
                 trackRows
             } header: { Text("Tracks") }
+            Section {
+                Picker("Scale ruler", selection: $rulerChoice) {
+                    ForEach(RulerChoice.allCases) { Text($0.rawValue).tag($0) }
+                }
+            } header: { Text("Map") }
         }
         .task { await activities.refresh() }
         .confirmationDialog("Show \(tracks.items.count) tracks?", isPresented: $confirmingShowAll, titleVisibility: .visible) {

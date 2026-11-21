@@ -23,6 +23,9 @@ import SwiftUI
 /// they are for what changes rarely; a change of the list of overlay ids draws a new image, and the old one stays on screen until then.
 ///
 /// The data credit is drawn over the map, in the corner of the view, as the style's `attribution` setting says.
+///
+/// A scale ruler can be shown in the lower left corner on iOS, iPadOS and macOS (``ScaleRulerSettings``, set with
+/// `View.mapScaleRuler(_:)`): always, only while the map is moved and shortly after, or never (the default). The Watch has none.
 public struct MapView: View {
     private let source: any CellSource
     private let style: MapStyle
@@ -43,6 +46,11 @@ public struct MapView: View {
     @State private var crownZoom = 0.0
     #endif
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.mapScaleRuler) private var scaleRuler
+    #if !os(watchOS)
+    /// When a ruler that shows after moving is on screen; it follows the changes of the map (see ``ScaleRulerVisibility``).
+    @State private var ruler = ScaleRulerPresenter()
+    #endif
 
     /// The lowest and highest zoom a gesture can reach.
     public static let zoomRange: ClosedRange<Double> = 2...20
@@ -135,6 +143,8 @@ public struct MapView: View {
             .overlay(alignment: .bottomTrailing) { attributionLabel }
             #if !os(watchOS)
             .overlay(alignment: .topTrailing) { compass }
+            .overlay(alignment: .bottomLeading) { rulerLabel(for: viewport) }
+            .animation(.easeInOut(duration: 0.25), value: ruler.isShown)
             #endif
             .contentShape(Rectangle())
             .accessibilityElement()
@@ -159,10 +169,21 @@ public struct MapView: View {
             }
             .onAppear { crownZoom = min(max(zoom, Self.zoomRange.lowerBound), Self.zoomRange.upperBound) - Self.zoomRange.lowerBound }
             #endif
-            .onChange(of: viewport) { _, new in model.request(viewport: new, scale: displayScale, interacting: interacting) }
+            .onChange(of: viewport) { _, new in
+                model.request(viewport: new, scale: displayScale, interacting: interacting)
+                #if !os(watchOS)
+                ruler.changed(visibility: scaleRuler.visibility, moving: interacting)
+                #endif
+            }
             .onChange(of: interacting) { _, now in
                 if !now { model.request(viewport: viewport, scale: displayScale, interacting: false) }
+                #if !os(watchOS)
+                ruler.changed(visibility: scaleRuler.visibility, moving: now)
+                #endif
             }
+            #if !os(watchOS)
+            .onDisappear { ruler.cancel() }
+            #endif
             .onChange(of: style) { _, new in
                 model.update(source: source, style: new)
                 model.request(viewport: viewport, scale: displayScale, interacting: false)
@@ -265,6 +286,16 @@ public struct MapView: View {
             .padding(8)
             .accessibilityLabel("Compass")
             .accessibilityHint("Turns the map back to north up")
+        }
+    }
+    #endif
+
+    #if !os(watchOS)
+    /// The scale ruler in the corner, or nothing when the settings hide it, or it is not its time, or no distance fits.
+    @ViewBuilder private func rulerLabel(for viewport: MapViewport) -> some View {
+        let shown = scaleRuler.visibility == .always || (scaleRuler.visibility != .hidden && ruler.isShown)
+        if shown, let scale = ScaleRuler.make(in: viewport, maximumWidth: scaleRuler.maximumWidth, units: scaleRuler.units) {
+            ScaleRulerView(ruler: scale).padding(6).transition(.opacity)
         }
     }
     #endif
