@@ -21,6 +21,8 @@ Status: early. The design is in [docs/design/architecture.md](docs/design/archit
 | `MapRender` | Renderer (placeholder) |
 | `Regions` | Region manifest, downloads, attribution (placeholder) |
 | `MapBuilder` | The build pipeline (blocks, levels, open sea), shared by the tool and the apps |
+| `MapLibrary` | The maps an app holds: files in one folder (a `.gmk` copied in, a folder of blocks or a very big file linked), a selection, and opening a map for drawing |
+| `MapDownload` | Getting a map for an area into the library: a ready-made file from a server (`HostedMapIndex`), or built on the phone from Geofabrik region files (`GeofabrikPhoneBuilder`), with the plan, progress and cancel (`MapDownloadModel`) |
 | `Tracks` | GPX files, the `Route` model (distances, projection) and activity tracks; no platform framework, so the Watch can read a route |
 | `TrackOverlays` | Draws a `Route` over the map (`RouteOverlay`); `MapView(overlays:)` takes any `MapOverlay` |
 
