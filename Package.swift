@@ -23,6 +23,8 @@ let package = Package(
         .library(name: "MapUI", targets: ["MapUI"]),
         .library(name: "Regions", targets: ["Regions"]),
         .library(name: "MapBuilder", targets: ["MapBuilder"]),
+        .library(name: "MapLibrary", targets: ["MapLibrary"]),
+        .library(name: "MapDownload", targets: ["MapDownload"]),
         .library(name: "Tracks", targets: ["Tracks"]),
         .library(name: "TrackOverlays", targets: ["TrackOverlays"]),
         .library(name: "TrackMatching", targets: ["TrackMatching"]),
@@ -58,6 +60,15 @@ let package = Package(
         // The build pipeline: blocks, levels and open sea from source files in the cache. Shared by the command-line tool and the apps.
         .target(name: "MapBuilder", dependencies: ["GeoCore", "OSMPBF", "FeatureStore", "FeatureStoreBuilder", "MapStyle", "Regions"]),
 
+        // The maps an app holds: files in one folder (copied in, or linked to a folder of blocks or a very big file), a selection, opening
+        // a map for drawing. Builds for all four platforms.
+        .target(name: "MapLibrary", dependencies: ["GeoCore", "FeatureStore"]),
+
+        // Getting a map for an area into the library: one from the library itself, a ready-made one from a server, or one built on the
+        // phone from OpenStreetMap data, with the plan, progress and cancel an app shows. Depends on the build pipeline; it builds for
+        // all four platforms, but the Watch never downloads or builds.
+        .target(name: "MapDownload", dependencies: ["GeoCore", "FeatureStore", "MapLibrary", "Regions", "MapBuilder"]),
+
         // GPX files, the Route model and activity tracks (v2). Free of any platform framework, so the Watch can read a Route.
         .target(name: "Tracks", dependencies: ["GeoCore"]),
 
@@ -78,6 +89,8 @@ let package = Package(
         .target(name: "PBFTestSupport", path: "Tests/PBFTestSupport"),
 
         .testTarget(name: "GeoCoreTests", dependencies: ["GeoCore"]),
+        .testTarget(name: "MapLibraryTests", dependencies: ["MapLibrary", "FeatureStore", "GeoCore"]),
+        .testTarget(name: "MapDownloadTests", dependencies: ["MapDownload", "MapLibrary", "FeatureStore", "Regions", "GeoCore"]),
         .testTarget(name: "OSMPBFTests", dependencies: ["OSMPBF", "GeoCore", "PBFTestSupport"]),
         .testTarget(name: "FeatureStoreBuilderTests", dependencies: ["FeatureStoreBuilder", "FeatureStore", "GeoCore", "OSMPBF", "PBFTestSupport"]),
         .testTarget(name: "MapStyleTests", dependencies: ["MapStyle", "FeatureStore"]),
